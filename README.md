@@ -1,10 +1,20 @@
 # Petika · पेटिका
 
+<img src="assets/brand/petika-logo.png" alt="Petika — open chest with rising binary digits" width="560">
+
+**Your secrets. Your infrastructure.**
+
 An open-source, self-hosted password manager written in Rust. Petika means a small box in Sanskrit.
 
-**Status: repository foundation only. Do not store real secrets in this code.**
-The CLI supports help and version output. The server deliberately exits with an error;
-there is no working vault, encryption, login, sync, sharing, or autofill yet.
+**Status: experimental implementation. Use synthetic data only.**
+The Rust CLI supports encrypted local storage, password generation, and GPG imports.
+Setup offers standard or experimental hybrid post-quantum encryption. The API stores
+ciphertext with revision checks and a one-way encrypted Git mirror; entry names and
+folder hierarchy stay inside the encrypted snapshot.
+
+[Deploy from source, distroless Docker, Kubernetes, or Podman kube play](docs/deployment.md).
+Account login, CLI/API synchronization, sharing, browser autofill, mobile apps,
+biometric unlock, and the GPG management UI are still planned.
 
 ## Development
 
@@ -37,5 +47,5 @@ Start with the [documentation index](docs/README.md),
 
 [MIT](LICENSE), copyright 2026 K2patel. Petika starts from original code in this
 repository. It does not contain or translate the GPL implementation of `pass`.
-Compatibility with existing stores will be implemented through a local GPG importer.
+Existing GPG stores can be imported locally using the native CLI and GnuPG.
 See [contributing](CONTRIBUTING.md) and [security reporting](SECURITY.md).

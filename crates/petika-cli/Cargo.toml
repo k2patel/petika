@@ -10,3 +10,9 @@ publish = false
 
 [dependencies]
 petika-core.workspace = true
+clap.workspace = true
+rpassword.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

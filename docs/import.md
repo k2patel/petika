@@ -1,16 +1,23 @@
 # Existing GPG store import
 
-**Planned; no importer is implemented.**
+The native CLI imports `.gpg` entries through the user's local GnuPG installation.
+The distroless server image deliberately contains no GnuPG or private GPG keys.
 
-Import existing `.gpg` entries by decrypting on the user's machine using their authorized
-GPG key. Generate Petika records locally and encrypt them before upload. No existing
-`pass` implementation is copied or translated, and its files and Git history are not
-modified or imported into the Petika source repository.
+```sh
+petika init --encryption standard --import-gpg /path/to/password-store
+petika init --encryption hybrid-post-quantum --import-gpg /path/to/password-store
+petika import-gpg /path/to/password-store
+```
 
-Before implementation, define field mapping for first-line passwords, usernames, URLs,
-and arbitrary trailing notes; duplicate handling; and unsupported entry reporting.
-Reject path escapes and unsafe symlinks. Do not execute store extensions or Git hooks.
+Choose one init command for a new store. Both modes support import. Use `--gpg-home`
+for a dedicated GnuPG home. GPG agent must be able to unlock the authorized key.
+Existing names are rejected unless `--replace` is supplied to `import-gpg`.
 
-Verification must cover missing keys, canceled prompts, corrupt ciphertext, nested
-stores, Unicode names, duplicate entries, partial failures, and source preservation.
-Plaintext must not be written to logs or left in intermediate files.
+Relative paths become encrypted entry names. The first line is the password;
+remaining lines are retained as notes. Username/user/login and URL/website fields
+are also extracted. Imports reject symlinks and skip `.git` and `.extensions`.
+The importer saves only after every file succeeds, leaves source files unchanged,
+and never imports source Git history. Decrypted bytes remain in memory.
+
+Full GPG key management in the future UI remains planned: creation, inspection,
+public-key export, expiry changes, and revocation. No such UI exists yet.

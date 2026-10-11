@@ -1,0 +1,11 @@
+.git
+.remember
+target
+.secrets
+petika-data
+petika-mirror
+.env*
+**/*.gpg
+**/*.petika
+**/*.key
+**/*.pem

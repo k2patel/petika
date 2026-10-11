@@ -11,3 +11,18 @@ repository = "https://github.com/k2patel/petika"
 
 [workspace.dependencies]
 petika-core = { path = "crates/petika-core" }
+argon2 = { version = "0.5.3", features = ["zeroize"] }
+chacha20poly1305 = "0.10.1"
+getrandom = "0.2.16"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+zeroize = { version = "1", features = ["derive"] }
+thiserror = "2"
+fs2 = "0.4"
+tempfile = "3"
+clap = { version = "4", features = ["derive"] }
+rpassword = "7"
+tiny_http = "0.12"
+subtle = "2.6"
+x-wing = { version = "0.1.1", features = ["getrandom", "zeroize"] }
+gix = { version = "0.89", default-features = false, features = ["sha1"] }

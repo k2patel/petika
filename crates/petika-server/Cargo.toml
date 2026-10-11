@@ -10,3 +10,12 @@ publish = false
 
 [dependencies]
 petika-core.workspace = true
+gix.workspace = true
+tiny_http.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+subtle.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

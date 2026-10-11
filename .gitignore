@@ -8,3 +8,8 @@
 
 # Local assistant session state
 /.remember/
+
+/.secrets/
+/petika-data/
+/petika-mirror/
+*.petika

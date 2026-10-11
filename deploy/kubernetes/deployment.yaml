@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: petika
+  namespace: petika
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: petika
+  template:
+    metadata:
+      labels:
+        app: petika
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: petika
+          image: petika:dev
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: PETIKA_LISTEN
+              value: 0.0.0.0:8080
+            - name: PETIKA_DATA_DIR
+              value: /data
+            - name: PETIKA_GIT_MIRROR
+              value: /mirror
+            - name: PETIKA_TOKEN_FILE
+              value: /run/secrets/token
+          ports:
+            - name: http
+              containerPort: 8080
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: '1'
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: mirror
+              mountPath: /mirror
+            - name: token
+              mountPath: /run/secrets
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: petika-data
+        - name: mirror
+          persistentVolumeClaim:
+            claimName: petika-mirror
+        - name: token
+          secret:
+            secretName: petika-auth
+            defaultMode: 0440
+        - name: tmp
+          emptyDir:
+            medium: Memory
+            sizeLimit: 16Mi

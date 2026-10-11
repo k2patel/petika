@@ -30,3 +30,40 @@ jobs:
       - name: Dependency licenses
         if: runner.os == 'Linux'
         run: python3 scripts/check_licenses.py
+
+  container:
+    name: Distroless runtime
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t petika:test .
+      - name: Exercise distroless API and mirror
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/petika-test/data /tmp/petika-test/mirror
+          openssl rand -hex 32 > /tmp/petika-test/token
+          sudo chown -R 65532:65532 /tmp/petika-test
+          sudo chmod 755 /tmp/petika-test
+          sudo chmod 444 /tmp/petika-test/token
+          printf 'synthetic test passphrase\nsynthetic test passphrase\n' |
+            docker run --rm -i --entrypoint /usr/local/bin/petika \
+              -v /tmp/petika-test:/test petika:test \
+              --store /test/fixture.petika --passphrase-stdin init
+          docker run --rm -d --name petika-test --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+            -p 127.0.0.1:18080:8080 \
+            -v /tmp/petika-test/token:/run/secrets/token:ro \
+            -v /tmp/petika-test/data:/data -v /tmp/petika-test/mirror:/mirror petika:test
+          trap 'docker stop petika-test' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:18080/healthz; then break; fi
+            sleep 1
+          done
+          sudo python3 scripts/smoke_api.py http://127.0.0.1:18080 \
+            /tmp/petika-test/token /tmp/petika-test/fixture.petika
+          if docker run --rm --entrypoint /bin/sh petika:test -c true; then
+            echo 'Unexpected shell in distroless runtime' >&2
+            exit 1
+          fi

@@ -1,4 +1,10 @@
-//! Shared Petika foundation. Cryptography and vault operations are not implemented.
+//! Experimental local encrypted storage for Petika.
+mod crypto;
+mod storage;
 
-/// Describes the current implementation status for all clients.
-pub const STATUS: &str = "Petika is a development foundation; password storage, authentication, encryption, and sync are not implemented.";
+pub use crypto::{
+    EncryptionMode, Entry, Error, Result, UnlockedStore, generate_password, validate_envelope,
+};
+pub use storage::StoreFile;
+
+pub const STATUS: &str = "Experimental local encrypted storage; biometrics, account login, sharing, and automatic sync are not implemented.";

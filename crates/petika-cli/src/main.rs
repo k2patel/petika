@@ -1,24 +1,293 @@
-use std::process::ExitCode;
+mod import;
 
-fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match args.as_slice() {
-        [] => help(),
-        [arg] if arg == "--help" || arg == "-h" => help(),
-        [arg] if arg == "--version" || arg == "-V" => {
-            println!("petika {}", env!("CARGO_PKG_VERSION"));
-        }
-        _ => {
-            eprintln!("Unsupported command. {}", petika_core::STATUS);
-            eprintln!("Run petika --help for the current interface.");
-            return ExitCode::FAILURE;
-        }
-    }
-    ExitCode::SUCCESS
+use clap::{Parser, Subcommand, ValueEnum};
+use petika_core::{EncryptionMode, Entry, StoreFile, UnlockedStore, generate_password};
+use std::{
+    io::{self, BufRead, Read},
+    path::PathBuf,
+    process::ExitCode,
+};
+use zeroize::Zeroizing;
+
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
+
+#[derive(Parser)]
+#[command(
+    name = "petika",
+    version,
+    about = "Petika — experimental encrypted password storage",
+    after_help = "Every storage command unlocks locally with a passphrase and locks on exit. Biometrics, login, sharing, and network sync are not implemented yet."
+)]
+struct Cli {
+    /// Encrypted store file (defaults to the OS user data directory).
+    #[arg(long, global = true)]
+    store: Option<PathBuf>,
+    /// Read passphrases from stdin instead of the terminal. Never pass them as arguments.
+    #[arg(long, global = true)]
+    passphrase_stdin: bool,
+    #[command(subcommand)]
+    command: Command,
 }
 
-fn help() {
-    println!("Petika — an open-source, self-hosted password manager");
-    println!("\nUsage: petika [--help | --version]");
-    println!("\n{}", petika_core::STATUS);
+#[derive(Clone, Copy, ValueEnum)]
+enum SetupEncryption {
+    Standard,
+    HybridPostQuantum,
+}
+impl From<SetupEncryption> for EncryptionMode {
+    fn from(value: SetupEncryption) -> Self {
+        match value {
+            SetupEncryption::Standard => Self::Standard,
+            SetupEncryption::HybridPostQuantum => Self::HybridPostQuantum,
+        }
+    }
+}
+
+#[derive(Subcommand)]
+enum Command {
+    /// Create a new encrypted store; never overwrite an existing store.
+    Init {
+        #[arg(long, value_enum, default_value = "standard")]
+        encryption: SetupEncryption,
+        /// Optional existing GPG password-store directory to import locally.
+        #[arg(long)]
+        import_gpg: Option<PathBuf>,
+        /// GnuPG home to use for import; otherwise use the user's existing GnuPG home.
+        #[arg(long, requires = "import_gpg")]
+        gpg_home: Option<PathBuf>,
+    },
+    /// Import GPG entries locally into an existing Petika store, saving only if all succeed.
+    ImportGpg {
+        source: PathBuf,
+        #[arg(long)]
+        gpg_home: Option<PathBuf>,
+        #[arg(long)]
+        replace: bool,
+    },
+    /// List entry names, optionally filtered by a case-insensitive substring.
+    List { query: Option<String> },
+    /// Show metadata; use --reveal explicitly to print the password only.
+    Get {
+        name: String,
+        #[arg(long)]
+        reveal: bool,
+    },
+    /// Save an entry, reading its password from a hidden prompt or stdin.
+    Put {
+        name: String,
+        #[arg(long, default_value = "")]
+        username: String,
+        #[arg(long, default_value = "")]
+        url: String,
+        #[arg(long)]
+        replace: bool,
+        #[arg(long)]
+        password_stdin: bool,
+    },
+    /// Generate and save a password without printing it.
+    Generate {
+        name: String,
+        #[arg(long, default_value_t = 24)]
+        length: usize,
+        #[arg(long, default_value = "")]
+        username: String,
+        #[arg(long, default_value = "")]
+        url: String,
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Delete an entry. Requires explicit --yes.
+    Remove {
+        name: String,
+        #[arg(long, required = true)]
+        yes: bool,
+    },
+    /// Change the local passphrase. Does not revoke copies encrypted with the old one.
+    Passphrase,
+}
+
+fn secret(prompt: &str, from_stdin: bool) -> Result<Zeroizing<String>> {
+    if !from_stdin {
+        return Ok(Zeroizing::new(rpassword::prompt_password(prompt)?));
+    }
+    let mut line = Zeroizing::new(String::new());
+    let bytes = io::stdin().lock().take(4098).read_line(&mut line)?;
+    if bytes == 0 || line.len() > 4096 {
+        return Err("missing or oversized secret on stdin".into());
+    }
+    if line.ends_with('\n') {
+        line.pop();
+        if line.ends_with('\r') {
+            line.pop();
+        }
+    }
+    Ok(line)
+}
+
+fn new_passphrase(from_stdin: bool) -> Result<Zeroizing<String>> {
+    let first = secret("New passphrase (12+ characters): ", from_stdin)?;
+    let second = secret("Confirm passphrase: ", from_stdin)?;
+    if *first != *second {
+        return Err("passphrases do not match".into());
+    }
+    Ok(first)
+}
+
+fn default_store() -> Result<PathBuf> {
+    #[cfg(target_os = "windows")]
+    let root = std::env::var_os("LOCALAPPDATA").map(PathBuf::from);
+    #[cfg(target_os = "macos")]
+    let root = std::env::var_os("HOME")
+        .map(|home| PathBuf::from(home).join("Library/Application Support"));
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let root = std::env::var_os("XDG_DATA_HOME")
+        .map(PathBuf::from)
+        .filter(|path| path.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|home| PathBuf::from(home).join(".local/share")));
+    let root = root
+        .filter(|path| path.is_absolute())
+        .ok_or("cannot determine user data directory; use --store")?;
+    Ok(root.join("petika/store.petika"))
+}
+
+fn run(cli: Cli) -> Result<()> {
+    let path = match cli.store {
+        Some(path) => path,
+        None => default_store()?,
+    };
+    let file = StoreFile::lock(path)?;
+    if let Command::Init {
+        encryption,
+        ref import_gpg,
+        ref gpg_home,
+    } = cli.command
+    {
+        if file.exists() {
+            return Err(petika_core::Error::AlreadyExists.into());
+        }
+        let passphrase = new_passphrase(cli.passphrase_stdin)?;
+        let mut store = UnlockedStore::create_with_mode(&passphrase, encryption.into())?;
+        if let Some(source) = import_gpg {
+            let count = import::gpg_store(&mut store, source, gpg_home.as_deref(), false)?;
+            println!("Imported {count} entries locally.");
+        }
+        file.save(&mut store, true)?;
+        println!("Created encrypted Petika store.");
+        return Ok(());
+    }
+    if !file.exists() {
+        return Err("store does not exist; run petika init first".into());
+    }
+    let passphrase = secret("Passphrase: ", cli.passphrase_stdin)?;
+    let mut store = file.open(&passphrase)?;
+    drop(passphrase);
+    match cli.command {
+        Command::Init { .. } => unreachable!(),
+        Command::ImportGpg {
+            source,
+            gpg_home,
+            replace,
+        } => {
+            let count = import::gpg_store(&mut store, &source, gpg_home.as_deref(), replace)?;
+            file.save(&mut store, false)?;
+            println!("Imported {count} entries. Source store unchanged.");
+        }
+        Command::List { query } => {
+            let query = query.unwrap_or_default().to_lowercase();
+            for name in store
+                .names()
+                .filter(|name| name.to_lowercase().contains(&query))
+            {
+                println!("{name}");
+            }
+        }
+        Command::Get { name, reveal } => {
+            let entry = store.get(&name)?;
+            if reveal {
+                println!("{}", entry.password);
+            } else {
+                println!(
+                    "Name: {name:?}\nUsername: {:?}\nURL: {:?}\nNotes: {:?}",
+                    entry.username, entry.url, entry.notes
+                );
+                println!("Password: hidden (use --reveal to print it)");
+            }
+        }
+        Command::Put {
+            name,
+            username,
+            url,
+            replace,
+            password_stdin,
+        } => {
+            let password = secret("Entry password: ", password_stdin)?;
+            if password.is_empty() {
+                return Err("entry password must not be empty".into());
+            }
+            // Preserve imported notes when explicitly replacing an entry.
+            let notes = store
+                .get(&name)
+                .map(|e| e.notes.clone())
+                .unwrap_or_default();
+            store.put(
+                name,
+                Entry {
+                    username,
+                    password: password.to_string(),
+                    url,
+                    notes,
+                },
+                replace,
+            )?;
+            file.save(&mut store, false)?;
+            println!("Saved entry.");
+        }
+        Command::Generate {
+            name,
+            length,
+            username,
+            url,
+            replace,
+        } => {
+            let password = generate_password(length)?;
+            let notes = store
+                .get(&name)
+                .map(|e| e.notes.clone())
+                .unwrap_or_default();
+            store.put(
+                name,
+                Entry {
+                    username,
+                    password: password.to_string(),
+                    url,
+                    notes,
+                },
+                replace,
+            )?;
+            file.save(&mut store, false)?;
+            println!("Generated and saved password. Use get --reveal to print it.");
+        }
+        Command::Remove { name, yes: _ } => {
+            store.remove(&name)?;
+            file.save(&mut store, false)?;
+            println!("Removed entry.");
+        }
+        Command::Passphrase => {
+            let new = new_passphrase(cli.passphrase_stdin)?;
+            store.change_passphrase(&new)?;
+            file.save(&mut store, false)?;
+            println!("Changed local passphrase. Older copies still require their old passphrase.");
+        }
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    match run(Cli::parse()) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => {
+            eprintln!("Error: {err}");
+            ExitCode::FAILURE
+        }
+    }
 }
