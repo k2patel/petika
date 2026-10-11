@@ -1,0 +1,12 @@
+[package]
+name = "petika"
+description = "Petika password manager CLI"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+petika-core.workspace = true

@@ -1,0 +1,9 @@
+[package]
+name = "petika-core"
+description = "Shared core for Petika"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
