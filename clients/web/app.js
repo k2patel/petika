@@ -201,6 +201,7 @@ function authScreen(initialized = true) {
   })
 }
 async function enter() {
+  if (new URLSearchParams(location.search).get('cli') === '1') return cliApprovalScreen();
   state.collections = await api('/v1/collections');
   state.collection = state.collections[0];
   state.view = 'items';
@@ -336,7 +337,7 @@ async function renderPage() {
     main.innerHTML = title('Less typing. More control.', 'Website-aware filling, with your permission.') + `<section class="panel readable"><div class="panel-header"><h2>Browser autofill</h2><span class="pill neutral">Extension not connected</span></div><p>The web app can copy credentials and generate website verification codes. Filling forms on another website requires the Petika Chromium or Firefox extension, which is not implemented yet.</p><div class="settings-row"><div><h3>Match the website</h3><p>Save the complete HTTPS address on each login. The planned extension will check the destination before suggesting credentials.</p></div>${icon('browser')}</div><div class="settings-row"><div><h3>Fill only when you choose</h3><p>Explicit selection will fill the username, password, or current one-time code without automatically submitting the form.</p></div>${icon('check')}</div><div class="settings-row"><div><h3>Website OTP</h3><p>Add a setup key or otpauth link to a login to get time-based codes now.</p></div>${button('Go to items','items','key')}</div></section>`;
   }
   if (state.view === 'settings') {
-    main.innerHTML = title('A workspace that feels like yours', 'Profile, appearance, and local session preferences.') + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div><div class="settings-row"><div><h3>Biometric unlock</h3><p>Requires the native device integration. This web release uses a passphrase and cannot verify biometrics.</p></div><span class="pill neutral">Not available yet</span></div></section>${button('Change account password','account-password','key')} ${button('Sign out','logout','logout')}`;
+    main.innerHTML = title('A workspace that feels like yours', 'Profile, appearance, and local session preferences.') + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div><div class="settings-row"><div><h3>Biometric unlock</h3><p>Requires the native device integration. This web release uses a passphrase and cannot verify biometrics.</p></div><span class="pill neutral">Not available yet</span></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Change account password','account-password','key')} ${button('Sign out','logout','logout')}`;
     form('#profile-form', async data => {
       state.user = state.demo ? {
         ...state.user,
@@ -926,5 +927,15 @@ function accountPasswordDialog() {
     });
     closeDialog();
     toast('Account password changed')
+  });
+}
+
+// The code is entered manually from the user's terminal, never prefilled from a link.
+function cliApprovalScreen() {
+  $('#app').innerHTML = `<main class="auth-panel"><div class="auth-form">${brand()}<h1>Connect your CLI</h1><p>Signed in as <strong>${esc(state.user.username)}</strong>.</p><p>Only continue if you started <code>petika login</code> yourself. Enter the code shown in your terminal. Never approve a code someone sent you.</p><p>This grants an eight-hour session with your account permissions. Your collection passphrases stay on your device.</p><form id="cli-approval-form">${field('Code from your terminal','user_code','text','','required maxlength="11" autocomplete="off" spellcheck="false"')}${field('Confirm account password','password','password','','required autocomplete="current-password"')}<div class="field"><label for="cli-decision">Decision</label><select id="cli-decision" name="decision"><option value="deny">Deny this request</option><option value="approve">Approve this CLI</option></select></div><div class="form-error" role="alert"></div><button class="btn primary full" type="submit">Confirm decision</button></form><p><a href="/">Back to Petika</a></p></div></main>`;
+  form('#cli-approval-form', async (data, el) => {
+    await api('/v1/auth/device/approve', {method:'POST',body:{user_code:data.get('user_code'),password:data.get('password'),approve:data.get('decision')==='approve'}});
+    el.reset();
+    $('.auth-form').innerHTML = `${brand()}<h1>Request answered</h1><p>Return to your terminal. You can close this page.</p><a href="/">Back to Petika</a>`;
   });
 }

@@ -19,5 +19,8 @@ for package in sorted(metadata["packages"], key=lambda p: (p["name"], p["version
         paths.update(p for p in root.glob(pattern) if p.is_file())
     if package.get("license_file"):
         paths.add(root / package["license_file"])
+    if package["name"] == "ring":
+        paths.update(root.glob("src/polyfill/once_cell/LICENSE-*"))
+        paths.update(root.glob("third_party/fiat/LICENSE"))
     for path in sorted(paths):
         print(f"\n--- {path.name} ---\n{path.read_text(errors='replace')}")

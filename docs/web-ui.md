@@ -22,6 +22,7 @@ Generated WASM/bindings are build artifacts, not checked into Git.
 ## Working flows
 
 - First-administrator setup, local account sign-in/sign-out, profile and password changes.
+- Browser approval of [managed CLI sessions](cli-accounts.md), with explicit consent and reauthentication.
 - Standard or experimental hybrid collection creation, passphrase unlock, and inactivity lock.
 - Item search/filter, create/edit/delete, password generation, explicit reveal/copy, and website links.
 - Website TOTP setup from a Base32 key or `otpauth://totp/` URI, live countdown, and code copying.

@@ -13,6 +13,11 @@
 /petika-data/
 /petika-mirror/
 *.petika
+# Managed-account bearer credentials when explicitly stored in the checkout.
+session.json
+session.json.lock
+*.session.json
+*.session.json.lock
 
 /clients/web/wasm/*
 

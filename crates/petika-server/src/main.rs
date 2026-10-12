@@ -72,7 +72,7 @@ fn handle(
                     "revision": snapshot.map(|s| s.revision).unwrap_or(0),
                     "mirror_enabled": mirror_enabled,
                     "mirror_revision": mirror_revision.load(Ordering::Acquire),
-                    "authentication": "single-account-bearer-token"
+                    "authentication": if authenticated { "managed-account" } else { "single-account-bearer-token" }
                 })
                 .to_string(),
                 None,

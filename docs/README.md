@@ -19,3 +19,5 @@ Implemented: encrypted CLI and Rust/WASM web client, standard/hybrid setup modes
 local GPG import, managed accounts, user/group permissions, website OTP, encrypted
 snapshot API and Git mirroring, first-run/environment provisioning, versioned storage,
 and distroless deployment. See the web UI guide for remaining integrations.
+
+- [Managed CLI accounts](cli-accounts.md): browser approval, sessions, and encrypted collection pull/push.

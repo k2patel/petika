@@ -166,3 +166,114 @@ fn account_password_change_revokes_other_sessions_only() {
             .is_ok()
     );
 }
+
+#[test]
+fn device_approval_is_single_use_and_revocable() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut accounts = Accounts::new(dir.path().join("accounts.json"));
+    let owner = accounts
+        .create_user(
+            "owner",
+            "Owner",
+            "synthetic owner password".into(),
+            true,
+            true,
+        )
+        .unwrap();
+    let (browser, _) = accounts
+        .login("owner", "synthetic owner password".into())
+        .unwrap();
+    let start = accounts.device_start().unwrap();
+    let code = start["user_code"].as_str().unwrap();
+    let device = start["device_code"].as_str().unwrap();
+    assert!(
+        accounts
+            .device_approve(&browser, code, "wrong password".into(), true)
+            .is_err()
+    );
+    accounts
+        .device_approve(&browser, code, "synthetic owner password".into(), true)
+        .unwrap();
+    assert!(
+        accounts
+            .device_approve(&browser, code, "synthetic owner password".into(), true)
+            .is_err()
+    );
+    let approved = accounts.device_poll(device).unwrap();
+    let token = approved["token"].as_str().unwrap();
+    assert_eq!(accounts.authenticate(token).unwrap().unwrap().id, owner.id);
+    assert_eq!(accounts.device_poll(device).unwrap()["status"], "expired");
+    let pending = accounts.device_start().unwrap();
+    assert!(
+        accounts
+            .device_approve(
+                token,
+                pending["user_code"].as_str().unwrap(),
+                "synthetic owner password".into(),
+                true
+            )
+            .is_err()
+    );
+    accounts
+        .change_password(
+            &owner,
+            "synthetic owner password".into(),
+            "replacement synthetic password".into(),
+            &browser,
+        )
+        .unwrap();
+    assert!(accounts.authenticate(token).unwrap().is_none());
+    accounts
+        .device_approve(
+            &browser,
+            pending["user_code"].as_str().unwrap(),
+            "replacement synthetic password".into(),
+            true,
+        )
+        .unwrap();
+    accounts.logout(&browser);
+    assert_eq!(
+        accounts
+            .device_poll(pending["device_code"].as_str().unwrap())
+            .unwrap()["status"],
+        "expired_or_denied"
+    );
+}
+
+#[test]
+fn device_pending_denial_and_throttling() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut accounts = Accounts::new(dir.path().join("accounts.json"));
+    accounts
+        .create_user(
+            "owner",
+            "Owner",
+            "synthetic owner password".into(),
+            true,
+            true,
+        )
+        .unwrap();
+    let (browser, _) = accounts
+        .login("owner", "synthetic owner password".into())
+        .unwrap();
+    let pending = accounts.device_start().unwrap();
+    let device = pending["device_code"].as_str().unwrap();
+    assert_eq!(accounts.device_poll(device).unwrap()["status"], "pending");
+    assert_eq!(accounts.device_poll(device).unwrap()["status"], "slow_down");
+    accounts
+        .device_approve(
+            &browser,
+            pending["user_code"].as_str().unwrap(),
+            "synthetic owner password".into(),
+            false,
+        )
+        .unwrap();
+    assert_eq!(
+        accounts.device_poll(device).unwrap()["status"],
+        "expired_or_denied"
+    );
+    for _ in 0..29 {
+        accounts.device_start().unwrap();
+    }
+    assert!(accounts.device_start().is_err());
+}

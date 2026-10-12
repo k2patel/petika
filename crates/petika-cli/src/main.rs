@@ -1,3 +1,4 @@
+mod account;
 mod import;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -16,9 +17,12 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     name = "petika",
     version,
     about = "Petika — experimental encrypted password storage",
-    after_help = "Every storage command unlocks locally with a passphrase and locks on exit. Biometrics, login, sharing, and network sync are not implemented yet."
+    after_help = "Every storage command unlocks locally with a passphrase and locks on exit. Use login for managed API access; collection passphrases never leave this device. Biometrics are not implemented."
 )]
 struct Cli {
+    /// Saved managed session (sensitive bearer credential; defaults to user data directory).
+    #[arg(long, global = true)]
+    session_file: Option<PathBuf>,
     /// Encrypted store file (defaults to the OS user data directory).
     #[arg(long, global = true)]
     store: Option<PathBuf>,
@@ -45,6 +49,39 @@ impl From<SetupEncryption> for EncryptionMode {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Sign in to a managed account by approving a code in your browser.
+    Login {
+        #[arg(long)]
+        server: String,
+    },
+    /// Revoke the saved CLI session. --local only forgets it when offline.
+    Logout {
+        #[arg(long)]
+        local: bool,
+    },
+    /// Show the currently authenticated account.
+    Whoami,
+    /// List accessible personal and group collection IDs and permissions.
+    Collections,
+    /// Show the remote revision and mirror state.
+    Status {
+        #[arg(long, default_value = "personal")]
+        collection: String,
+    },
+    /// Download and locally verify an encrypted collection; refuses existing files by default.
+    Pull {
+        #[arg(long, default_value = "personal")]
+        collection: String,
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Upload ciphertext using an explicit expected revision (0 for a new collection).
+    Push {
+        #[arg(long, default_value = "personal")]
+        collection: String,
+        #[arg(long)]
+        revision: u64,
+    },
     /// Create a new encrypted store; never overwrite an existing store.
     Init {
         #[arg(long, value_enum, default_value = "standard")]
@@ -151,10 +188,51 @@ fn default_store() -> Result<PathBuf> {
 }
 
 fn run(cli: Cli) -> Result<()> {
+    let session = || -> Result<PathBuf> {
+        match &cli.session_file {
+            Some(path) => Ok(path.clone()),
+            None => Ok(default_store()?.with_file_name("session.json")),
+        }
+    };
+    match &cli.command {
+        Command::Login { server } => return account::login(&session()?, server),
+        Command::Logout { local } => return account::logout(&session()?, *local),
+        Command::Whoami => return account::whoami(&session()?),
+        Command::Collections => return account::collections(&session()?),
+        Command::Status { collection } => return account::status(&session()?, collection),
+        _ => {}
+    }
     let path = match cli.store {
         Some(path) => path,
         None => default_store()?,
     };
+    match &cli.command {
+        Command::Pull {
+            collection,
+            replace,
+        } => {
+            return account::pull(
+                &session()?,
+                collection,
+                &path,
+                *replace,
+                cli.passphrase_stdin,
+            );
+        }
+        Command::Push {
+            collection,
+            revision,
+        } => {
+            return account::push(
+                &session()?,
+                collection,
+                &path,
+                *revision,
+                cli.passphrase_stdin,
+            );
+        }
+        _ => {}
+    }
     let file = StoreFile::lock(path)?;
     if let Command::Init {
         encryption,
@@ -182,7 +260,14 @@ fn run(cli: Cli) -> Result<()> {
     let mut store = file.open(&passphrase)?;
     drop(passphrase);
     match cli.command {
-        Command::Init { .. } => unreachable!(),
+        Command::Init { .. }
+        | Command::Login { .. }
+        | Command::Logout { .. }
+        | Command::Whoami
+        | Command::Collections
+        | Command::Status { .. }
+        | Command::Pull { .. }
+        | Command::Push { .. } => unreachable!(),
         Command::ImportGpg {
             source,
             gpg_home,
@@ -230,9 +315,9 @@ fn run(cli: Cli) -> Result<()> {
                 .map(|e| e.notes.clone())
                 .unwrap_or_default();
             store.put(
-                name,
+                name.clone(),
                 Entry {
-                    otp: None,
+                    otp: store.get(&name).ok().and_then(|e| e.otp.clone()),
                     username,
                     password: password.to_string(),
                     url,
@@ -256,9 +341,9 @@ fn run(cli: Cli) -> Result<()> {
                 .map(|e| e.notes.clone())
                 .unwrap_or_default();
             store.put(
-                name,
+                name.clone(),
                 Entry {
-                    otp: None,
+                    otp: store.get(&name).ok().and_then(|e| e.otp.clone()),
                     username,
                     password: password.to_string(),
                     url,

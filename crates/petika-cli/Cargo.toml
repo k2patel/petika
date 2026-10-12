@@ -13,6 +13,10 @@ petika-core.workspace = true
 clap.workspace = true
 rpassword.workspace = true
 zeroize.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
+url = "2"
 
 [dev-dependencies]
 tempfile.workspace = true

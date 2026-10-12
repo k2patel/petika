@@ -59,11 +59,20 @@ struct Session {
     user_id: String,
     expires: Instant,
 }
+struct DeviceGrant {
+    code: String,
+    expires: Instant,
+    last_poll: Option<Instant>,
+    approval: Option<String>,
+    denied: bool,
+}
 pub struct Accounts {
     path: PathBuf,
     sessions: HashMap<String, Session>,
     attempts: Vec<Instant>,
     initial_snapshot: Option<String>,
+    devices: HashMap<String, DeviceGrant>,
+    device_attempts: Vec<Instant>,
 }
 fn random_id() -> Result<String> {
     let mut bytes = [0u8; 32];
@@ -92,6 +101,8 @@ impl Accounts {
             sessions: HashMap::new(),
             attempts: Vec::new(),
             initial_snapshot: None,
+            devices: HashMap::new(),
+            device_attempts: Vec::new(),
         }
     }
     pub fn initial_snapshot(&mut self, encrypted: String) -> Result<()> {
@@ -245,6 +256,102 @@ impl Accounts {
     pub fn logout(&mut self, token: &str) {
         self.sessions.remove(token);
     }
+    /// Petika device approval, not an OAuth/OIDC endpoint. No decryption keys are issued.
+    pub fn device_start(&mut self) -> Result<serde_json::Value> {
+        self.device_attempts
+            .retain(|t| t.elapsed() < Duration::from_secs(60));
+        self.devices.retain(|_, g| g.expires > Instant::now());
+        if self.device_attempts.len() >= 30 || self.devices.len() >= 100 {
+            return Err("Too many CLI sign-in requests; try again later".into());
+        }
+        self.device_attempts.push(Instant::now());
+        let device = random_id()?;
+        let code = random_id()?[..10].to_uppercase();
+        if self.devices.values().any(|g| g.code == code) {
+            return Err("Please retry sign-in".into());
+        }
+        self.devices.insert(
+            device.clone(),
+            DeviceGrant {
+                code: code.clone(),
+                expires: Instant::now() + Duration::from_secs(600),
+                last_poll: None,
+                approval: None,
+                denied: false,
+            },
+        );
+        Ok(serde_json::json!({"device_code":device,"user_code":code,"expires_in":600,"interval":5}))
+    }
+    pub fn device_approve(
+        &mut self,
+        browser_session: &str,
+        code: &str,
+        password: String,
+        approve: bool,
+    ) -> Result<()> {
+        if browser_session.starts_with("cli_") {
+            return Err("Approve from your browser".into());
+        }
+        let user = self
+            .authenticate(browser_session)?
+            .ok_or("Sign in to continue")?;
+        // Reauthentication is rate-limited through the same path as normal login.
+        let (temporary, _) = self.login(&user.username, password)?;
+        self.logout(&temporary);
+        let code = code.trim().replace('-', "").to_uppercase();
+        let grant = self
+            .devices
+            .values_mut()
+            .find(|g| g.code == code && g.expires > Instant::now())
+            .ok_or("Invalid or expired CLI code")?;
+        if grant.approval.is_some() || grant.denied {
+            return Err("CLI request already answered".into());
+        }
+        grant.denied = !approve;
+        if approve {
+            grant.approval = Some(browser_session.into());
+        }
+        Ok(())
+    }
+    pub fn device_poll(&mut self, device: &str) -> Result<serde_json::Value> {
+        let Some(grant) = self.devices.get_mut(device) else {
+            return Ok(serde_json::json!({"status":"expired"}));
+        };
+        if grant.expires <= Instant::now() || grant.denied {
+            self.devices.remove(device);
+            return Ok(serde_json::json!({"status":"expired_or_denied"}));
+        }
+        if grant
+            .last_poll
+            .is_some_and(|t| t.elapsed() < Duration::from_secs(5))
+        {
+            return Ok(serde_json::json!({"status":"slow_down"}));
+        }
+        grant.last_poll = Some(Instant::now());
+        let Some(approval) = grant.approval.clone() else {
+            return Ok(serde_json::json!({"status":"pending"}));
+        };
+        let user = self.authenticate(&approval)?;
+        self.devices.remove(device);
+        let Some(user) = user else {
+            return Ok(serde_json::json!({"status":"expired_or_denied"}));
+        };
+        self.sessions.retain(|_, s| s.expires > Instant::now());
+        if self.sessions.len() >= 1000 {
+            return Err("Too many active sessions".into());
+        }
+        let token = format!("cli_{}", random_id()?);
+        self.sessions.insert(
+            token.clone(),
+            Session {
+                user_id: user.id.clone(),
+                expires: Instant::now() + Duration::from_secs(8 * 3600),
+            },
+        );
+        Ok(
+            serde_json::json!({"status":"approved","token":token,"user":user.public(),"expires_in":28800}),
+        )
+    }
     pub fn users(&self) -> Result<Vec<serde_json::Value>> {
         Ok(Self::load(&StoreFile::lock(&self.path)?)?
             .users
@@ -373,5 +480,45 @@ impl Accounts {
                     .iter()
                     .any(|m| m.user_id == user.id && (!write || m.edit))
         }))
+    }
+}
+
+#[cfg(test)]
+mod device_expiry_tests {
+    use super::*;
+    #[test]
+    fn expired_device_cannot_be_approved_or_redeemed() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut accounts = Accounts::new(dir.path().join("accounts.json"));
+        accounts
+            .create_user(
+                "owner",
+                "Owner",
+                "synthetic owner password".into(),
+                true,
+                true,
+            )
+            .unwrap();
+        let (browser, _) = accounts
+            .login("owner", "synthetic owner password".into())
+            .unwrap();
+        let grant = accounts.device_start().unwrap();
+        let device = grant["device_code"].as_str().unwrap();
+        accounts.devices.get_mut(device).unwrap().expires = Instant::now() - Duration::from_secs(1);
+        assert!(
+            accounts
+                .device_approve(
+                    &browser,
+                    grant["user_code"].as_str().unwrap(),
+                    "synthetic owner password".into(),
+                    true
+                )
+                .is_err()
+        );
+        assert_eq!(
+            accounts.device_poll(device).unwrap()["status"],
+            "expired_or_denied"
+        );
+        assert!(!accounts.devices.contains_key(device));
     }
 }

@@ -121,10 +121,64 @@ with tempfile.TemporaryDirectory(prefix='petika-ui-') as temporary:
             assert member.request.get(url+f'/v1/collections/{owner["id"]}/snapshot').status==403
             assert member.request.put(url+f'/v1/collections/{group["id"]}/snapshot',headers={**headers,'If-Match':'"0"'},data=snapshot).status==403
             assert context.request.post(url+'/v1/profile',data=json.dumps({'name':'CSRF'})).status==403
+            # A CLI token inherits read-only group permissions and disable revocation.
+            grant=member.request.post(url+'/v1/auth/device/start',headers=headers,data='{}').json()
+            assert member.request.post(url+'/v1/auth/device/approve',headers=headers,data=json.dumps({'user_code':grant['user_code'],'password':'synthetic member password','approve':True})).ok
+            member_cli=member.request.post(url+'/v1/auth/device/poll',headers=headers,data=json.dumps({'device_code':grant['device_code']})).json()['token']
+            cli_headers={**headers,'Authorization':'Bearer '+member_cli}
+            assert member.request.get(url+f'/v1/collections/{group["id"]}/snapshot',headers=cli_headers).ok
+            assert member.request.put(url+f'/v1/collections/{group["id"]}/snapshot',headers={**cli_headers,'If-Match':'"0"'},data=snapshot).status==403
             assert context.request.post(url+'/v1/admin/user-status',headers=headers,data=json.dumps({'id':next(u['id'] for u in users if u['username']=='member'),'disabled':True})).ok
             assert member.request.get(url+'/v1/collections').status==401
+            assert member.request.get(url+'/v1/collections',headers=cli_headers).status==401
+            # Managed CLI approval uses the real browser screen and separate bearer session.
+            session_file = work/'cli-session.json'
+            cli_base = [str(root/'target/debug/petika'),'--session-file',str(session_file)]
+            pending = subprocess.Popen(cli_base+['login','--server',url],stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            try:
+                assert '/?cli=1' in pending.stdout.readline()
+                code = pending.stdout.readline().strip().split(': ',1)[1]
+                page.goto(url+'/?cli=1')
+                expect(page.get_by_role('heading',name='Connect your CLI')).to_be_visible()
+                page.get_by_label('Code from your terminal',exact=True).fill(code)
+                page.get_by_label('Confirm account password',exact=True).fill('synthetic account password')
+                page.get_by_label('Decision',exact=True).select_option('approve')
+                page.screenshot(path=str(screenshots/'cli-approval.png'))
+                page.get_by_role('button',name='Confirm decision',exact=True).click()
+                expect(page.get_by_role('heading',name='Request answered')).to_be_visible()
+                out, err = pending.communicate(timeout=20)
+                assert pending.returncode == 0, (out, err)
+            finally:
+                if pending.poll() is None:
+                    pending.terminate(); pending.wait(timeout=5)
+            def managed(*arguments, secret=None, succeeds=True):
+                result = subprocess.run(cli_base+list(arguments),input=secret,text=True,capture_output=True,timeout=30)
+                assert (result.returncode==0)==succeeds,(arguments,result.stdout,result.stderr)
+                return result
+            assert json.loads(managed('whoami').stdout)['username']=='admin'
+            assert any(c['id']==group['id'] for c in json.loads(managed('collections').stdout))
+            local = work/'cli-pulled.petika'
+            managed('--store',str(local),'--passphrase-stdin','pull',secret='synthetic encryption passphrase\n')
+            assert local.read_text()==snapshot
+            original=local.read_bytes()
+            managed('--store',str(local),'--passphrase-stdin','pull',secret='synthetic encryption passphrase\n',succeeds=False)
+            managed('--store',str(local),'--passphrase-stdin','pull','--replace',secret='wrong passphrase\n',succeeds=False)
+            assert local.read_bytes()==original
+            # Replacing an entry must preserve its OTP seed.
+            managed('--store',str(local),'--passphrase-stdin','generate','Private / Example login','--replace',secret='synthetic encryption passphrase\n')
+            revision=json.loads(managed('status').stdout)['revision']
+            managed('--store',str(local),'--passphrase-stdin','push','--revision',str(revision),secret='synthetic encryption passphrase\n')
+            managed('--store',str(local),'--passphrase-stdin','push','--revision',str(revision),secret='synthetic encryption passphrase\n',succeeds=False)
+            managed('--store',str(work/'group-cli.petika'),'--passphrase-stdin','pull','--collection',group['id'],secret='synthetic group passphrase\n')
+            saved=json.loads(session_file.read_text())
+            assert 'password' not in saved and 'synthetic' not in session_file.read_text()
+            if os.name!='nt': assert session_file.stat().st_mode & 0o077 == 0
+            managed('logout')
+            assert context.request.get(url+'/v1/auth/status',headers={'Authorization':'Bearer '+saved['token']}).json()['user'] is None
+            managed('whoami',succeeds=False)
+            page.goto(url)
             page.get_by_role('button',name='Settings',exact=True).click()
-            page.get_by_role('button',name='Sign out',exact=True).click()
+            page.locator('#main').get_by_role('button',name='Sign out',exact=True).click()
             expect(page.get_by_role('heading',name='Welcome back')).to_be_visible()
             page.get_by_role('button',name='Explore the demo',exact=True).click()
             expect(page.get_by_role('heading',name='GitHub',exact=True)).to_be_visible(timeout=30000)

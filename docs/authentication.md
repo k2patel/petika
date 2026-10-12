@@ -4,10 +4,10 @@ Petika-managed accounts, session cookies, administrator user/group management, a
 collection read/edit permissions are implemented in the experimental web UI. See
 [web authentication and sharing](web-ui.md#identity-and-group-boundaries) for the
 current security model and limitations, and [setup](setup.md) for provisioning.
-Optional OpenID Connect and CLI browser-login enrollment remain planned.
+[Managed CLI browser approval](cli-accounts.md) is implemented. Optional OpenID Connect remains planned.
 
-Keep server authentication distinct from local decryption. A proposed CLI browser-login
-flow (or a code entered on another device for headless hosts) establishes a server session;
+Keep server authentication distinct from local decryption. The CLI browser-approval
+flow (including a code entered on another device for headless hosts) establishes a server session;
 new-device enrollment must separately grant access to decryption keys.
 
 Planned biometric clients will default on when supported and enrolled, with a local on/off control. Turning

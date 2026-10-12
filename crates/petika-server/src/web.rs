@@ -18,6 +18,11 @@ pub fn json(request: Request, status: u16, value: serde_json::Value, cookie: Opt
     let _ = request.respond(response);
 }
 pub fn session(request: &Request) -> String {
+    if let Some(token) =
+        super::header(request, "Authorization").and_then(|s| s.strip_prefix("Bearer cli_"))
+    {
+        return format!("cli_{token}");
+    }
     super::header(request, "Cookie")
         .unwrap_or("")
         .split(';')
@@ -129,6 +134,26 @@ pub fn account_route(
         }
     };
     let result: Result<serde_json::Value> = (|| {
+        if method == Method::Post {
+            match path.as_str() {
+                "/v1/auth/device/start" => return accounts.device_start(),
+                "/v1/auth/device/poll" => {
+                    return accounts.device_poll(text(&payload, "device_code"));
+                }
+                "/v1/auth/device/approve" => {
+                    accounts.device_approve(
+                        &token,
+                        text(&payload, "user_code"),
+                        text(&payload, "password").into(),
+                        payload["approve"]
+                            .as_bool()
+                            .ok_or("Choose approve or deny")?,
+                    )?;
+                    return Ok(serde_json::json!({"ok":true}));
+                }
+                _ => {}
+            }
+        }
         if path == "/v1/auth/bootstrap" && method == Method::Post {
             if !bool::from(
                 text(&payload, "token")

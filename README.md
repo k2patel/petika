@@ -10,7 +10,8 @@
 An open-source, self-hosted password manager written in Rust. Petika means a small box in Sanskrit.
 
 **Status: experimental implementation. Use synthetic data only.**
-The Rust CLI supports encrypted local storage, password generation, and GPG imports.
+The Rust CLI supports encrypted local storage, password generation, GPG imports, and
+[managed-account browser login with encrypted pull/push](docs/cli-accounts.md).
 Setup offers standard or experimental hybrid post-quantum encryption. The API stores
 ciphertext with revision checks and a one-way encrypted Git mirror; entry names and
 folder hierarchy stay inside the encrypted snapshot.
