@@ -4,6 +4,7 @@ use serde_json::Value;
 const PASS: &str = "correct test horse battery staple";
 fn entry() -> Entry {
     Entry {
+        otp: None,
         username: "alice@example.test".into(),
         password: "distinctive-secret-value".into(),
         url: "https://example.test".into(),

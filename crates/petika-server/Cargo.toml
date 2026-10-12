@@ -16,6 +16,8 @@ serde.workspace = true
 serde_json.workspace = true
 subtle.workspace = true
 zeroize.workspace = true
+argon2.workspace = true
+getrandom.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

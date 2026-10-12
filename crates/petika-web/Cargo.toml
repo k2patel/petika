@@ -1,0 +1,17 @@
+[package]
+name = "petika-web"
+description = "Browser bindings for Petika client-side encryption"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+petika-core.workspace = true
+serde_json.workspace = true
+wasm-bindgen = "=0.2.114"
+zeroize.workspace = true

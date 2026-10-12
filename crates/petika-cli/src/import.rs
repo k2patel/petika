@@ -129,6 +129,7 @@ fn parse(text: &str) -> Result<Entry> {
         return Err("GPG entry has an empty first-line password".into());
     }
     let mut entry = Entry {
+        otp: None,
         password: password.into(),
         username: String::new(),
         url: String::new(),

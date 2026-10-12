@@ -1,13 +1,16 @@
 # Container and source deployment
 
-Experimental single-account API only. UI, browser login, device enrollment, sharing,
-and biometric integration are not implemented. The bearer token authorizes ciphertext
+Experimental web UI and local managed accounts, with personal/group encrypted collections.
+Native biometric integration, browser extensions, and automatic sharing-key delivery are not implemented. The bearer token authorizes ciphertext
 access; it cannot decrypt the store. Use synthetic data until the security design and
 implementation have been independently reviewed.
 
 ## Build from source
 
 ```sh
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.114 --locked
+sh scripts/build_web.sh
 cargo build --release --locked -p petika -p petika-server
 ```
 
@@ -17,6 +20,7 @@ Create a private token file outside the repository:
 umask 077
 mkdir -p "$HOME/.config/petika"
 openssl rand -hex 32 > "$HOME/.config/petika/api-token"
+PETIKA_COOKIE_SECURE=false \
 PETIKA_TOKEN_FILE="$HOME/.config/petika/api-token" \
 PETIKA_DATA_DIR="$HOME/.local/share/petika-api" \
 PETIKA_GIT_MIRROR="$HOME/.local/share/petika-mirror" \
@@ -47,6 +51,7 @@ Example after preparing a UID-65532-readable secret file:
 docker run --name petika --detach \
   --read-only --cap-drop ALL --security-opt no-new-privileges \
   --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  -e PETIKA_COOKIE_SECURE=false \
   -p 127.0.0.1:8080:8080 \
   -v petika-data:/data -v petika-mirror:/mirror \
   --mount type=bind,src=/absolute/path/to/api-token,dst=/run/secrets/token,readonly \
@@ -79,7 +84,7 @@ The cluster needs a default storage class or pre-provisioned volumes. fsGroup gr
 initial volume access; Petika creates nested files with owner-only permissions. Keep
 fsGroupChangePolicy at OnRootMismatch to avoid relaxing existing file permissions.
 Do not scale beyond one replica: the current store is a filesystem-backed single-account
-prototype. Expose it remotely only behind HTTPS with request timeouts, body limits, and
+implementation. Expose it remotely only behind HTTPS with request timeouts, body limits, and
 rate limits. No public ingress is installed automatically.
 
 ## Rootless Podman kube play
@@ -120,3 +125,10 @@ passphrase or GPG private keys to the server.
 
 References: [Podman kube play](https://docs.podman.io/en/latest/markdown/podman-kube-play.1.html),
 [Kubernetes security contexts](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/).
+
+
+The image includes the built web UI at `/`. See [setup variables](setup.md) for unattended
+administrator creation, optional encrypted snapshot provisioning, and setup lockout.
+HTTP port-forward/local examples require `PETIKA_COOKIE_SECURE=false` for web login;
+use the default `true` behind HTTPS in production. Account cookies are not API bearer tokens.
+See [web security boundaries](web-ui.md) and [schema upgrades](schema.md).

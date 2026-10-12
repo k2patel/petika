@@ -1,6 +1,9 @@
 # Petika · पेटिका
 
-<img src="assets/brand/petika-logo.png" alt="Petika — open chest with rising binary digits" width="560">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/brand/petika-icon-dark.png">
+  <img src="assets/brand/petika-icon-light.png" alt="Petika — open chest with rising binary digits" width="140">
+</picture>
 
 **Your secrets. Your infrastructure.**
 
@@ -13,8 +16,14 @@ ciphertext with revision checks and a one-way encrypted Git mirror; entry names 
 folder hierarchy stay inside the encrypted snapshot.
 
 [Deploy from source, distroless Docker, Kubernetes, or Podman kube play](docs/deployment.md).
-Account login, CLI/API synchronization, sharing, browser autofill, mobile apps,
-biometric unlock, and the GPG management UI are still planned.
+The [web UI](docs/web-ui.md) includes local accounts, users/groups, encrypted collections,
+website OTP, profile settings, and system/light/dark themes. [First-run setup](docs/setup.md)
+can be completed through the browser or environment variables. [Versioned schemas](docs/schema.md)
+provide a migration path for upgrades.
+
+Browser autofill, mobile apps, biometric unlock, full native GPG key management,
+optional OpenID Connect, and automatic per-user sharing-key delivery are still planned.
+Group collections currently require sharing an unlock passphrase through a separate channel.
 
 ## Development
 

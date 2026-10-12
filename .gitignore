@@ -13,3 +13,7 @@
 /petika-data/
 /petika-mirror/
 *.petika
+
+/clients/web/wasm/*
+
+/output/

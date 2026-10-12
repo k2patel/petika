@@ -46,3 +46,16 @@ fn compare_and_swap_persists_and_mirror_preserves_every_accepted_revision() {
     let latest: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(latest["revision"], 2);
 }
+
+#[test]
+fn snapshot_schema_supports_legacy_and_rejects_future_versions() {
+    use petika_server::Snapshot;
+    let old: Snapshot = serde_json::from_str(r#"{"revision":1,"encrypted":"opaque"}"#).unwrap();
+    assert_eq!(old.schema_version, 1);
+    assert!(
+        serde_json::from_str::<Snapshot>(
+            r#"{"schema_version":999,"revision":1,"encrypted":"opaque"}"#
+        )
+        .is_err()
+    );
+}

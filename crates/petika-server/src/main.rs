@@ -1,3 +1,4 @@
+mod web;
 use petika_server::{Repository, Result, Update, mirror_once};
 use std::{
     env,
@@ -45,6 +46,7 @@ fn handle(
     token: &str,
     mirror_revision: &AtomicU64,
     mirror_enabled: bool,
+    authenticated: bool,
 ) {
     if request.method() == &Method::Get && request.url() == "/healthz" {
         return respond(request, 200, "{\"status\":\"ok\"}", None);
@@ -58,10 +60,10 @@ fn handle(
     let provided = header(&request, "Authorization")
         .and_then(|s| s.strip_prefix("Bearer "))
         .unwrap_or("");
-    if !bool::from(provided.as_bytes().ct_eq(token.as_bytes())) {
+    if !authenticated && !bool::from(provided.as_bytes().ct_eq(token.as_bytes())) {
         return respond(request, 401, "{\"error\":\"unauthorized\"}", None);
     }
-    if request.method() == &Method::Get && request.url() == "/v1/status" {
+    if request.method() == &Method::Get && request.url().ends_with("/status") {
         return match repository.read() {
             Ok(snapshot) => respond(
                 request,
@@ -78,7 +80,7 @@ fn handle(
             Err(_) => respond(request, 503, "{\"error\":\"storage unavailable\"}", None),
         };
     }
-    if request.url() != "/v1/snapshot" {
+    if !request.url().ends_with("/snapshot") {
         return respond(request, 404, "{\"error\":\"not found\"}", None);
     }
     if request.method() == &Method::Get {
@@ -171,9 +173,10 @@ fn run() -> Result<()> {
     let mirror_revision = Arc::new(AtomicU64::new(0));
     let mirror = env::var_os("PETIKA_GIT_MIRROR").map(PathBuf::from);
     let enabled = mirror.is_some();
-    if let Some(directory) = mirror {
+    if let Some(directory) = mirror.clone() {
         let repository = Arc::clone(&repository);
         let mirrored = Arc::clone(&mirror_revision);
+        let collection_root = data.join("collections");
         thread::spawn(move || {
             loop {
                 match mirror_once(&repository, &directory) {
@@ -183,16 +186,141 @@ fn run() -> Result<()> {
                     Ok(None) => {}
                     Err(_) => eprintln!("Git mirror retry pending; API data is retained."),
                 }
+                if let Ok(entries) = std::fs::read_dir(&collection_root) {
+                    for entry in entries.flatten() {
+                        let id = entry.file_name().to_string_lossy().into_owned();
+                        if id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
+                            let collection = Repository::new(entry.path().join("snapshot.json"));
+                            let _ = mirror_once(&collection, &directory.join(&id));
+                        }
+                    }
+                }
                 thread::sleep(Duration::from_secs(5));
             }
         });
     }
+    let mut accounts = petika_server::accounts::Accounts::new(data.join("accounts.json"));
+    accounts.migrate()?;
+    let setup_mode = env::var("PETIKA_SETUP_MODE").unwrap_or_else(|_| "auto".into());
+    if !matches!(setup_mode.as_str(), "auto" | "manual" | "disabled") {
+        return Err("PETIKA_SETUP_MODE must be auto, manual, or disabled".into());
+    }
+    if !accounts.initialized()? {
+        if setup_mode == "disabled" {
+            return Err("Setup is disabled but no administrator exists".into());
+        }
+        let username = env::var("PETIKA_ADMIN_USERNAME").ok();
+        let password_env = env::var("PETIKA_ADMIN_PASSWORD").ok().map(Zeroizing::new);
+        let password_file = env::var("PETIKA_ADMIN_PASSWORD_FILE").ok();
+        if setup_mode == "auto"
+            && (username.is_some()
+                || password_env.is_some()
+                || password_file.is_some()
+                || env::var_os("PETIKA_INITIAL_SNAPSHOT_FILE").is_some())
+        {
+            if password_env.is_some() && password_file.is_some() {
+                return Err("Set only one administrator password source".into());
+            }
+            let password = if let Some(path) = password_file {
+                let mut value = Zeroizing::new(String::new());
+                File::open(path)?.take(4097).read_to_string(&mut value)?;
+                if value.len() > 4096 {
+                    return Err("Administrator password file too large".into());
+                }
+                Zeroizing::new(value.trim_end_matches(['\r', '\n']).to_owned())
+            } else {
+                password_env
+                    .ok_or("Complete PETIKA_ADMIN_PASSWORD or PETIKA_ADMIN_PASSWORD_FILE")?
+            };
+            if let Some(path) = env::var_os("PETIKA_INITIAL_SNAPSHOT_FILE") {
+                let mut encrypted = String::new();
+                File::open(path)?
+                    .take(MAX_BODY + 1)
+                    .read_to_string(&mut encrypted)?;
+                if encrypted.len() as u64 > MAX_BODY {
+                    return Err("Initial snapshot too large".into());
+                }
+                accounts.initial_snapshot(encrypted)?;
+            }
+            accounts.create_user(
+                &username.ok_or("Complete PETIKA_ADMIN_USERNAME")?,
+                &env::var("PETIKA_ADMIN_NAME").unwrap_or_else(|_| "Administrator".into()),
+                password.to_string(),
+                true,
+                true,
+            )?;
+        }
+    }
+    let web_root =
+        PathBuf::from(env::var_os("PETIKA_WEB_DIR").unwrap_or_else(|| "clients/web".into()));
+    let secure_cookie = env::var("PETIKA_COOKIE_SECURE").as_deref() != Ok("false");
     let server = Server::http(&listen)?;
     eprintln!(
         "Petika experimental snapshot API listening on {listen}; use TLS termination for remote access."
     );
     for request in server.incoming_requests() {
-        handle(request, &repository, &token, &mirror_revision, enabled);
+        let path = request.url().to_owned();
+        if !path.starts_with("/v1/") && path != "/healthz" && path != "/readyz" {
+            web::static_file(request, &web_root);
+        } else if path.starts_with("/v1/auth/")
+            || path.starts_with("/v1/admin/")
+            || path == "/v1/profile"
+            || path == "/v1/collections"
+        {
+            web::account_route(request, &mut accounts, &token, secure_cookie);
+        } else if let Some(rest) = path.strip_prefix("/v1/collections/") {
+            let Some((id, action)) = rest.split_once('/') else {
+                web::json(request, 404, serde_json::json!({"error":"Not found"}), None);
+                continue;
+            };
+            let write = request.method() != &Method::Get;
+            let user = accounts
+                .authenticate(&web::session(&request))
+                .ok()
+                .flatten();
+            let allowed = user
+                .as_ref()
+                .is_some_and(|u| accounts.access(u, id, write).unwrap_or(false));
+            if !allowed
+                || (write && !web::csrf(&request))
+                || !matches!(action, "snapshot" | "status")
+            {
+                web::json(
+                    request,
+                    403,
+                    serde_json::json!({"error":"Collection access denied"}),
+                    None,
+                );
+                continue;
+            }
+            let collection =
+                Repository::new(data.join("collections").join(id).join("snapshot.json"));
+            let mirrored = if let Some(root) = &mirror {
+                mirror_once(&collection, &root.join(id))
+                    .ok()
+                    .flatten()
+                    .unwrap_or(0)
+            } else {
+                0
+            };
+            handle(
+                request,
+                &collection,
+                &token,
+                &AtomicU64::new(mirrored),
+                enabled,
+                true,
+            );
+        } else {
+            handle(
+                request,
+                &repository,
+                &token,
+                &mirror_revision,
+                enabled,
+                false,
+            );
+        }
     }
     Ok(())
 }

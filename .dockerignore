@@ -9,3 +9,5 @@ petika-mirror
 **/*.petika
 **/*.key
 **/*.pem
+
+clients/web/wasm

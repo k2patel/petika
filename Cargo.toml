@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/petika-core", "crates/petika-cli", "crates/petika-server", "crates/petika-desktop"]
+members = ["crates/petika-core", "crates/petika-cli", "crates/petika-server", "crates/petika-desktop", "crates/petika-web"]
 resolver = "3"
 
 [workspace.package]

@@ -61,9 +61,43 @@ jobs:
             if curl --fail --silent http://127.0.0.1:18080/healthz; then break; fi
             sleep 1
           done
+          curl --fail --silent http://127.0.0.1:18080/ > /tmp/petika-index.html
+          curl --fail --silent http://127.0.0.1:18080/wasm/petika_web_bg.wasm > /tmp/petika-browser.wasm
+          curl --fail --silent http://127.0.0.1:18080/brand-dark.png > /tmp/petika-brand-dark.png
           sudo python3 scripts/smoke_api.py http://127.0.0.1:18080 \
             /tmp/petika-test/token /tmp/petika-test/fixture.petika
           if docker run --rm --entrypoint /bin/sh petika:test -c true; then
             echo 'Unexpected shell in distroless runtime' >&2
             exit 1
           fi
+
+  web:
+    name: Web UI and provisioning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Rust browser toolchain
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo install wasm-bindgen-cli --version 0.2.114 --locked
+      - name: Build native and browser clients
+        run: |
+          cargo build --workspace --locked
+          sh scripts/build_web.sh
+      - name: OTP reference vectors
+        run: node scripts/test_otp.mjs
+      - name: Provisioning
+        run: python3 scripts/test_setup.py
+      - name: Install browser test tools
+        run: |
+          python3 -m venv /tmp/petika-browser-tests
+          /tmp/petika-browser-tests/bin/pip install playwright==1.60.0
+          /tmp/petika-browser-tests/bin/playwright install --with-deps chromium
+      - name: Browser workflows and permissions
+        run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
+      - name: Screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: petika-web-ui
+          path: output/web-ui

@@ -71,6 +71,8 @@ pub struct Entry {
     pub password: String,
     pub url: String,
     pub notes: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub otp: Option<String>,
 }
 
 #[derive(Serialize, Deserialize)]

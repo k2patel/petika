@@ -1,10 +1,14 @@
 # syntax=docker/dockerfile:1
 FROM rust:1.90.0-bookworm AS build
 RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+RUN rustup target add wasm32-unknown-unknown \
+    && cargo install wasm-bindgen-cli --version 0.2.114 --locked
 WORKDIR /build
 COPY Cargo.toml Cargo.lock rust-toolchain.toml ./
 COPY crates ./crates
 COPY scripts ./scripts
+COPY clients/web ./clients/web
+RUN sh scripts/build_web.sh
 RUN cargo build --release --locked -p petika -p petika-server \
     && python3 scripts/check_licenses.py \
     && python3 scripts/third_party_notices.py > /build/THIRD_PARTY_NOTICES.txt
@@ -17,6 +21,7 @@ COPY --from=build /build/target/release/petika /usr/local/bin/petika
 COPY --from=build /build/target/release/petika-server /usr/local/bin/petika-server
 COPY --from=build /build/THIRD_PARTY_NOTICES.txt /usr/share/doc/petika/THIRD_PARTY_NOTICES.txt
 COPY LICENSE /usr/share/doc/petika/LICENSE
+COPY --from=build /build/clients/web /usr/share/petika/web
 LABEL org.opencontainers.image.source="https://github.com/k2patel/petika" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.title="Petika" \
@@ -24,7 +29,8 @@ LABEL org.opencontainers.image.source="https://github.com/k2patel/petika" \
 ENV PETIKA_LISTEN=0.0.0.0:8080 \
     PETIKA_DATA_DIR=/data \
     PETIKA_GIT_MIRROR=/mirror \
-    PETIKA_TOKEN_FILE=/run/secrets/token
+    PETIKA_TOKEN_FILE=/run/secrets/token \
+    PETIKA_WEB_DIR=/usr/share/petika/web
 WORKDIR /data
 USER 65532:65532
 EXPOSE 8080

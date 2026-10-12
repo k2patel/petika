@@ -16,6 +16,12 @@ serde.workspace = true
 serde_json.workspace = true
 zeroize.workspace = true
 thiserror.workspace = true
+x-wing.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 fs2.workspace = true
 tempfile.workspace = true
-x-wing.workspace = true
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { workspace = true, features = ["js"] }
+getrandom04 = { package = "getrandom", version = "0.4", features = ["wasm_js"] }

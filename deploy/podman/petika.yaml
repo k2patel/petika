@@ -45,6 +45,9 @@ spec:
           value: /data
         - name: PETIKA_GIT_MIRROR
           value: /mirror
+        # Loopback-only HTTP example; keep true behind HTTPS.
+        - name: PETIKA_COOKIE_SECURE
+          value: "false"
         - name: PETIKA_TOKEN_FILE
           value: /run/secrets/token
       ports:

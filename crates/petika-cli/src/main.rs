@@ -232,6 +232,7 @@ fn run(cli: Cli) -> Result<()> {
             store.put(
                 name,
                 Entry {
+                    otp: None,
                     username,
                     password: password.to_string(),
                     url,
@@ -257,6 +258,7 @@ fn run(cli: Cli) -> Result<()> {
             store.put(
                 name,
                 Entry {
+                    otp: None,
                     username,
                     password: password.to_string(),
                     url,

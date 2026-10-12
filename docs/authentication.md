@@ -1,12 +1,16 @@
 # Authentication and sharing
 
-**Planned; no login or access-control API is implemented.**
+Petika-managed accounts, session cookies, administrator user/group management, and
+collection read/edit permissions are implemented in the experimental web UI. See
+[web authentication and sharing](web-ui.md#identity-and-group-boundaries) for the
+current security model and limitations, and [setup](setup.md) for provisioning.
+Optional OpenID Connect and CLI browser-login enrollment remain planned.
 
 Keep server authentication distinct from local decryption. A proposed CLI browser-login
 flow (or a code entered on another device for headless hosts) establishes a server session;
 new-device enrollment must separately grant access to decryption keys.
 
-Biometrics default on when supported and enrolled, with a local on/off control. Turning
+Planned biometric clients will default on when supported and enrolled, with a local on/off control. Turning
 biometrics off must not disable vault locking. An explicit passphrase fallback remains
 available, including on headless Linux. Canceling a prompt leaves the client locked.
 Choose reauthentication rules for security-setting changes and auto-lock defaults before

@@ -1,7 +1,10 @@
 # Documentation
 
-All operational features below are planned unless explicitly marked implemented.
+Implementation status and current limitations are documented in each guide.
 
+- [Web UI](web-ui.md)
+- [First-run and unattended setup](setup.md)
+- [Schema and migrations](schema.md)
 - [Product requirements](requirements.md)
 - [Architecture and open decisions](architecture.md)
 - [Development and verification](development.md)
@@ -12,6 +15,7 @@ All operational features below are planned unless explicitly marked implemented.
 - [Authentication and sharing](authentication.md)
 - [Sync, backup, and recovery](recovery.md)
 
-Implemented: encrypted local CLI, standard and experimental hybrid setup modes,
-local GPG import, single-account ciphertext API, durable revision journal, Rust Git
-mirror, and distroless deployment configuration. Remaining product features are planned.
+Implemented: encrypted CLI and Rust/WASM web client, standard/hybrid setup modes,
+local GPG import, managed accounts, user/group permissions, website OTP, encrypted
+snapshot API and Git mirroring, first-run/environment provisioning, versioned storage,
+and distroless deployment. See the web UI guide for remaining integrations.

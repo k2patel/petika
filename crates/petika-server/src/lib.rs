@@ -8,8 +8,27 @@ pub type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + S
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Snapshot {
+    #[serde(
+        default = "snapshot_version",
+        deserialize_with = "read_snapshot_version"
+    )]
+    pub schema_version: u32,
     pub revision: u64,
     pub encrypted: String,
+}
+
+fn snapshot_version() -> u32 {
+    1
+}
+fn read_snapshot_version<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<u32, D::Error> {
+    let version = u32::deserialize(d)?;
+    if version == 1 {
+        Ok(version)
+    } else {
+        Err(serde::de::Error::custom("unsupported snapshot schema"))
+    }
 }
 
 pub enum Update {
@@ -51,6 +70,7 @@ impl Repository {
         }
         let revision = current.checked_add(1).ok_or("revision limit reached")?;
         let bytes = serde_json::to_vec(&Snapshot {
+            schema_version: 1,
             revision,
             encrypted,
         })?;
@@ -135,3 +155,5 @@ pub fn mirror_once(repository: &Repository, directory: &Path) -> Result<Option<u
     }
     Ok(Some(snapshot.revision))
 }
+
+pub mod accounts;
