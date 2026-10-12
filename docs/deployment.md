@@ -83,7 +83,7 @@ kubectl -n petika port-forward service/petika 8080:8080
 The cluster needs a default storage class or pre-provisioned volumes. fsGroup grants
 initial volume access; Petika creates nested files with owner-only permissions. Keep
 fsGroupChangePolicy at OnRootMismatch to avoid relaxing existing file permissions.
-Do not scale beyond one replica: the current store is a filesystem-backed single-account
+Do not scale beyond one replica: the current store is a filesystem-backed single-server
 implementation. Expose it remotely only behind HTTPS with request timeouts, body limits, and
 rate limits. No public ingress is installed automatically.
 
@@ -112,9 +112,11 @@ do not request volume deletion unless you intend to erase the data and mirror.
 `GET /healthz` checks the process; `GET /readyz` checks storage access. Authenticated
 `GET /v1/status` reports API and mirror revisions. Mirror lag does not reject API writes:
 accepted snapshots remain in the durable revision journal and retry every five seconds.
-The mirror is a bare Git repository on `/mirror/repository.git` containing only `snapshot.json`
+The legacy bearer API mirror is a bare Git repository on `/mirror/repository.git` containing only `snapshot.json`
 in each committed tree. Inspect it externally with `git --git-dir=/mirror/repository.git show HEAD:snapshot.json`.
-Entry names and folder hierarchy are encrypted; ciphertext sizes, revision counts,
+Managed collections use `/mirror/{opaque-collection-id}/repository.git`; their revisions
+are available through `petika status --collection ID`. Account and group metadata is
+not included in these mirrors. Entry names and folder hierarchy are encrypted; ciphertext sizes, revision counts,
 and commit times remain visible. Pushing it to a remote Git server is
 currently an operator task. Back up both persistent volumes and client recovery material.
 A mirror on the same physical disk is not an independent disaster-recovery backup.
