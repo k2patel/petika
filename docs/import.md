@@ -19,5 +19,5 @@ are also extracted. Imports reject symlinks and skip `.git` and `.extensions`.
 The importer saves only after every file succeeds, leaves source files unchanged,
 and never imports source Git history. Decrypted bytes remain in memory.
 
-Full GPG key management in the future UI remains planned: creation, inspection,
+Full GPG key management in the UI remains planned: creation, inspection,
 public-key export, expiry changes, and revocation. No such UI exists yet.

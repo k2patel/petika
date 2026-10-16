@@ -3,14 +3,23 @@
 Use the toolchain in `rust-toolchain.toml`. Run the commands in the root README before
 submitting changes. `Cargo.lock` is committed for reproducible application builds.
 
-CI builds, lints, and tests on Linux, macOS, and Windows. It checks formatting and runs
-the dependency-license gate on Linux. The initial foundation has no behavioral test
-suite; Cargo test currently checks that all targets and documentation tests compile.
+CI builds, lints, and runs behavioral Rust tests on Linux, macOS, and Windows.
+It checks formatting and dependency licenses, exercises the distroless API/mirror,
+and runs browser, provisioning, and website OTP reference-vector checks on Linux.
 
-When behavior is introduced, add tests for encryption round trips and tampering,
-authentication denial and lock expiry, canceled biometric prompts and passphrase
-fallback, sync conflicts and offline changes, sharing/revocation, non-destructive GPG
-import, and recovery on a fresh installation. Use synthetic fixtures, never real secrets.
+Rust tests cover encryption/tampering, persistence, CLI record workflows, account and
+group authorization, session revocation, browser-approval grants, schema migration,
+snapshot conflicts, and mirror history. Python browser checks cover setup, permissions,
+CLI/WASM compatibility, and screenshots. See the root README and [web UI guide](web-ui.md)
+for commands. The `API contracts` job validates the proposed group-key delivery
+OpenAPI document, schema fixtures, and per-operation test mappings; see the
+[test actions](testing/group-key-delivery.md). It does not test unimplemented endpoints.
+Use synthetic fixtures, never real secrets.
+
+Add focused tests as behavior changes. The next milestone needs recipient-key delivery,
+key substitution/tampering, membership races, rotation, and migration coverage; see the
+[roadmap acceptance criteria](roadmap.md). Native authentication and clean-host recovery
+tests remain outstanding because those integrations/workflows are unfinished.
 
 Platform verification must cover Chromium and Firefox native messaging, iOS/Android
 autofill, and OS authentication on actual supported environments. A successful Rust

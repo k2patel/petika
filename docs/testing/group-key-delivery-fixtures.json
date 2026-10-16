@@ -1,0 +1,95 @@
+[
+  {
+    "name": "bundle-update-valid",
+    "schema": "BundleUpdate",
+    "valid": true,
+    "value": {
+      "expected_bundle_revision": 1,
+      "encrypted_bundle": {
+        "bundle_version": 1,
+        "identity_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "salt": "YQ==",
+        "nonce": "YQ==",
+        "ciphertext": "YQ==",
+        "kdf": "argon2id-v19-m65536-t3-p1"
+      }
+    }
+  },
+  {
+    "name": "negative-revision",
+    "schema": "BundleUpdate",
+    "valid": false,
+    "value": {
+      "expected_bundle_revision": -1,
+      "encrypted_bundle": {}
+    }
+  },
+  {
+    "name": "error-valid",
+    "schema": "Error",
+    "valid": true,
+    "value": {
+      "code": "conflict",
+      "message": "State changed; refresh and retry"
+    }
+  },
+  {
+    "name": "error-must-not-leak-extra-field",
+    "schema": "Error",
+    "valid": false,
+    "value": {
+      "code": "conflict",
+      "message": "Conflict",
+      "private_key": "synthetic"
+    }
+  },
+  {
+    "name": "empty-package-page",
+    "schema": "PackagePage",
+    "valid": true,
+    "value": {
+      "packages": [],
+      "next_cursor": ""
+    }
+  },
+  {
+    "name": "empty-publication-rejected",
+    "schema": "PublishRequest",
+    "valid": false,
+    "value": {
+      "expected_snapshot_revision": 1,
+      "expected_key_epoch": 1,
+      "expected_membership_generation": 1,
+      "packages": []
+    }
+  },
+  {
+    "name": "missing-commit-epoch",
+    "schema": "CommitResult",
+    "valid": false,
+    "value": {
+      "snapshot_revision": 1,
+      "membership_generation": 1
+    }
+  },
+  {
+    "name": "commit-valid",
+    "schema": "CommitResult",
+    "valid": true,
+    "value": {
+      "snapshot_revision": 2,
+      "key_epoch": 1,
+      "membership_generation": 1
+    }
+  },
+  {
+    "name": "unsafe-js-counter",
+    "schema": "CommitResult",
+    "valid": false,
+    "value": {
+      "snapshot_revision": 9007199254740992,
+      "key_epoch": 1,
+      "membership_generation": 1
+    }
+  }
+]

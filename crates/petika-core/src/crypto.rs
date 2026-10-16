@@ -109,13 +109,13 @@ impl Drop for UnlockedStore {
     }
 }
 
-fn random<const N: usize>() -> Result<[u8; N]> {
+pub(crate) fn random<const N: usize>() -> Result<[u8; N]> {
     let mut bytes = [0; N];
     getrandom::getrandom(&mut bytes).map_err(|_| Error::Random)?;
     Ok(bytes)
 }
 
-fn derive(passphrase: &str, salt: &[u8; 16]) -> Result<Zeroizing<[u8; 32]>> {
+pub(crate) fn derive(passphrase: &str, salt: &[u8; 16]) -> Result<Zeroizing<[u8; 32]>> {
     let mut key = Zeroizing::new([0; 32]);
     let params = Params::new(65536, 3, 1, Some(32)).map_err(|_| Error::Format)?;
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
@@ -124,13 +124,18 @@ fn derive(passphrase: &str, salt: &[u8; 16]) -> Result<Zeroizing<[u8; 32]>> {
     Ok(key)
 }
 
-fn encrypt(key: &[u8; 32], nonce: &[u8; 24], message: &[u8], aad: &[u8]) -> Result<Vec<u8>> {
+pub(crate) fn encrypt(
+    key: &[u8; 32],
+    nonce: &[u8; 24],
+    message: &[u8],
+    aad: &[u8],
+) -> Result<Vec<u8>> {
     XChaCha20Poly1305::new(key.into())
         .encrypt(XNonce::from_slice(nonce), Payload { msg: message, aad })
         .map_err(|_| Error::Format)
 }
 
-fn decrypt(
+pub(crate) fn decrypt(
     key: &[u8; 32],
     nonce: &[u8; 24],
     message: &[u8],
@@ -330,7 +335,7 @@ impl UnlockedStore {
     }
 }
 
-fn check_passphrase(value: &str) -> Result<()> {
+pub(crate) fn check_passphrase(value: &str) -> Result<()> {
     if value.chars().count() < 12 {
         Err(Error::WeakPassphrase)
     } else {

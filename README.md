@@ -129,6 +129,12 @@ The Git mirror hides entry names and folder structure, but exposes ciphertext si
 revision history, and timing. Remote Git pushes remain an operator task. Keep independent
 backups of server data, mirrors, configuration, and client recovery material.
 
+**Next milestone: [automatic per-user group-key delivery](docs/roadmap.md#next-milestone-automatic-per-user-group-key-delivery).**
+Membership-change key rotation follows it. The [roadmap](docs/roadmap.md) tracks the
+complete implementation checklist. The shared core now generates and encrypts recipient
+identities with fingerprint-checked recovery; verified-contact handling, enrollment APIs,
+and CLI/web delivery flows remain pending. See the [local identity format](docs/identity-format.md).
+
 Still planned:
 
 - Chromium/Firefox extensions and cross-site autofill.

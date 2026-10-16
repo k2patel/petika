@@ -4,38 +4,52 @@
 
 | Component | Purpose | Current state |
 | --- | --- | --- |
-| `petika-core` | Shared domain, encryption, and sync logic | Status constant only |
-| `petika` | User-facing Rust CLI | Help and version only |
-| `petika-server` | Self-hosted API | Fails explicitly; opens no listener |
+| `petika-core` | Shared records, encryption, local storage | Standard/hybrid envelopes, record operations, local recipient identities/recovery, atomic native persistence |
+| `petika` | Rust CLI | Offline password management, GPG import, managed login, encrypted collection pull/push |
+| `petika-server` | Self-hosted API and web hosting | Accounts, permissions, provisioning, revision checks, snapshot journals, Git mirrors |
+| `petika-web` and `clients/web` | Browser password manager | Rust/WASM encryption worker and JavaScript/CSS interface |
 | `petika-desktop` | Native messaging and platform authentication | Library placeholder |
-| Browser/mobile clients | Autofill and interactive password management | Documentation only |
+| Browser extensions/mobile apps | Platform autofill and biometric unlock | Not implemented |
 
-All packages have `publish = false` until the first release is ready. No external Rust
-dependencies are present. Public code exposes only foundation status; no vault format,
-API protocol, or cryptographic compatibility guarantee exists yet.
+Packages remain unpublished (`publish = false`). Cargo dependencies and the lockfile
+are present. Storage and API formats are versioned but experimental; there is no stable
+compatibility guarantee. See [schema upgrades](schema.md).
 
-## Proposed direction, not a finalized protocol
+## Implemented data flow
 
-Clients encrypt/decrypt locally using a shared Rust core. A central API authenticates
-devices and synchronizes encrypted records. The Rust CLI is a first-class client.
-Browser extensions communicate with a desktop helper using native messaging. Mobile
-clients need platform bindings for biometrics and autofill. Browser glue may require
-JavaScript; it must not introduce npm tooling or an npm runtime dependency.
+Clients encrypt/decrypt locally using the shared Rust core. Server authentication is
+separate from collection unlocking. The API authorizes personal/group collection access
+and accepts whole encrypted snapshots using compare-and-swap revisions. Stale writes
+are rejected; clients retain local changes for explicit resolution. There is no automatic
+per-record merge. The CLI uses explicit pull/push; the web client saves encrypted drafts
+and attempts synchronization.
 
-If API-authoritative sync is selected, accepted revisions feed a one-way encrypted Git
-mirror. Stale edits to the same record produce explicit conflicts. Local offline edits
-queue for synchronization. Git edits do not automatically override API records.
+Accepted snapshots are journaled and mirrored to separate local Git repositories. Git
+is a one-way recovery mirror, not a writable synchronization peer. Remote Git replication
+is an operator task. Accounts and memberships are server metadata outside the mirror.
 
-## Design gates
+Group members currently share a collection passphrase out of band. Automatic per-user
+group-key delivery is the [next milestone](roadmap.md). Server administrators can manage
+membership but do not automatically receive collection decryption keys. The core now
+implements local recipient identity generation, encrypted storage, and pinned recovery;
+verified contact storage, enrollment APIs, and package delivery remain pending.
 
-Before implementing secret storage, document and review the threat model, cryptographic
-library choices, authenticated record format, key wrapping, recovery, enrollment and
-revocation, and migration/versioning rules. Use established cryptographic primitives;
-do not invent a cipher or equate server login with decryption authorization.
+## Remaining design gates
 
-A revoked device may retain already-downloaded records and keys. Git history also
-retains old ciphertext. Rotation cannot retroactively erase disclosed passwords.
-Choose sharing and recovery designs with these limits explicit.
+The [group-key delivery proposal](decisions/0002-per-user-group-key-delivery.md) defines
+recipient enrollment, identity verification, packages, recovery, and migration boundaries.
+Validate protocol encodings and dependencies before implementation integration; fresh-key
+rotation still needs its own implementation decision. Keep account
+login separate from decryption authorization. Preserve standard and experimental hybrid
+mode semantics without silently downgrading protection.
 
-Record each accepted architecture decision with rationale and validation criteria in
-this directory before relying on it in code.
+Planned extensions use native messaging; mobile clients need platform autofill and
+biometric bindings. Platform packaging must preserve the no-npm requirement.
+
+A revoked user/device may retain downloaded ciphertext, keys, and plaintext. Git history
+retains old ciphertext. Rotation cannot erase passwords already disclosed. The server's
+revision checks do not establish rollback resistance against a malicious server or a
+restored old data directory.
+
+Record architecture decisions with rationale and validation criteria before relying on
+them in code. See the [local encryption decision](decisions/0001-local-encryption.md).

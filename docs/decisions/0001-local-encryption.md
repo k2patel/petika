@@ -2,6 +2,10 @@
 
 Status: accepted for the experimental local milestone, not a stable storage contract.
 
+This decision records the original local milestone. Managed accounts, collection sharing,
+and snapshot synchronization have since been implemented; see the current
+[architecture](../architecture.md) and [roadmap](../roadmap.md).
+
 ## Architecture
 
 The user selected API-authoritative synchronization with a one-way encrypted Git mirror.
@@ -14,8 +18,8 @@ this milestone. The local snapshot format will need migration before per-record 
 Protect a copied, locked store against plaintext disclosure and undetected modification.
 Do not claim protection from malware running as the user, a compromised OS, terminal
 capture, hostile filesystem races, or a malicious binary. File size and ciphertext length
-remain observable. Valid older snapshots can be replayed; rollback detection needs the
-future revision protocol. Passphrase strength limits resistance to offline guessing.
+remain observable. Valid older snapshots can be replayed; server compare-and-swap revisions reject stale writes but do not provide rollback
+detection against an old restored database or malicious server. Passphrase strength limits resistance to offline guessing.
 
 Use RustCrypto Argon2id v19 (64 MiB memory, 3 iterations, 1 lane, 32-byte output) with a
 fresh 16-byte salt to derive a wrapping key. In standard mode, generate a separate random 256-bit data key.
@@ -51,8 +55,9 @@ allocator, OS, or terminal copies. Disabling biometrics is not modeled as disabl
 Test wrong passphrases, ciphertext/key/header tampering, version rejection, bounded reads,
 round trips, metadata confidentiality, exclusive locking, duplicate/missing records,
 atomic replacement, permissions, passphrase changes, and CLI failure behavior.
-The format is experimental and unaudited. Recovery, enrollment, sharing, hardware key
-storage, migration, and the network protocol remain separate design/implementation steps.
+The format is experimental and unaudited. Managed enrollment, collection permissions, schema migration, and the snapshot API now
+exist outside this local-storage decision. Automatic recipient-key delivery, hardware key
+storage, and complete recovery workflows remain unfinished.
 
 References: [Argon2](https://docs.rs/argon2/0.5.3/argon2/),
 [XChaCha20-Poly1305](https://docs.rs/chacha20poly1305/0.10.1/chacha20poly1305/),

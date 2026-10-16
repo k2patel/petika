@@ -24,5 +24,9 @@ clap = { version = "4", features = ["derive"] }
 rpassword = "7"
 tiny_http = "0.12"
 subtle = "2.6"
+base64 = "0.22.1"
+sha2 = "0.10.9"
+ed25519-dalek = { version = "2.2.0", features = ["zeroize"] }
+x25519-dalek = { version = "3.0.0", features = ["static_secrets", "zeroize"] }
 x-wing = { version = "0.1.1", features = ["getrandom", "zeroize"] }
 gix = { version = "0.89", default-features = false, features = ["sha1"] }

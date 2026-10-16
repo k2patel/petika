@@ -1,8 +1,14 @@
-# Planned clients
+# Clients
 
-Browser extensions for Chromium and Firefox, and mobile apps for iOS and Android,
-will live here. No client app or extension is currently implemented.
+The implemented web client lives in `web/`. The Rust server serves its JavaScript/CSS
+interface, while a dedicated worker uses `petika-web` WASM bindings for local encryption.
+See the [web UI guide](../docs/web-ui.md) for features, build steps, and limitations.
+The native CLI lives in `crates/petika-cli` and supports offline storage and managed
+account synchronization.
 
-Use the shared Rust core where applicable and native platform bindings for autofill
-and biometrics. Browser-specific glue must work without npm. UI stacks and packaging
-will be selected before client implementation.
+Chromium/Firefox extensions and iOS/Android apps are not implemented. The desktop
+integration crate is a placeholder for native messaging and OS authentication.
+
+Planned clients should reuse the Rust core and native platform bindings for autofill
+and biometrics. Browser-specific glue must work without npm. Native UI stacks and
+packaging remain open decisions. See the [roadmap](../docs/roadmap.md).

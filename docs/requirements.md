@@ -16,15 +16,37 @@
 - Encrypted Git copies and recoverable backups must be addressed in the design.
 - Cargo and native binary distribution; no domain purchase required.
 
-## Not implemented
+## Implemented experimental capabilities
 
-All password management and platform features. TOTP, passkeys, payment cards,
-enterprise administration, and full 1Password feature parity are outside the initial scope.
+The CLI and Rust/WASM web client support local encryption, password management,
+standard and experimental hybrid protection, and encrypted snapshot import/export.
+Native GPG import preserves the source store. Website TOTP is implemented for saved
+logins; it is separate from account MFA.
 
-## Decisions needed before functional implementation
+The API is authoritative, with revision-checked collection snapshots and a one-way
+encrypted Git mirror. Managed accounts, browser-approved CLI sessions, personal/group
+collections, and read/edit permissions are implemented. Group passphrases currently
+travel through a separate trusted channel. Setup supports browser and unattended
+provisioning; persistence uses versioned JSON files.
 
-API-authoritative sync versus two-way Git sync, authentication provider and enrollment,
-cryptographic format and key lifecycle, sharing permissions, platform UI technologies,
-auto-lock durations, supported OS versions, deployment storage, and backup retention.
-The discussion favored an API-based Rust CLI with offline use and an encrypted Git
-mirror, but that transport choice has not been explicitly finalized.
+The shared client core also generates recipient identities and supports encrypted local
+storage, fingerprint-checked recovery, and passphrase rewrapping. This foundation is not
+yet connected to CLI/web enrollment or server-backed group-key delivery.
+
+## Next milestone and remaining requirements
+
+**Next: automatic per-user group-key delivery**, followed by membership-change key
+rotation. Track implementation and acceptance in the [roadmap](roadmap.md).
+
+Browser extensions/autofill, mobile apps, native biometrics, full GPG key-management UI,
+OS credential storage, optional OIDC, account MFA/passkeys, recovery, and audit trails
+remain unfinished. Payment cards and full 1Password parity remain outside the initial
+scope; basic user/group administration is already implemented.
+
+## Open decisions
+
+The recipient enrollment/verification design is [documented](decisions/0002-per-user-group-key-delivery.md)
+but awaits API and client integration. Fresh group-key rotation, individual item-sharing semantics, native UI stacks and supported OS versions, native auto-lock
+policy, and backup retention/recovery objectives still need decisions. The web client
+already has configurable inactivity locking. Deployment manifests target a single
+server with persistent filesystem storage; multi-replica operation is unsupported.

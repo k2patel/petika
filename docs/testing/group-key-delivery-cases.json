@@ -1,0 +1,104 @@
+{
+  "status": "planned-runtime-tests",
+  "operations": {
+    "getOwnIdentity": {
+      "success": [
+        "Own encrypted bundle returned with current revision"
+      ],
+      "rejection": [
+        "Unenrolled returns 404",
+        "Other user bundle never returned"
+      ]
+    },
+    "enrollIdentity": {
+      "success": [
+        "Verified self-registration returns 201 revision 1"
+      ],
+      "rejection": [
+        "Wrong account password returns 401",
+        "Simultaneous creates yield one 409",
+        "Mismatched deployment/user rejected",
+        "Invalid public signature rejected"
+      ]
+    },
+    "updateIdentityBundle": {
+      "success": [
+        "CAS rewrap increments revision without changing public identity"
+      ],
+      "rejection": [
+        "Stale bundle revision returns 409",
+        "Changed identity fingerprint rejected",
+        "Other user cannot overwrite bundle"
+      ]
+    },
+    "replaceIdentity": {
+      "success": [
+        "Explicit reauthenticated replacement increments identity and bundle versions"
+      ],
+      "rejection": [
+        "Stale identity returns 409",
+        "Wrong account password returns 401",
+        "Old identity packages no longer served",
+        "Affected group generations advance"
+      ]
+    },
+    "getRecipientIdentity": {
+      "success": [
+        "Active co-member sees public record only"
+      ],
+      "rejection": [
+        "Unrelated user receives 404",
+        "Admin without co-membership receives 404",
+        "Private bundle absent"
+      ]
+    },
+    "getAccessState": {
+      "success": [
+        "Member sees self; editor sees roster status with pagination"
+      ],
+      "rejection": [
+        "Reader cannot enumerate other recipient status",
+        "Stale cursor returns 409",
+        "Cross-user cursor rejected"
+      ]
+    },
+    "getOwnPackages": {
+      "success": [
+        "Own current identity and epoch packages returned; empty is valid"
+      ],
+      "rejection": [
+        "Other recipient packages never returned",
+        "Removed or disabled member denied",
+        "Old identity/epoch packages not served"
+      ]
+    },
+    "publishPackages": {
+      "success": [
+        "Active editor publishes matching grants and advances revision",
+        "Identical retry returns original result after restart"
+      ],
+      "rejection": [
+        "Read-only and admin-only denied",
+        "Changed roster/identity/epoch yields 409",
+        "Reused ID with different bytes yields 409",
+        "Invalid issuer signature rejected",
+        "Mixed old/new batch rejected",
+        "Crash never exposes partial grant state"
+      ]
+    },
+    "migrateCollection": {
+      "success": [
+        "Legacy group becomes v2 epoch 1 with issuer grant in one commit",
+        "Both modes reopen in native/WASM clients"
+      ],
+      "rejection": [
+        "Concurrent snapshot write yields 409",
+        "Missing issuer grant rejected",
+        "Mode downgrade rejected",
+        "v1 upload cannot overwrite migrated group",
+        "Crash preserves old or complete new state",
+        "Retry with changed snapshot bytes yields 409"
+      ]
+    }
+  }
+}

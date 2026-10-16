@@ -1,4 +1,4 @@
-//! Experimental single-account ciphertext snapshot API support.
+//! Experimental ciphertext snapshot storage and Git mirroring for API collections.
 use petika_core::{StoreFile, validate_envelope};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

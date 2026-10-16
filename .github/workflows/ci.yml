@@ -8,6 +8,19 @@ permissions:
   contents: read
 
 jobs:
+  contracts:
+    name: API contracts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install contract validator
+        run: python -m pip install -r scripts/requirements-contracts.txt
+      - name: Validate proposed API contracts and schema fixtures
+        run: python scripts/check_api_contracts.py
+
   rust:
     name: Rust (${{ matrix.os }})
     strategy:
