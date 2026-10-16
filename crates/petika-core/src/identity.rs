@@ -2,6 +2,9 @@
 //!
 //! This module supplies the local foundation, not enrollment, group-key delivery, or
 //! a trust directory. An enrollment self-signature does not verify a person's identity.
+mod contacts;
+pub use contacts::{ContactPin, ContactStatus, MAX_VERIFIED_CONTACTS};
+
 use base64::{Engine, engine::general_purpose::STANDARD};
 use ed25519_dalek::{Signature, Signer, SigningKey, VerifyingKey};
 use serde::{Deserialize, Serialize};
@@ -17,7 +20,8 @@ const MAX_COUNTER: u64 = (1 << 53) - 1;
 const KDF: &str = "argon2id-v19-m65536-t3-p1";
 const IDENTITY_DOMAIN: &[u8] = b"petika:recipient-identity:v1";
 const SIGNATURE_DOMAIN: &[u8] = b"petika:recipient-enrollment:v1";
-const BUNDLE_DOMAIN: &[u8] = b"petika:recipient-private-bundle:v1";
+const BUNDLE_DOMAIN_V1: &[u8] = b"petika:recipient-private-bundle:v1";
+const BUNDLE_DOMAIN_V2: &[u8] = b"petika:recipient-private-bundle:v2";
 const SUITES: [&[u8]; 3] = [b"x25519", b"xwing-draft06", b"ed25519"];
 
 /// Public transport record only. Validate before trusting its framing or signature.
@@ -46,6 +50,32 @@ pub struct EncryptedIdentityBundle {
     pub kdf: String,
 }
 
+impl EncryptedIdentityBundle {
+    /// Framing only: a ciphertext-only server cannot authenticate or decrypt the bundle.
+    pub fn validate(&self, expected_fingerprint: &str) -> Result<()> {
+        if !matches!(self.bundle_version, 1 | 2)
+            || self.kdf != KDF
+            || !valid_id(expected_fingerprint)
+            || self.identity_fingerprint != expected_fingerprint
+            || self.ciphertext.len() > MAX_CIPHERTEXT_BYTES.div_ceil(3) * 4
+        {
+            return Err(Error::Format);
+        }
+        decode(&self.salt, 16)?;
+        decode(&self.nonce, 24)?;
+        let ciphertext = STANDARD
+            .decode(&self.ciphertext)
+            .map_err(|_| Error::Format)?;
+        if ciphertext.len() < 16
+            || ciphertext.len() > MAX_CIPHERTEXT_BYTES
+            || STANDARD.encode(&ciphertext) != self.ciphertext
+        {
+            return Err(Error::Format);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Backup {
@@ -63,10 +93,24 @@ struct PrivateIdentity {
     fingerprint: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PrivateBundleV2 {
+    identity: PrivateIdentity,
+    contacts: Vec<ContactPin>,
+}
+
+#[derive(Serialize)]
+struct PrivateBundleV2Ref<'a> {
+    identity: &'a PrivateIdentity,
+    contacts: &'a [ContactPin],
+}
+
 /// Owns zeroizing private seeds. Deliberately has no Debug, Clone, or Serialize impl.
 pub struct UnlockedIdentity {
     public: PublicIdentity,
     private: PrivateIdentity,
+    contacts: Vec<ContactPin>,
 }
 
 fn valid_id(value: &str) -> bool {
@@ -198,13 +242,18 @@ impl PrivateIdentity {
     }
 }
 
-fn bundle_aad(fingerprint: &str) -> Vec<u8> {
+fn bundle_aad(fingerprint: &str, version: u32) -> Result<Vec<u8>> {
+    let domain = match version {
+        1 => BUNDLE_DOMAIN_V1,
+        2 => BUNDLE_DOMAIN_V2,
+        _ => return Err(Error::Format),
+    };
     let mut bytes = Vec::new();
-    field(&mut bytes, BUNDLE_DOMAIN);
-    bytes.extend_from_slice(&1u32.to_be_bytes());
+    field(&mut bytes, domain);
+    bytes.extend_from_slice(&version.to_be_bytes());
     field(&mut bytes, fingerprint.as_bytes());
     field(&mut bytes, KDF.as_bytes());
-    bytes
+    Ok(bytes)
 }
 
 impl UnlockedIdentity {
@@ -227,7 +276,11 @@ impl UnlockedIdentity {
         private.fingerprint = public.fingerprint.clone();
         private.self_check()?;
         public.validate()?;
-        Ok(Self { public, private })
+        Ok(Self {
+            public,
+            private,
+            contacts: Vec::new(),
+        })
     }
 
     pub fn public_identity(&self) -> &PublicIdentity {
@@ -241,8 +294,17 @@ impl UnlockedIdentity {
         if passphrase.len() > 4096 {
             return Err(Error::Format);
         }
-        let plaintext =
-            Zeroizing::new(serde_json::to_vec(&self.private).map_err(|_| Error::Format)?);
+        contacts::validate_pins(&self.contacts, &self.public)?;
+        let plaintext = Zeroizing::new(
+            serde_json::to_vec(&PrivateBundleV2Ref {
+                identity: &self.private,
+                contacts: &self.contacts,
+            })
+            .map_err(|_| Error::Format)?,
+        );
+        if plaintext.len() > MAX_CIPHERTEXT_BYTES - 16 {
+            return Err(Error::Format);
+        }
         let salt = crypto::random::<16>()?;
         let nonce = crypto::random::<24>()?;
         let wrapping_key = crypto::derive(passphrase, &salt)?;
@@ -250,13 +312,13 @@ impl UnlockedIdentity {
             &wrapping_key,
             &nonce,
             &plaintext,
-            &bundle_aad(&self.public.fingerprint),
+            &bundle_aad(&self.public.fingerprint, 2)?,
         )?;
         let backup = Backup {
-            backup_version: 1,
+            backup_version: 2,
             public_identity: self.public.clone(),
             encrypted_bundle: EncryptedIdentityBundle {
-                bundle_version: 1,
+                bundle_version: 2,
                 identity_fingerprint: self.public.fingerprint.clone(),
                 salt: STANDARD.encode(salt),
                 nonce: STANDARD.encode(nonce),
@@ -278,8 +340,8 @@ impl UnlockedIdentity {
         }
         let backup: Backup = serde_json::from_slice(bytes).map_err(|_| Error::Format)?;
         let bundle = &backup.encrypted_bundle;
-        if backup.backup_version != 1
-            || bundle.bundle_version != 1
+        if !matches!(backup.backup_version, 1 | 2)
+            || bundle.bundle_version != backup.backup_version
             || bundle.kdf != KDF
             || bundle.ciphertext.len() > MAX_CIPHERTEXT_BYTES.div_ceil(3) * 4
         {
@@ -311,11 +373,19 @@ impl UnlockedIdentity {
             &wrapping_key,
             &nonce,
             &ciphertext,
-            &bundle_aad(expected_fingerprint),
+            &bundle_aad(expected_fingerprint, bundle.bundle_version)?,
         )?;
-        let private: PrivateIdentity =
-            serde_json::from_slice(&plaintext).map_err(|_| Error::Format)?;
+        let (private, contacts) = if bundle.bundle_version == 1 {
+            let private: PrivateIdentity =
+                serde_json::from_slice(&plaintext).map_err(|_| Error::Format)?;
+            (private, Vec::new())
+        } else {
+            let bundle: PrivateBundleV2 =
+                serde_json::from_slice(&plaintext).map_err(|_| Error::Format)?;
+            (bundle.identity, bundle.contacts)
+        };
         let public = &backup.public_identity;
+        contacts::validate_pins(&contacts, public)?;
         if private.fingerprint != expected_fingerprint
             || private.public(
                 &public.deployment_id,
@@ -329,6 +399,7 @@ impl UnlockedIdentity {
         Ok(Self {
             public: backup.public_identity,
             private,
+            contacts,
         })
     }
 }
@@ -336,24 +407,57 @@ impl UnlockedIdentity {
 /// Native encrypted identity storage using the same exclusive lock and atomic-write
 /// protections as collections. No server enrollment or automatic overwrite is implied.
 #[cfg(not(target_arch = "wasm32"))]
-pub struct IdentityFile(crate::StoreFile);
+pub struct IdentityFile {
+    file: crate::StoreFile,
+    path: std::path::PathBuf,
+}
 
 #[cfg(not(target_arch = "wasm32"))]
 impl IdentityFile {
     pub fn lock(path: impl AsRef<std::path::Path>) -> Result<Self> {
-        crate::StoreFile::lock(path).map(Self)
+        let path = path.as_ref().to_path_buf();
+        let file = crate::StoreFile::lock(&path)?;
+        Ok(Self { file, path })
     }
 
     pub fn open(&self, passphrase: &str, fingerprint: &str) -> Result<UnlockedIdentity> {
         UnlockedIdentity::open(
-            &self.0.read_limited(MAX_IDENTITY_BYTES)?,
+            &self.file.read_limited(MAX_IDENTITY_BYTES)?,
             passphrase,
             fingerprint,
         )
     }
 
+    /// Explicit v1-to-v2 replacement preserves the exact old ciphertext at
+    /// `<path>.v1.backup` first. Conflicting backups fail closed without overwriting.
     pub fn save(&self, identity: &UnlockedIdentity, passphrase: &str, create: bool) -> Result<()> {
-        self.0.write(&identity.seal(passphrase)?, create)
+        let bytes = identity.seal(passphrase)?;
+        if !create && self.file.exists() {
+            let previous_bytes = self.file.read_limited(MAX_IDENTITY_BYTES)?;
+            let previous: Backup =
+                serde_json::from_slice(&previous_bytes).map_err(|_| Error::Format)?;
+            if !matches!(previous.backup_version, 1 | 2)
+                || previous.backup_version != previous.encrypted_bundle.bundle_version
+            {
+                return Err(Error::Format);
+            }
+            if previous.public_identity.fingerprint != identity.public.fingerprint {
+                return Err(Error::Authentication);
+            }
+            if previous.backup_version == 1 {
+                let mut backup_path = self.path.as_os_str().to_os_string();
+                backup_path.push(".v1.backup");
+                let backup = crate::StoreFile::lock(std::path::PathBuf::from(backup_path))?;
+                if backup.exists() {
+                    if backup.read_limited(MAX_IDENTITY_BYTES)? != previous_bytes {
+                        return Err(Error::AlreadyExists);
+                    }
+                } else {
+                    backup.write(&previous_bytes, true)?;
+                }
+            }
+        }
+        self.file.write(&bytes, create)
     }
 }
 
@@ -411,12 +515,18 @@ mod tests {
         let salt: [u8; 16] = decode(&bundle.salt, 16).unwrap().try_into().unwrap();
         let nonce: [u8; 24] = decode(&bundle.nonce, 24).unwrap().try_into().unwrap();
         let key = crypto::derive(passphrase, &salt).unwrap();
-        let aad = bundle_aad(&bundle.identity_fingerprint);
+        let aad = bundle_aad(&bundle.identity_fingerprint, bundle.bundle_version).unwrap();
         let ciphertext = STANDARD.decode(&bundle.ciphertext).unwrap();
         let plaintext = crypto::decrypt(&key, &nonce, &ciphertext, &aad).unwrap();
-        let mut private: PrivateIdentity = serde_json::from_slice(&plaintext).unwrap();
-        private.signing_seed[0] ^= 1;
-        let changed = Zeroizing::new(serde_json::to_vec(&private).unwrap());
+        let mut private: PrivateBundleV2 = serde_json::from_slice(&plaintext).unwrap();
+        private.identity.signing_seed[0] ^= 1;
+        let changed = Zeroizing::new(
+            serde_json::to_vec(&PrivateBundleV2Ref {
+                identity: &private.identity,
+                contacts: &private.contacts,
+            })
+            .unwrap(),
+        );
         // Synthetic corruption fixture; use a fresh nonce even in the test.
         let new_nonce = crypto::random().unwrap();
         bundle.nonce = STANDARD.encode(new_nonce);

@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix='petika-setup-') as temporary:
     try:assert status['initialized']
     finally:proc.terminate();proc.wait(timeout=5)
     db=json.loads((work/'data/accounts.json').read_text())
-    assert db['schema_version']==1
+    assert db['schema_version']==2
     assert db['users'][0]['username']=='owner'
     snapshot=json.loads((work/'data/collections'/db['users'][0]['id']/'snapshot.json').read_text())
     assert snapshot['encrypted']==encrypted.read_text()

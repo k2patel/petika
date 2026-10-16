@@ -30,7 +30,8 @@ travel through a separate trusted channel. Setup supports browser and unattended
 provisioning; persistence uses versioned JSON files.
 
 The shared client core also generates recipient identities and supports encrypted local
-storage, fingerprint-checked recovery, and passphrase rewrapping. This foundation is not
+storage, fingerprint-checked recovery, passphrase rewrapping, verified contact pins,
+and key-change suspension. This foundation is not
 yet connected to CLI/web enrollment or server-backed group-key delivery.
 
 ## Next milestone and remaining requirements

@@ -262,6 +262,8 @@ fn run() -> Result<()> {
         let path = request.url().to_owned();
         if !path.starts_with("/v1/") && path != "/healthz" && path != "/readyz" {
             web::static_file(request, &web_root);
+        } else if path.starts_with("/v1/keys/") {
+            web::key_route(request, &mut accounts);
         } else if path.starts_with("/v1/auth/")
             || path.starts_with("/v1/admin/")
             || path == "/v1/profile"

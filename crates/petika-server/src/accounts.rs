@@ -1,10 +1,12 @@
-//! Local identities and collection authorization. Encryption keys never enter this module.
+//! Local identities and collection authorization. Plaintext private and collection keys never enter this module.
+mod keys;
 use crate::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+pub use keys::{IdentityState, KeyError, KeyOperation};
 use petika_core::StoreFile;
 use serde::{Deserialize, Serialize};
 use std::{
-    collections::HashMap,
+    collections::{BTreeMap, HashMap},
     path::PathBuf,
     time::{Duration, Instant},
 };
@@ -37,23 +39,79 @@ pub struct Group {
     pub id: String,
     pub name: String,
     pub members: Vec<Membership>,
+    pub membership_generation: u64,
+    pub rotation_required: bool,
 }
+const MAX_COUNTER: u64 = (1 << 53) - 1;
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Database {
+    schema_version: u32,
+    deployment_id: String,
+    users: Vec<User>,
+    groups: Vec<Group>,
+    identities: BTreeMap<String, IdentityState>,
+}
+impl Database {
+    fn empty() -> Result<Self> {
+        Ok(Self {
+            schema_version: 2,
+            deployment_id: random_id()?,
+            users: Vec::new(),
+            groups: Vec::new(),
+            identities: BTreeMap::new(),
+        })
+    }
+    fn validate(&self) -> Result<()> {
+        if self.schema_version != 2
+            || !keys::valid_id(&self.deployment_id)
+            || self
+                .groups
+                .iter()
+                .any(|g| !(1..=MAX_COUNTER).contains(&g.membership_generation))
+            || self.identities.iter().any(|(id, state)| {
+                state.public_identity.user_id != *id
+                    || state.public_identity.deployment_id != self.deployment_id
+                    || !(1..=MAX_COUNTER).contains(&state.bundle_revision)
+                    || !self.users.iter().any(|u| u.id == *id)
+            })
+        {
+            return Err("Unsupported or invalid account database; migration required".into());
+        }
+        Ok(())
+    }
+    fn identity_changed(&mut self, user_id: &str, rotation: bool) -> Result<()> {
+        for group in &mut self.groups {
+            if group.members.iter().any(|m| m.user_id == user_id) {
+                group.membership_generation = next_generation(group.membership_generation)?;
+                group.rotation_required |= rotation;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyGroup {
+    id: String,
+    name: String,
+    members: Vec<Membership>,
+}
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LegacyDatabase {
     #[serde(default)]
     schema_version: u32,
     users: Vec<User>,
-    groups: Vec<Group>,
+    groups: Vec<LegacyGroup>,
 }
-impl Default for Database {
-    fn default() -> Self {
-        Self {
-            schema_version: 1,
-            users: Vec::new(),
-            groups: Vec::new(),
-        }
-    }
+fn next_generation(value: u64) -> Result<u64> {
+    value
+        .checked_add(1)
+        .filter(|v| *v <= MAX_COUNTER)
+        .ok_or("Membership generation exhausted".into())
 }
 struct Session {
     user_id: String,
@@ -73,6 +131,7 @@ pub struct Accounts {
     initial_snapshot: Option<String>,
     devices: HashMap<String, DeviceGrant>,
     device_attempts: Vec<Instant>,
+    key_attempts: HashMap<String, Vec<Instant>>,
 }
 fn random_id() -> Result<String> {
     let mut bytes = [0u8; 32];
@@ -103,6 +162,7 @@ impl Accounts {
             initial_snapshot: None,
             devices: HashMap::new(),
             device_attempts: Vec::new(),
+            key_attempts: HashMap::new(),
         }
     }
     pub fn initial_snapshot(&mut self, encrypted: String) -> Result<()> {
@@ -112,37 +172,68 @@ impl Accounts {
     }
     fn load(file: &StoreFile) -> Result<Database> {
         if file.exists() {
-            {
-                let db: Database = serde_json::from_slice(&file.read()?)?;
-                if db.schema_version != 1 {
-                    return Err("Unsupported account schema; migration required".into());
-                }
-                Ok(db)
-            }
+            let db: Database = serde_json::from_slice(&file.read()?)?;
+            db.validate()?;
+            Ok(db)
         } else {
-            Ok(Database::default())
+            Database::empty()
         }
     }
-    /// Run once before serving requests. A failed migration leaves the original intact.
+    /// Sequential upgrades with exact original backups. Failed/repeated attempts never
+    /// overwrite a conflicting backup or regenerate a committed deployment ID.
     pub fn migrate(&self) -> Result<()> {
         let file = StoreFile::lock(&self.path)?;
         if !file.exists() {
-            return Ok(());
+            return file
+                .write(&serde_json::to_vec(&Database::empty()?)?, true)
+                .map_err(Into::into);
         }
-        let bytes = file.read()?;
-        let mut db: Database = serde_json::from_slice(&bytes)?;
-        match db.schema_version {
-            1 => Ok(()),
-            0 => {
-                let backup = StoreFile::lock(self.path.with_extension("schema-0.backup"))?;
-                if !backup.exists() {
-                    backup.write(&bytes, true)?;
-                }
-                db.schema_version = 1;
-                file.write(&serde_json::to_vec(&db)?, false)?;
-                Ok(())
+        loop {
+            let bytes = file.read()?;
+            let header: serde_json::Value = serde_json::from_slice(&bytes)?;
+            let version = header
+                .get("schema_version")
+                .map(|v| v.as_u64().ok_or("Invalid schema version"))
+                .transpose()?
+                .unwrap_or(0);
+            if version == 2 {
+                Self::load(&file)?;
+                return Ok(());
             }
-            _ => Err("Account database was created by a newer schema version".into()),
+            if version > 1 {
+                return Err("Account database was created by a newer schema version".into());
+            }
+            let mut old: LegacyDatabase = serde_json::from_slice(&bytes)?;
+            let backup =
+                StoreFile::lock(self.path.with_extension(format!("schema-{version}.backup")))?;
+            if backup.exists() {
+                if backup.read()? != bytes {
+                    return Err("Conflicting account migration backup".into());
+                }
+            } else {
+                backup.write(&bytes, true)?;
+            }
+            if version == 0 {
+                old.schema_version = 1;
+                file.write(&serde_json::to_vec(&old)?, false)?;
+            } else {
+                let mut db = Database::empty()?;
+                db.users = old.users;
+                db.groups = old
+                    .groups
+                    .into_iter()
+                    .map(|g| Group {
+                        id: g.id,
+                        name: g.name,
+                        members: g.members,
+                        membership_generation: 1,
+                        rotation_required: false,
+                    })
+                    .collect();
+                db.validate()?;
+                file.write(&serde_json::to_vec(&db)?, false)?;
+                return Ok(());
+            }
         }
     }
     pub fn initialized(&self) -> Result<bool> {
@@ -198,14 +289,19 @@ impl Accounts {
         file.write(&serde_json::to_vec(&db)?, false)?;
         Ok(user)
     }
-    pub fn login(&mut self, username: &str, password: String) -> Result<(String, User)> {
-        let password = Zeroizing::new(password);
+    fn reserve_reauthentication(&mut self) -> std::result::Result<(), KeyError> {
         self.attempts
             .retain(|t| t.elapsed() < Duration::from_secs(60));
         if self.attempts.len() >= 20 {
-            return Err("Too many sign-in attempts. Try again in a minute".into());
+            return Err(KeyError::RateLimited);
         }
         self.attempts.push(Instant::now());
+        Ok(())
+    }
+    pub fn login(&mut self, username: &str, password: String) -> Result<(String, User)> {
+        let password = Zeroizing::new(password);
+        self.reserve_reauthentication()
+            .map_err(|_| "Too many sign-in attempts. Try again in a minute")?;
         let db = Self::load(&StoreFile::lock(&self.path)?)?;
         let user = db
             .users
@@ -366,7 +462,7 @@ impl Accounts {
         &self,
         id: Option<&str>,
         name: &str,
-        members: Vec<Membership>,
+        mut members: Vec<Membership>,
     ) -> Result<Group> {
         if !label(name) {
             return Err("Enter a group name".into());
@@ -379,6 +475,33 @@ impl Accounts {
         {
             return Err("Select active users only".into());
         }
+        members.sort_by(|a, b| a.user_id.cmp(&b.user_id));
+        if members
+            .windows(2)
+            .any(|pair| pair[0].user_id == pair[1].user_id)
+        {
+            return Err("Duplicate group member".into());
+        }
+        let previous = id.and_then(|id| db.groups.iter().find(|g| g.id == id));
+        let changed = previous.is_some_and(|g| {
+            g.members.len() != members.len()
+                || g.members.iter().any(|old| {
+                    !members
+                        .iter()
+                        .any(|m| m.user_id == old.user_id && m.edit == old.edit)
+                })
+        });
+        let removed = previous.is_some_and(|g| {
+            g.members
+                .iter()
+                .any(|old| !members.iter().any(|m| m.user_id == old.user_id))
+        });
+        let generation = match previous {
+            Some(g) if changed => next_generation(g.membership_generation)?,
+            Some(g) => g.membership_generation,
+            None => 1,
+        };
+        let rotation_required = removed || previous.is_some_and(|g| g.rotation_required);
         let group = Group {
             id: match id {
                 Some(id) => id.into(),
@@ -386,6 +509,8 @@ impl Accounts {
             },
             name: name.trim().into(),
             members,
+            membership_generation: generation,
+            rotation_required,
         };
         if let Some(id) = id {
             let previous = db
@@ -411,7 +536,11 @@ impl Accounts {
             .iter_mut()
             .find(|u| u.id == id)
             .ok_or("User not found")?;
+        let changed = user.disabled != disabled;
         user.disabled = disabled;
+        if changed {
+            db.identity_changed(id, disabled)?;
+        }
         file.write(&serde_json::to_vec(&db)?, false)?;
         self.sessions.retain(|_, s| s.user_id != id);
         Ok(())

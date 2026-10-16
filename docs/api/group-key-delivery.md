@@ -1,6 +1,6 @@
 # Group-key delivery API contract
 
-Status: **proposed, unimplemented endpoints**. The machine-readable contract is
+Status: **six identity operations implemented; four collection operations planned**. The machine-readable contract is
 [group-key-delivery.openapi.json](group-key-delivery.openapi.json), OpenAPI 3.0.3.
 The [design decision](../decisions/0002-per-user-group-key-delivery.md) defines the
 cryptographic and trust model. This contract does not redefine existing endpoint errors.
@@ -33,6 +33,7 @@ is 401 and does not mutate existing identity state.
 
 | Method/path | Authorization and result | Conflict/negative requirements |
 | --- | --- | --- |
+| GET `/v1/keys/deployment` | Managed session reads persistent deployment ID, 200 | Required before generating a deployment-bound identity |
 | GET `/v1/keys/identity` | Own public identity plus encrypted private bundle, 200; 404 if unenrolled | Never return another user's bundle or plaintext |
 | POST `/v1/keys/identity` | Own enrollment with `current_password`, public record, encrypted bundle, expected revision 0; 201 and bundle revision 1 | Concurrent enrollment: one success, one 409; deployment/user IDs must match caller |
 | PUT `/v1/keys/identity/bundle` | Own encrypted bundle update; compare expected bundle revision, increment once; 200 | Cannot change public identity/fingerprint; stale edits preserve both copies |
@@ -70,6 +71,12 @@ Replay detection precedes the old revision comparison, but never bypasses curren
 checks. Migration retries use the same package batch and exact snapshot bytes; mismatched
 snapshot bytes are 409. Persist enough transaction metadata to recognize retries after restart.
 
+Identity bundle versions 1 and 2 have the same outer API fields; version 2 protects
+verified contact pins in its encrypted payload. New clients write version 2. Bundle
+updates must reject a 2-to-1 downgrade even with a matching revision, and a replacement
+identity starts with a version 2 bundle. Local pin revisions are separate from server
+bundle revisions and never replace server CAS.
+
 Identity mutations use bundle revision CAS; after a lost response fetch the own identity
 state to reconcile. Do not retry enrollment/replacement by silently generating new keys.
 
@@ -97,3 +104,9 @@ claim fresh-key exclusion until the separate rotation transaction is implemented
 to positive, denial, race, and recovery cases. The contract CI job validates OpenAPI and
 schema fixtures now. Runtime API conformance tests are required with each endpoint's
 implementation; they are not present yet.
+
+Identity operations use a 128 KiB request limit and 120 requests per user per minute.
+Password confirmation shares the existing 20-per-minute account authentication budget.
+Replacement requires bundle v2; updates cannot downgrade v2 to v1. Identity enrollment
+and replacement advance affected membership generations; replacement also marks rotation
+required. No group packages or cryptographic rotation are implemented yet.

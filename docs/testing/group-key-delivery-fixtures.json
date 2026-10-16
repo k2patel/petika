@@ -91,5 +91,37 @@
       "key_epoch": 1,
       "membership_generation": 1
     }
+  },
+  {
+    "name": "bundle-v2-contact-storage-valid",
+    "schema": "BundleUpdate",
+    "valid": true,
+    "value": {
+      "expected_bundle_revision": 1,
+      "encrypted_bundle": {
+        "bundle_version": 2,
+        "identity_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "salt": "YQ==",
+        "nonce": "YQ==",
+        "ciphertext": "YQ==",
+        "kdf": "argon2id-v19-m65536-t3-p1"
+      }
+    }
+  },
+  {
+    "name": "unknown-bundle-version-rejected",
+    "schema": "BundleUpdate",
+    "valid": false,
+    "value": {
+      "expected_bundle_revision": 1,
+      "encrypted_bundle": {
+        "bundle_version": 3,
+        "identity_fingerprint": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "salt": "YQ==",
+        "nonce": "YQ==",
+        "ciphertext": "YQ==",
+        "kdf": "argon2id-v19-m65536-t3-p1"
+      }
+    }
   }
 ]

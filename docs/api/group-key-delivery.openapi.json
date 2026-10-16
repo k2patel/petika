@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Petika per-user group-key delivery \u2014 proposed API",
+    "title": "Petika per-user group-key delivery API",
     "version": "0.1.0-draft",
-    "description": "Design contract only. None of these endpoints is implemented. Existing APIs retain their current behavior. See group-key-delivery.md for normative authorization, concurrency, limits, and test requirements."
+    "description": "Identity enrollment, replacement, directory and encrypted-bundle synchronization are implemented. Collection key delivery endpoints remain planned. See group-key-delivery.md for invariants."
   },
   "security": [
     {
@@ -18,7 +18,7 @@
       "get": {
         "operationId": "getOwnIdentity",
         "summary": "Read own public identity and encrypted bundle",
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "responses": {
           "200": {
             "description": "Success",
@@ -135,7 +135,7 @@
       "post": {
         "operationId": "enrollIdentity",
         "summary": "Create own identity, reauthentication and create-if-absent required",
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "responses": {
           "201": {
             "description": "Success",
@@ -277,7 +277,7 @@
       "put": {
         "operationId": "updateIdentityBundle",
         "summary": "Rewrap or update own encrypted bundle with revision CAS",
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "responses": {
           "200": {
             "description": "Success",
@@ -419,7 +419,7 @@
       "post": {
         "operationId": "replaceIdentity",
         "summary": "Explicit identity replacement; suspend grants to old identity",
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "responses": {
           "200": {
             "description": "Success",
@@ -561,7 +561,7 @@
       "get": {
         "operationId": "getRecipientIdentity",
         "summary": "Read self or an active co-member public identity",
-        "x-implementation-status": "planned",
+        "x-implementation-status": "implemented",
         "responses": {
           "200": {
             "description": "Success",
@@ -1282,6 +1282,135 @@
           }
         ]
       }
+    },
+    "/v1/keys/deployment": {
+      "get": {
+        "operationId": "getKeyDeployment",
+        "summary": "Read persistent deployment identifier",
+        "x-implementation-status": "implemented",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "deployment_id"
+                  ],
+                  "properties": {
+                    "deployment_id": {
+                      "type": "string",
+                      "pattern": "^[0-9a-f]{64}$"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed or invalid input",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, expired, revoked, or disabled-user session",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Insufficient permission or failed request-origin guard",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Resource absent or not visible",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Revision, identity, membership, epoch, or idempotency conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request exceeds byte/count limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Storage unavailable; no success acknowledged",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "Method not allowed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Unsupported mutation media type",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1370,7 +1499,8 @@
           "bundle_version": {
             "type": "integer",
             "enum": [
-              1
+              1,
+              2
             ]
           },
           "identity_fingerprint": {
@@ -1401,7 +1531,8 @@
               "argon2id-v19-m65536-t3-p1"
             ]
           }
-        }
+        },
+        "description": "Version 2 encrypts local verified contact pins; version 1 is readable for migration. New clients write version 2. Reject server-side updates that downgrade an existing version 2 bundle."
       },
       "IdentityState": {
         "type": "object",

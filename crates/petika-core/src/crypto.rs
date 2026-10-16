@@ -49,6 +49,16 @@ pub enum Error {
     Duplicate,
     #[error("record not found")]
     NotFound,
+    #[error("contact identity has not been independently verified")]
+    UnverifiedContact,
+    #[error("contact key changed; explicit verification is required")]
+    ContactKeyChanged,
+    #[error("contact identity version is older than the verified version")]
+    ContactRollback,
+    #[error("contact trust state changed; review the current pin and retry")]
+    ContactConflict,
+    #[error("verified contact limit reached")]
+    ContactLimit,
     #[error("store already exists")]
     AlreadyExists,
     #[error("store is busy in another process")]

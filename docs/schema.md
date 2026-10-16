@@ -6,13 +6,16 @@ These version numbers are independent:
 
 | Contract | Current version | Behavior |
 | --- | --- | --- |
-| Account database `schema_version` | 1 | Startup migration before requests; rejects newer schemas |
+| Account database `schema_version` | 2 | Startup migration before requests; rejects newer schemas |
 | Snapshot/journal `schema_version` | 1 | Validated on read; legacy unversioned records decode as v1 |
 | Encrypted envelope `version` | 1 | Shared Rust parser; rejects unsupported encryption formats |
-| Local recipient identity backup / encrypted bundle | 1 / 1 | Client-core format only; explicit fingerprint required on restore |
+| Local recipient identity backup / encrypted bundle | 2 / 2 | Reads v1 without rewriting; explicit native save preserves `.v1.backup` before upgrading |
 | HTTP API | `/v1` | Explicit route version |
 
-The account database contains user IDs, password hashes, roles, and group membership.
+The account database contains user IDs, password hashes, roles, group membership, a
+persistent random deployment ID, signed public identities, and encrypted private bundles
+with revision counters. Groups track membership generations and required rotation; a
+rotation flag does not perform cryptographic rotation.
 Names and memberships are server metadata and are not part of the encrypted Git mirror.
 Secrets, including OTP seeds, are always inside the encrypted collection snapshot.
 
@@ -24,11 +27,14 @@ Secrets, including OTP seeds, are always inside the encrypted collection snapsho
    in `accounts.schema-0.backup`, with the same owner-only storage protections.
 4. Add schema version 1 and atomically replace the database. The backup is never
    overwritten by repeated startup.
-5. Reject unknown newer versions without modifying the database. Do not auto-downgrade.
+5. Preserve schema 1 bytes in `accounts.schema-1.backup`, then atomically write schema 2
+   with deployment ID, empty identity directory, and initial group generations. Matching
+   backups allow retry; conflicting backups stop migration without overwriting them.
+6. Reject unknown newer versions without modifying the database. Do not auto-downgrade.
 
 Future changes must add explicit sequential migrations, backups, and tests for upgrade,
 repeat startup, interrupted writes, and unsupported versions. The current schema-0
-migration is tested with a fixture; version 1 to future versions is intentionally undefined.
+and schema-1 migrations are tested, including matching/conflicting backups and retries.
 Immutable historical journal records are not rewritten simply to add a version field.
 
 Before upgrading, stop writes and back up the **whole data directory**, Git mirror,
@@ -41,4 +47,5 @@ binaries may reject records containing them. Keep web assets and native clients 
 same release until a stable compatibility policy is published.
 
 Recipient identity storage is a separate [local encrypted format](identity-format.md).
-It does not migrate the account database or enable server enrollment/group-key delivery.
+Local identity backup migration is independent of account migration. Enrollment APIs
+store only encrypted bundles; group-key delivery remains pending.

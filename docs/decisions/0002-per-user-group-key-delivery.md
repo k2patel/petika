@@ -3,7 +3,8 @@
 Date: 2026-10-15.
 Status: implementation proposal for the next milestone; local recipient identity
 generation/storage is implemented in the shared core (see [format](../identity-format.md)).
-Enrollment APIs, trust-pin workflows, and group-key delivery are not implemented. This
+Local encrypted contact pins and key-change checks are also implemented. Enrollment
+APIs, CLI/web trust-pin workflows, and group-key delivery are not implemented. This
 is not an audited protocol or stable wire-format commitment.
 
 ## Outcome and scope

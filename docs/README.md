@@ -25,7 +25,8 @@ Implemented: encrypted CLI and Rust/WASM web client, standard/hybrid setup modes
 local GPG import, managed accounts, user/group permissions, website OTP, encrypted
 snapshot API and Git mirroring, first-run/environment provisioning, versioned storage,
 and distroless deployment. The shared core also implements local recipient identities
-and encrypted recovery; their enrollment and group-delivery interfaces remain pending.
+and encrypted recovery, plus verified contact pins and key-change suspension. Their
+enrollment and group-delivery interfaces remain pending.
 See the roadmap for completed work, next actions, and remaining integrations.
 
 - [Managed CLI accounts](cli-accounts.md): browser approval, sessions, and encrypted collection pull/push.

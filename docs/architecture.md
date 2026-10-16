@@ -32,7 +32,8 @@ Group members currently share a collection passphrase out of band. Automatic per
 group-key delivery is the [next milestone](roadmap.md). Server administrators can manage
 membership but do not automatically receive collection decryption keys. The core now
 implements local recipient identity generation, encrypted storage, and pinned recovery;
-verified contact storage, enrollment APIs, and package delivery remain pending.
+verified contact storage and key-change checks are also implemented locally. Authenticated enrollment, replacement, directory, and encrypted-bundle synchronization
+APIs are implemented. Client trust UI and package delivery remain pending.
 
 ## Remaining design gates
 

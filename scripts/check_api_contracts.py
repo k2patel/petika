@@ -54,7 +54,7 @@ def main():
             detail = errors[0].message if errors else "invalid fixture was accepted"
             raise ValueError(f'{fixture["name"]}: {detail}')
     print(f"PASS: OpenAPI, {len(ids)} operation mappings, {len(fixtures)} schema fixtures")
-    print("Runtime group-key delivery tests are PLANNED; no endpoint conformance claimed.")
+    print("Identity runtime tests run separately in Cargo; collection delivery tests remain planned.")
 
 
 if __name__ == "__main__":

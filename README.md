@@ -132,8 +132,8 @@ backups of server data, mirrors, configuration, and client recovery material.
 **Next milestone: [automatic per-user group-key delivery](docs/roadmap.md#next-milestone-automatic-per-user-group-key-delivery).**
 Membership-change key rotation follows it. The [roadmap](docs/roadmap.md) tracks the
 complete implementation checklist. The shared core now generates and encrypts recipient
-identities with fingerprint-checked recovery; verified-contact handling, enrollment APIs,
-and CLI/web delivery flows remain pending. See the [local identity format](docs/identity-format.md).
+identities with fingerprint-checked recovery and encrypted contact pins that suspend changed
+keys. Enrollment, directory, replacement, and encrypted-bundle revision APIs are implemented. Verified-contact UI and CLI/web delivery flows remain pending. See the [local identity format](docs/identity-format.md).
 
 Still planned:
 

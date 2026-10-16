@@ -1,5 +1,5 @@
 {
-  "status": "planned-runtime-tests",
+  "status": "identity-runtime-tests-implemented; collection-runtime-tests-planned",
   "operations": {
     "getOwnIdentity": {
       "success": [
@@ -98,6 +98,14 @@
         "v1 upload cannot overwrite migrated group",
         "Crash preserves old or complete new state",
         "Retry with changed snapshot bytes yields 409"
+      ]
+    },
+    "getKeyDeployment": {
+      "success": [
+        "Authenticated caller reads persistent deployment ID"
+      ],
+      "rejection": [
+        "Missing or revoked session returns 401"
       ]
     }
   }

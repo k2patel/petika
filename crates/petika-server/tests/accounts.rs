@@ -85,7 +85,7 @@ fn identities_permissions_revocation_and_public_profiles() {
     assert!(!public.contains("synthetic password"));
     let disk = std::fs::read_to_string(dir.path().join("accounts.json")).unwrap();
     assert!(!disk.contains("synthetic password"));
-    assert!(disk.contains("\"schema_version\":1"));
+    assert!(disk.contains("\"schema_version\":2"));
 }
 
 #[test]

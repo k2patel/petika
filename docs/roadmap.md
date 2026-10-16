@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status reviewed against the repository on 2026-10-15. This is the central checklist;
+Status reviewed against the repository on 2026-10-16. This is the central checklist;
 feature guides describe current behavior. Checked items are implemented experimental
 capabilities, not a production-readiness certification.
 
@@ -18,23 +18,24 @@ capabilities, not a production-readiness certification.
 - [x] Light/dark branding with Indian motifs and Devanagari binary digits.
 - [x] Shared client-core recipient identity generation, signed public fingerprints,
   encrypted local storage, recovery, and passphrase rewrapping (not yet exposed in clients).
-- [x] Ten local identity tests, including independent public-key/fingerprint fixtures.
-- [x] Proposed contracts for nine sharing API operations, per-step test actions, and an
+- [x] Local identity and verified-contact tests, including independent public-key/fingerprint
+  fixtures, changed-key rejection, encrypted recovery, and migration backups.
+- [x] Contracts for ten sharing API operations, per-step test actions, and an
   executable schema-validation gate wired into GitHub Actions.
 - [x] Reconciled stale implementation descriptions and centralized this checklist.
 
 ## Next milestone: automatic per-user group-key delivery
 
 Selected next milestone. **In progress; end-to-end delivery is not implemented.**
-The local identity foundation and API/test specifications are complete. Group members currently share an
-unlock passphrase through a separate trusted channel. The intended outcome is that an
+The local identity/contact-trust foundation and API/test specifications are complete.
+Group members currently share an unlock passphrase through a separate trusted channel. The intended outcome is that an
 enrolled member can unlock an authorized group using their local user key material,
 without manually exchanging the group's passphrase.
 
 Each step has [test actions](testing/group-key-delivery.md) and the proposed endpoints
 have [API contracts](api/group-key-delivery.md). Schema validation is wired into CI and
-passes locally; a remote run for these changes is pending. Runtime sharing API and
-client workflow tests remain planned until their features are implemented.
+passes locally; a remote run for these changes is pending. Identity API behavior and HTTP routing have executable Rust tests. Collection delivery
+and client workflow tests remain pending.
 
 Implementation work:
 
@@ -44,13 +45,15 @@ Implementation work:
   package-delivery implementation and package protocol-vector validation remain pending.
 - [x] Implement shared client-core recipient identity generation, encrypted local storage,
   fingerprint-pinned recovery, and passphrase rewrapping. See [identity format](identity-format.md).
-  CLI/web enrollment interfaces and server-backed new-device enrollment remain pending.
-- [ ] **Next action:** persist verified contact identities and enforce key-change handling.
-  Local fingerprints/self-signatures exist; trusted contact pins, first-contact verification,
-  and changed-key blocking are not implemented.
-- [ ] Implement authenticated enrollment, identity replacement, public-directory lookup,
-  and encrypted identity-bundle synchronization APIs with revision checks.
-- [ ] Allow an authorized unlocked client to encrypt group access material for each
+  CLI/web enrollment and new-device restore interfaces remain pending.
+- [x] Persist verified contact pins in encrypted identity bundles, require explicit
+  confirmation, suspend changed keys, reject older identities, and protect against
+  stale in-memory verification. Native v1 upgrades preserve original ciphertext backups.
+  Encrypted bundle synchronization APIs are available; CLI/web verification and sync UI remain pending.
+- [x] Implement authenticated deployment discovery, enrollment, identity replacement,
+  public-directory lookup, and encrypted identity-bundle synchronization APIs with revision checks.
+  Schema 2 preserves migration backups and tracks membership generations/rotation requirements.
+- [ ] **Next action:** allow an authorized unlocked client to encrypt group access material for each
   enrolled recipient; store and deliver only encrypted packages through the API.
 - [ ] Bind packages to the collection, recipient, key version, and encryption mode, and
   reject tampered, mismatched, stale, or unauthorized packages.
@@ -69,14 +72,18 @@ keys and group keys must never enter server storage, logs, or API payloads.
 
 ## Verification status for this development batch
 
-- [x] Local workspace Rust tests: 32 passed, including 10 new identity tests.
+- [x] Local workspace Rust tests: 49 passed, including 12 new contact-trust/migration
+  tests and the 10 identity-foundation tests from the preceding task.
 - [x] Formatting and workspace Clippy with warnings denied.
+- [x] Unattended provisioning, restart idempotency, and managed cookie/CLI identity HTTP tests.
 - [x] WASM target compilation check for the web crate and shared identity core.
-- [x] License declaration gate: 272 resolved packages accepted.
-- [x] API contract gate: OpenAPI, nine operation mappings, nine schema fixtures.
+- [x] License declaration gate: 272 resolved packages accepted for the preceding identity task;
+  this contact task adds no dependencies or lockfile changes.
+- [x] API contract gate: OpenAPI, ten operation mappings, 11 schema fixtures including v1/v2 bundles.
 - [x] Documentation links/anchors and whitespace checks.
 - [ ] Remote CI for this batch, including Linux/Windows, browser, and container jobs.
-- [ ] Browser identity workflow and live sharing API tests (features not implemented).
+- [x] Identity API behavior, loopback HTTP routes, revision conflicts, and schema-2 migration tests.
+- [ ] Browser identity workflow and collection delivery API tests (features not implemented).
 
 These results describe local checks already run. The WASM check does not establish a
 working browser enrollment flow, and schema validation does not establish API behavior.
