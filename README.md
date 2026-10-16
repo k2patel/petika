@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/brand/petika-icon-dark.png">
-  <img src="assets/brand/petika-icon-light.png" alt="Petika — open chest with rising binary digits" width="140">
+  <img src="assets/brand/petika-icon-light.png" alt="Petika — Indian-patterned open chest with rising Devanagari binary digits" width="140">
 </picture>
 
 **Your secrets. Your infrastructure.**

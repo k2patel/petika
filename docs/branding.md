@@ -4,7 +4,9 @@
 
 Petika's identity connects its small-box name with digital safekeeping. An open
 chest with a keyhole represents deliberate access to protected information. The
-ascending binary digits represent digital contents becoming available when unlocked.
+lotus inlays and geometric borders evoke Indian decorative keepsake boxes. The
+ascending binary digits use Devanagari **०** (zero) and **१** (one), connecting the
+Indian-inspired box with digital contents becoming available when unlocked.
 Use this as a brand metaphor, not an illustration of how encryption works.
 
 ## Assets
@@ -49,8 +51,7 @@ Describe unfinished features as planned and hybrid encryption as experimental.
 
 The web UI uses [light artwork](../assets/brand/petika-icon-light.png) in navy and
 teal, and [dark artwork](../assets/brand/petika-icon-dark.png) in ice white and mint.
-The dark raster has an ink background matched to the sidebar. The light raster is
-transparent. The wordmark is live theme-colored text in the UI, avoiding a navy
-wordmark on a dark surface. The original horizontal PNG remains for light-background
+Both theme rasters have transparent backgrounds. The wordmark is live theme-colored text in the UI, avoiding a navy
+wordmark on a dark surface. The horizontal PNG uses the same decorated chest for light-background
 print/document use. System theme and explicit appearance overrides switch the marks.
-Target dark mark colors: ice `#E7F1F5`, mint `#6EDBC9`, ground `#101C26`.
+Target dark mark colors: ice `#E7F1F5`, teal-mint `#31B5A4`, interior `#101C26`.
