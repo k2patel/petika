@@ -35,4 +35,6 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          cache-from: type=registry,ref=git.k2patel.in/k2patel/petika:buildcache
+          cache-to: type=registry,ref=git.k2patel.in/k2patel/petika:buildcache,mode=max
           tags: git.k2patel.in/k2patel/petika:${{ gitea.sha }}

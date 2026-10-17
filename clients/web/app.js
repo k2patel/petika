@@ -1,3 +1,16 @@
+// getRandomValues is available on HTTP demo origins; randomUUID is HTTPS-only.
+function randomId() {
+  if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+async function copyText(value) {
+  if (!navigator.clipboard?.writeText) throw new Error('Copying requires HTTPS or localhost. Reveal the value to select and copy it manually.');
+  await navigator.clipboard.writeText(value);
+}
 const $ = (s, root = document) => root.querySelector(s);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({
   '&': '&amp;',
@@ -412,7 +425,11 @@ async function renderDetail() {
       ['copy-otp', 'Copy verification code']
     ]) detail.querySelector(`[data-action="${a}"]`)?.setAttribute('aria-label', label);
   bind(detail);
-  if (entry.otp) {
+  if (entry.otp && !isSecureContext) {
+    $('#otp-time').textContent = 'Verification codes require HTTPS or localhost.';
+    detail.querySelector('[data-action="copy-otp"]').disabled = true;
+  }
+  if (entry.otp && isSecureContext) {
     const tick = async () => {
       try {
         const otp = await rpc('otp', name);
@@ -604,7 +621,7 @@ async function userDialog() {
     if (state.demo) demoUsers.push({
       ...body,
       password: undefined,
-      id: crypto.randomUUID(),
+      id: randomId(),
       disabled: false
     });
     else await api('/v1/admin/users', {
@@ -632,7 +649,7 @@ async function groupDialog(group = null) {
       if (group) Object.assign(group, body);
       else demoGroups.push({
         ...body,
-        id: crypto.randomUUID()
+        id: randomId()
       })
     } else {
       await api('/v1/admin/groups', {
@@ -745,7 +762,7 @@ async function action(name, el) {
       toast('New password generated');
       break;
     case 'copy-generated':
-      await navigator.clipboard.writeText($('#generated').value);
+      await copyText($('#generated').value);
       toast('Password copied');
       break;
     case 'save-generated':
@@ -767,13 +784,13 @@ async function action(name, el) {
     case 'copy-password':
     case 'copy-username': {
       const entry = await rpc('get', state.selected);
-      await navigator.clipboard.writeText(name === 'copy-password' ? entry.password : entry.username);
+      await copyText(name === 'copy-password' ? entry.password : entry.username);
       toast(name === 'copy-password' ? 'Password copied' : 'Username copied');
       break;
     }
     case 'copy-otp': {
       const otp = await rpc('otp', state.selected);
-      await navigator.clipboard.writeText(otp.code);
+      await copyText(otp.code);
       toast('Verification code copied');
       break;
     }
@@ -876,7 +893,7 @@ async function demo() {
   state.mode = 'standard';
   state.query = '';
   state.snapshot = null;
-  await rpc('create', crypto.randomUUID(), false);
+  await rpc('create', randomId(), false);
   for (const [name, username, url, notes, otp] of [
       ['GitHub', 'alex@example.test', 'https://github.com', 'Personal development account. Recovery codes are kept separately.', 'JBSWY3DPEHPK3PXP'],
       ['Linear', 'alex@example.test', 'https://linear.app', 'Product planning and issue tracking.', null],

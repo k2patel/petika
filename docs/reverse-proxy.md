@@ -134,7 +134,9 @@ See [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reve
    the mirror sidecar logs for successful replication after a save.
 
 A plain LAN URL such as `http://10.10.12.115/` can serve the UI and API, but it is
-not a browser secure context. Browser encryption and OTP therefore require the
+not a browser secure context. The sample demo works there, with an explanatory
+message for unavailable OTP and clipboard features. Account collection workflows
+and OTP require the
 HTTPS proxy or localhost. For local browser tests without any TLS proxy, leave
 cookie security `false` and run:
 
