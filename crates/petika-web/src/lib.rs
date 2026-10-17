@@ -73,3 +73,105 @@ pub fn generate(length: usize) -> Result<String, JsValue> {
         .map(|p| p.to_string())
         .map_err(error)
 }
+
+/// Worker-owned identity; only public records and ciphertext cross the worker boundary.
+#[wasm_bindgen]
+pub struct RecipientIdentity(petika_core::identity::UnlockedIdentity);
+#[wasm_bindgen]
+impl RecipientIdentity {
+    pub fn generate(deployment: &str, user: &str) -> Result<Self, JsValue> {
+        petika_core::identity::UnlockedIdentity::generate(deployment, user, 1)
+            .map(Self)
+            .map_err(error)
+    }
+    pub fn open(bytes: &[u8], passphrase: String, fingerprint: &str) -> Result<Self, JsValue> {
+        petika_core::identity::UnlockedIdentity::open(
+            bytes,
+            &Zeroizing::new(passphrase),
+            fingerprint,
+        )
+        .map(Self)
+        .map_err(error)
+    }
+    pub fn seal(&self, passphrase: String) -> Result<Vec<u8>, JsValue> {
+        self.0.seal(&Zeroizing::new(passphrase)).map_err(error)
+    }
+    pub fn public_identity(&self) -> Result<String, JsValue> {
+        serde_json::to_string(self.0.public_identity()).map_err(error)
+    }
+    pub fn verify(&mut self, public: &str, fingerprint: &str) -> Result<(), JsValue> {
+        let candidate: petika_core::identity::PublicIdentity =
+            serde_json::from_str(public).map_err(error)?;
+        let pin = self.0.contact_pin(&candidate.user_id).cloned();
+        self.0
+            .verify_contact(&candidate.user_id, &candidate, fingerprint, pin.as_ref())
+            .map_err(error)
+    }
+    pub fn package(
+        &mut self,
+        session: &Session,
+        public: &str,
+        generation: u64,
+    ) -> Result<String, JsValue> {
+        let candidate = serde_json::from_str(public).map_err(error)?;
+        serde_json::to_string(
+            &self
+                .0
+                .create_key_package(&session.0, &candidate, generation)
+                .map_err(error)?,
+        )
+        .map_err(error)
+    }
+    pub fn unlock(
+        &mut self,
+        package: &str,
+        issuer: &str,
+        snapshot: &[u8],
+        context: &str,
+        hybrid: bool,
+    ) -> Result<Session, JsValue> {
+        let package =
+            petika_core::identity::KeyPackage::parse(package.as_bytes()).map_err(error)?;
+        self.0
+            .open_key_package(
+                &package,
+                &serde_json::from_str(issuer).map_err(error)?,
+                snapshot,
+                &serde_json::from_str(context).map_err(error)?,
+                if hybrid {
+                    EncryptionMode::HybridPostQuantum
+                } else {
+                    EncryptionMode::Standard
+                },
+            )
+            .map(Session)
+            .map_err(error)
+    }
+}
+#[wasm_bindgen]
+impl Session {
+    pub fn bind_collection(
+        &self,
+        deployment: String,
+        collection: String,
+        recovery: String,
+    ) -> Result<Session, JsValue> {
+        self.0
+            .migration_draft(
+                petika_core::CollectionContext {
+                    deployment_id: deployment,
+                    collection_id: collection,
+                    key_epoch: 1,
+                },
+                &Zeroizing::new(recovery),
+            )
+            .map(Session)
+            .map_err(error)
+    }
+    pub fn rotate(&self, recovery: String) -> Result<Session, JsValue> {
+        self.0
+            .rotated(&Zeroizing::new(recovery))
+            .map(Session)
+            .map_err(error)
+    }
+}

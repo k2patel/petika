@@ -1,7 +1,8 @@
 # Container and source deployment
 
 Experimental web UI and local managed accounts, with personal/group encrypted collections.
-Native biometric integration, browser extensions, and automatic sharing-key delivery are not implemented. The bearer token authorizes ciphertext
+Verified group-key delivery and explicit rotation are implemented; native biometrics and
+browser extensions remain planned. The bearer token authorizes ciphertext
 access; it cannot decrypt the store. Use synthetic data until the security design and
 implementation have been independently reviewed.
 

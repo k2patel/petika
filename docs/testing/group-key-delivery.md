@@ -1,42 +1,36 @@
 # Group-key delivery development test actions
 
-Status: contract validation and local recipient-identity/contact Rust tests are executable.
-Identity server behavior and loopback HTTP routes have Rust tests. Package delivery
-and client enrollment workflow tests remain **planned**.
-Never mark a feature complete based on schema validation or a round-trip test alone.
+Status: native identity, package, migration, and rotation tests are executable, as are
+CLI/browser interoperability tests in both modes. Independent Python package fixtures
+and upstream X-Wing draft-06 vectors validate the protocol beyond round trips.
 
-## Development gates
+## Executable gates
 
-| Step | Test action and expected evidence | Intended runner | Status |
-| --- | --- | --- | --- |
-| Design/API contract | Validate OpenAPI, positive/negative schema fixtures, operation-to-test mapping | `python scripts/check_api_contracts.py`; CI `API contracts` | Implemented |
-| Recipient key generation/storage | Independent keys, encrypted bundle round trip, wrong passphrase, malformed keys, size/KDF limits, no plaintext serialization, owner-only persistence | `identity.rs` integration tests and identity module unit tests in workspace CI | Implemented; local macOS run, cross-platform CI pending |
-| Identity verification | Stable fingerprint vectors, modified user/deployment/key changes fingerprint, unverified/changed identity blocks grants, encrypted pin conflicts retain drafts | Core tests plus CLI/web workflows | Core contact pins, suspension, verification conflicts, and identity checks implemented; actual grant/UI integration pending |
-| Package encryption | Upstream HPKE/X-Wing vectors, independent interoperability, both modes, wrong recipient, signature failure, mutation of every authenticated field, bad encoding/size | Core tests and WASM fixtures | Planned |
-| Enrollment/directory APIs | Every operation in `group-key-delivery-cases.json`, real HTTP session/cookie/CLI token checks, atomic concurrent enrollment | Server unit + loopback HTTP tests | Implemented; broader conformance cases remain in the checklist |
-| Authorization/delivery | Read-only/admin-only/removed/disabled denials; own packages only; pending enrollment; membership/identity change between read and commit | Server integration tests | Planned |
-| Durable updates/migration | v1 unchanged until explicit migration; v2 reopens in CLI/WASM; downgrade denied; crash before/after journal/pointer; idempotent restart retry | Core/server integration + fault injection | Planned |
-| CLI integration | Two users unlock without shared group passphrase; headless login still works; wrong identity retains local store; offline use; no key material on stdout/stderr | CLI process integration tests | Planned |
-| Web integration | Enrollment, verification, pending/ready states, worker lock clears identity, no plaintext localStorage, both modes, read-only denial | Existing Playwright runner extended | Planned |
-| Recovery/new device | Export on client A, restore on fresh B, matching fingerprints and group unlock; lost passphrase/keys fail clearly; account reset does not recover keys | CLI/web end-to-end | Planned |
-| Removal rotation (following milestone) | Removed user's cached keys fail against new epoch; remaining members decrypt; interrupted rotation preserves committed state | Core/server/CLI/web integration | Planned |
+| Area | Runner | Evidence |
+| --- | --- | --- |
+| Identity and contact trust | Core identity/contact tests | Recovery, changed-key suspension, fingerprints, CAS, migration backups |
+| Package crypto | Core packages tests and module fixtures | Bound-field mutations, wrong/unverified recipient, canonical headers, signatures, independent HPKE vectors |
+| Envelope migration/rotation | Core collection-context tests | Both modes, authenticated bindings, old-wrapper rejection, legacy preservation |
+| API authorization and durability | Server sharing/delivery tests | Editor/reader/admin-only denials, own grants, membership changes, stale epochs/revisions, journal failure, retry after restart, mirror exclusions |
+| Real HTTP routing | Identity loopback tests and browser/CLI runner | Managed cookie and CLI sessions, headers and request limits, group operations |
+| Native/WASM interop | `scripts/test_group_delivery.py` | Independent enrollments, mutual verification, native grants opened in WASM, browser rotation grants opened in CLI, both modes |
+| Browser regressions | `scripts/test_web_ui.py` | Existing vault workflows, permissions, OTP, themes, mobile layout |
+| Actual request/response shapes | `check_api_contracts.py --runtime` | Captured successful Rust delivery requests/responses checked against OpenAPI |
 
-Implemented: `crates/petika-core/tests/identity.rs`, `tests/contacts.rs`, and identity module unit tests, including
-independent public-key/fingerprint vectors and authenticated private-key mismatch rejection.
-Contact tests also cover encrypted pins, verification conflicts, rollback/suspension,
-contact bounds, and preservation of v1 migration backups. Server tests cover stale bundle revisions, identity replacement, directory permissions,
-revocation, malformed input, storage locks, and schema-2 migration retries. Collection v2
-migration remains planned.
-The local workspace regression run passes 49 tests, including 12 contact-trust/migration
-tests added in this task. The contract checker passes 11 schema fixtures. Remote CI for
-these changes has not run yet.
-The web CI job compiles the shared core to WASM; browser identity workflows are not yet exposed.
+The browser CI job runs the cross-client workflow and captured-schema gate. Run locally:
 
-Proposed remaining runtime test files: `crates/petika-core/tests/sharing.rs`,
-`crates/petika-cli/tests/sharing.rs`, and
-`scripts/test_sharing_api.py`. These paths are a plan, not existing coverage.
-Extend `scripts/test_web_ui.py` for browser flows. Existing workspace Cargo and web CI
-jobs will run their respective tests; wire the new HTTP runner explicitly when added.
+```sh
+cargo test --workspace --locked
+PETIKA_CONTRACT_CAPTURE=target/delivery-contracts.json cargo test -p petika-server --test delivery --locked
+python scripts/check_api_contracts.py --runtime target/delivery-contracts.json
+python scripts/test_group_delivery.py
+```
+
+The browser runner requires built native binaries, built WASM assets, Python Playwright,
+and Chromium. All fixtures are synthetic and servers use isolated temporary directories.
+Exhaustive crash-boundary injection, all-route negative response schema validation, and
+parallel multi-process membership race scheduling remain hardening work; tests of stale
+state and held storage locks do not substitute for every power-loss boundary.
 
 ## Per-operation contracts
 
@@ -66,13 +60,6 @@ python3 -m venv /tmp/petika-contract-tests
 /tmp/petika-contract-tests/bin/python scripts/check_api_contracts.py
 ```
 
-The `API contracts` GitHub Actions job runs on pushes and pull requests. It validates the
-proposed contract and fixtures only. The existing Rust, web/provisioning, and distroless
-jobs continue to test implemented functionality. Identity behavior and HTTP tests run in the workspace test job. Package delivery
-coverage remains planned.
-
-Identity runtime coverage: `crates/petika-server/tests/sharing.rs`, account key module
-unit tests, and `web::key_http_tests` run in the existing workspace Cargo CI job.
-The HTTP test opens a real loopback listener and exercises all six identity operations
-through the production handler. Schema fixtures remain a separate gate; exhaustive
-response-schema, crash-boundary, and cross-client tests remain pending.
+The `API contracts` job validates the contract and static positive/negative fixtures.
+Rust, browser/provisioning, captured runtime schemas, and distroless jobs exercise actual
+behavior separately. A passing schema gate does not establish cryptographic safety.

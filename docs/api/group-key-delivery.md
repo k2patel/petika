@@ -1,6 +1,6 @@
 # Group-key delivery API contract
 
-Status: **six identity operations implemented; four collection operations planned**. The machine-readable contract is
+Status: **six identity and six collection operations implemented experimentally**. The machine-readable contract is
 [group-key-delivery.openapi.json](group-key-delivery.openapi.json), OpenAPI 3.0.3.
 The [design decision](../decisions/0002-per-user-group-key-delivery.md) defines the
 cryptographic and trust model. This contract does not redefine existing endpoint errors.
@@ -51,8 +51,8 @@ pins and authenticate decrypted snapshots. The initial migration must include th
 issuer's own usable grant; other unenrolled/unverified members remain visibly pending.
 
 The supplied encrypted snapshot is an opaque serialized envelope subject to server
-framing validation. Its v2 byte-level encoding will be frozen with core protocol fixtures;
-this API contract must not be mistaken for a completed cryptographic wire specification.
+framing validation. Its v2 byte-level encoding and independent fixtures are documented in the
+[wire format](../key-package-format.md).
 
 ## Concurrency, limits, and retry behavior
 
@@ -62,6 +62,10 @@ changes and migration through the same durable collection journal/current pointe
 Each successful state change increments the snapshot/state revision, including package-only
 changes; adjust legacy snapshot clients to tolerate unchanged ciphertext at a new revision.
 No response may acknowledge a state that has not reached durable storage.
+`POST /v1/collections/{collection_id}/key-rotation` commits the next epoch, snapshot,
+and replacement grants. `POST /v1/collections/{collection_id}/recipient-snapshot` updates
+a v2 snapshot at the active epoch; its package list must be empty. Both require edit
+access and the same revision/generation CAS. Rotation-required state blocks other v2 writes.
 
 A repeated package ID with identical authenticated bytes returns the original committed
 result without a new revision, after checking current caller authorization, identity, and
@@ -95,18 +99,20 @@ rate thresholds belong to implementation configuration and must have boundary te
 Membership edits and disabling/re-enabling a user increment affected group membership
 generations. Identity replacement invalidates delivery to the old identity and updates
 affected group generations. Removing/disabling a recipient or replacing its key marks
-rotation required. Re-enabling/re-adding never clears that flag. This milestone must not
-claim fresh-key exclusion until the separate rotation transaction is implemented.
+rotation required. Re-enabling/re-adding never clears that flag. The rotation transaction records the satisfied membership generation in the same
+collection state as its fresh snapshot and grants; later membership generations require
+a fresh review/rotation when the account rotation flag remains set.
 
 ## Verification
 
 [Development test actions](../testing/group-key-delivery.md) map every step and operation
 to positive, denial, race, and recovery cases. The contract CI job validates OpenAPI and
-schema fixtures now. Runtime API conformance tests are required with each endpoint's
-implementation; they are not present yet.
+static fixtures. The browser CI job also validates captured runtime delivery requests
+and responses; native and browser tests exercise behavior separately.
 
 Identity operations use a 128 KiB request limit and 120 requests per user per minute.
 Password confirmation shares the existing 20-per-minute account authentication budget.
 Replacement requires bundle v2; updates cannot downgrade v2 to v1. Identity enrollment
 and replacement advance affected membership generations; replacement also marks rotation
-required. No group packages or cryptographic rotation are implemented yet.
+required. All key routes share the bounded per-user request budget. See the
+[group-access guide](../group-access.md) for enrollment, delivery, rotation, and retries.

@@ -14,6 +14,7 @@ ALLOWED.update({
     "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
     "(MIT OR Apache-2.0) AND Unicode-3.0",
     "CC0-1.0 OR MIT-0 OR Apache-2.0", "(Apache-2.0 OR MIT) AND BSD-3-Clause",
+    "BSD-2-Clause OR Apache-2.0 OR MIT",  # zerocopy: MIT branch reviewed
     "Unlicense/MIT", "Zlib OR Apache-2.0 OR MIT",
     # Rust HTTPS transport: preserve ring's Apache/ISC notices, select MIT for rustls.
     "Apache-2.0 AND ISC", "Apache-2.0 OR ISC OR MIT",

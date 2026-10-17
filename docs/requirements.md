@@ -25,19 +25,19 @@ logins; it is separate from account MFA.
 
 The API is authoritative, with revision-checked collection snapshots and a one-way
 encrypted Git mirror. Managed accounts, browser-approved CLI sessions, personal/group
-collections, and read/edit permissions are implemented. Group passphrases currently
-travel through a separate trusted channel. Setup supports browser and unattended
+collections, and read/edit permissions are implemented. Legacy groups use separately shared passphrases; migrated groups use verified recipient
+packages and explicit fresh-key rotation. Setup supports browser and unattended
 provisioning; persistence uses versioned JSON files.
 
 The shared client core also generates recipient identities and supports encrypted local
 storage, fingerprint-checked recovery, passphrase rewrapping, verified contact pins,
-and key-change suspension. This foundation is not
-yet connected to CLI/web enrollment or server-backed group-key delivery.
+and key-change suspension. CLI/web enrollment, verified delivery, trusted restore, migration, and rotation use this
+shared core.
 
 ## Next milestone and remaining requirements
 
-**Next: automatic per-user group-key delivery**, followed by membership-change key
-rotation. Track implementation and acceptance in the [roadmap](roadmap.md).
+Per-user group-key delivery and explicit membership-change rotation are implemented
+experimentally. Track remaining work in the [roadmap](roadmap.md).
 
 Browser extensions/autofill, mobile apps, native biometrics, full GPG key-management UI,
 OS credential storage, optional OIDC, account MFA/passkeys, recovery, and audit trails
@@ -47,7 +47,7 @@ scope; basic user/group administration is already implemented.
 ## Open decisions
 
 The recipient enrollment/verification design is [documented](decisions/0002-per-user-group-key-delivery.md)
-but awaits API and client integration. Fresh group-key rotation, individual item-sharing semantics, native UI stacks and supported OS versions, native auto-lock
+and implemented. Individual item-sharing semantics, native UI stacks and supported OS versions, native auto-lock
 policy, and backup retention/recovery objectives still need decisions. The web client
 already has configurable inactivity locking. Deployment manifests target a single
 server with persistent filesystem storage; multi-replica operation is unsupported.

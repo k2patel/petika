@@ -107,6 +107,22 @@
       "rejection": [
         "Missing or revoked session returns 401"
       ]
+    },
+    "rotateCollectionKeys": {
+      "success": [
+        "Fresh-key rotation commits snapshot and replacement grants together; identical retry after restart returns original revision."
+      ],
+      "rejection": [
+        "Removed users and readers cannot rotate; stale membership, epoch, or revision preserves current state."
+      ]
+    },
+    "updateRecipientSnapshot": {
+      "success": [
+        "Current editor publishes bound ciphertext at the active epoch with revision CAS."
+      ],
+      "rejection": [
+        "Pending rotation, old epoch, mode change, readers, and mismatched collection binding are rejected."
+      ]
     }
   }
 }

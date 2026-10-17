@@ -364,6 +364,79 @@ pub fn key_route(mut request: Request, accounts: &mut Accounts) {
     }
 }
 
+pub fn delivery_route(
+    mut request: Request,
+    accounts: &mut Accounts,
+    collection: &str,
+    action: &str,
+) {
+    use petika_server::accounts::{DeliveryOperation, KeyError};
+    let fail =
+        |request: Request, error: KeyError| json(request, error.status(), error.body(), None);
+    let token = if super::header(&request, "Authorization")
+        .is_some_and(|h| !h.starts_with("Bearer cli_"))
+    {
+        String::new()
+    } else {
+        session(&request)
+    };
+    match accounts.authenticate(&token) {
+        Ok(Some(_)) => {}
+        Ok(None) => return fail(request, KeyError::Unauthenticated),
+        Err(_) => return fail(request, KeyError::Unavailable),
+    }
+    if action == "key-packages" && request.url().contains('?') {
+        return fail(request, KeyError::Conflict);
+    }
+    let operation = match (action, request.method().as_str()) {
+        ("key-access", "GET") => match request.url().split_once('?') {
+            None => DeliveryOperation::Access,
+            Some((_, query)) => match query.strip_prefix("cursor=") {
+                Some(cursor) if cursor.len() <= 512 => DeliveryOperation::AccessPage(cursor.into()),
+                _ => return fail(request, KeyError::Invalid),
+            },
+        },
+        ("key-packages", "GET") => DeliveryOperation::Packages,
+        ("key-packages", "POST") => DeliveryOperation::Publish,
+        ("recipient-migration", "POST") => DeliveryOperation::Migrate,
+        ("key-rotation", "POST") => DeliveryOperation::Rotate,
+        ("recipient-snapshot", "POST") => DeliveryOperation::Snapshot,
+        _ => return fail(request, KeyError::MethodNotAllowed),
+    };
+    let mut body = Vec::new();
+    if request.method() != &Method::Get {
+        if super::header(&request, "Content-Type") != Some("application/json") {
+            return fail(request, KeyError::UnsupportedMediaType);
+        }
+        if !csrf(&request) {
+            return fail(request, KeyError::Forbidden);
+        }
+        let limit = if action == "key-packages" {
+            2 * 1024 * 1024
+        } else {
+            20 * 1024 * 1024
+        };
+        if request.body_length().is_some_and(|len| len > limit) {
+            return fail(request, KeyError::TooLarge);
+        }
+        if request
+            .as_reader()
+            .take(limit as u64 + 1)
+            .read_to_end(&mut body)
+            .is_err()
+        {
+            return fail(request, KeyError::Invalid);
+        }
+        if body.len() > limit {
+            return fail(request, KeyError::TooLarge);
+        }
+    }
+    match accounts.delivery_operation(&token, collection, operation, &body) {
+        Ok(value) => json(request, 200, value, None),
+        Err(error) => fail(request, error),
+    }
+}
+
 #[cfg(test)]
 mod key_http_tests {
     use super::*;

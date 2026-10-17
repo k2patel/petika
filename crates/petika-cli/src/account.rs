@@ -39,9 +39,9 @@ fn origin(input: &str) -> Result<String> {
     }
     Ok(url.origin().ascii_serialization())
 }
-struct Client {
+pub(crate) struct Client {
     agent: ureq::Agent,
-    server: String,
+    pub(crate) server: String,
     token: String,
 }
 impl Drop for Client {
@@ -63,7 +63,7 @@ impl Client {
                 .into(),
         })
     }
-    fn request(
+    pub(crate) fn request(
         &self,
         method: &str,
         path: &str,
@@ -91,10 +91,7 @@ impl Client {
                 .header("Authorization", auth.as_str())
                 .header("Content-Type", "application/json")
                 .header("X-Petika-Request", "1")
-                .header(
-                    "If-Match",
-                    format!("\"{}\"", revision.ok_or("Revision required")?),
-                )
+                .header("If-Match", format!("\"{}\"", revision.unwrap_or(0)))
                 .send(body.ok_or("Snapshot required")?)?,
             _ => return Err("Unsupported method".into()),
         };
@@ -123,7 +120,7 @@ impl Client {
             _ => Err(format!("Server returned HTTP {status}").into()),
         }
     }
-    fn json(&self, method: &str, path: &str, body: Value) -> Result<Value> {
+    pub(crate) fn json(&self, method: &str, path: &str, body: Value) -> Result<Value> {
         let encoded = Zeroizing::new(body.to_string());
         let (_, _, text) = self.request(method, path, Some(&encoded), None)?;
         Ok(serde_json::from_str(&text)?)
@@ -141,7 +138,7 @@ fn credential(file: &StoreFile) -> Result<Credential> {
     }
     Ok(saved)
 }
-fn client(path: &Path) -> Result<Client> {
+pub(crate) fn client(path: &Path) -> Result<Client> {
     let saved = credential(&StoreFile::lock(path)?)?;
     Client::new(&saved.server, saved.token.clone())
 }
@@ -254,7 +251,7 @@ pub fn collections(path: &Path) -> Result<()> {
     );
     Ok(())
 }
-fn collection(client: &Client, selected: &str, write: bool) -> Result<String> {
+pub(crate) fn collection(client: &Client, selected: &str, write: bool) -> Result<String> {
     let list = client.json("GET", "/v1/collections", Value::Null)?;
     let item = list
         .as_array()

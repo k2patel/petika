@@ -85,9 +85,36 @@ pub struct Entry {
     pub otp: Option<String>,
 }
 
-#[derive(Serialize, Deserialize)]
+/// Authenticated location and key generation for recipient-enabled collections.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CollectionContext {
+    pub deployment_id: String,
+    pub collection_id: String,
+    pub key_epoch: u64,
+}
+impl CollectionContext {
+    pub fn validate(&self) -> Result<()> {
+        let valid = |s: &str| {
+            s.len() == 64
+                && s.bytes()
+                    .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        };
+        if !valid(&self.deployment_id)
+            || !valid(&self.collection_id)
+            || !(1..=(1u64 << 53) - 1).contains(&self.key_epoch)
+        {
+            return Err(Error::Format);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Envelope {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    context: Option<CollectionContext>,
     version: u32,
     encryption: EncryptionMode,
     kem_ciphertext: Vec<u8>,
@@ -100,6 +127,25 @@ struct Envelope {
     wrapped_key: Vec<u8>,
     data_nonce: [u8; 24],
     ciphertext: Vec<u8>,
+}
+
+impl Envelope {
+    fn aad(&self, wrapping: bool) -> Vec<u8> {
+        let legacy = if wrapping {
+            self.encryption.key_aad()
+        } else {
+            self.encryption.data_aad()
+        };
+        let Some(context) = &self.context else {
+            return legacy.to_vec();
+        };
+        let mut bytes = b"petika:collection:v2:".to_vec();
+        bytes.extend_from_slice(legacy);
+        bytes.extend_from_slice(context.deployment_id.as_bytes());
+        bytes.extend_from_slice(context.collection_id.as_bytes());
+        bytes.extend_from_slice(&context.key_epoch.to_be_bytes());
+        bytes
+    }
 }
 
 /// An unlocked store owns keys and records only for its lifetime. It never implements Debug.
@@ -162,7 +208,7 @@ fn parse(bytes: &[u8]) -> Result<Envelope> {
         return Err(Error::Format);
     }
     let e: Envelope = serde_json::from_slice(bytes).map_err(|_| Error::Format)?;
-    if e.version != 1
+    if !matches!((e.version, &e.context), (1, None) | (2, Some(_)))
         || e.kdf != "argon2id-v19"
         || e.memory_kib != 65536
         || e.iterations != 3
@@ -173,6 +219,9 @@ fn parse(bytes: &[u8]) -> Result<Envelope> {
     {
         return Err(Error::Format);
     }
+    if let Some(context) = &e.context {
+        context.validate()?;
+    }
     match e.encryption {
         EncryptionMode::Standard if !e.kem_ciphertext.is_empty() => return Err(Error::Format),
         EncryptionMode::HybridPostQuantum if e.kem_ciphertext.len() != x_wing::CIPHERTEXT_SIZE => {
@@ -181,6 +230,12 @@ fn parse(bytes: &[u8]) -> Result<Envelope> {
         _ => {}
     }
     Ok(e)
+}
+
+/// Returns validated public framing, without authenticating ciphertext.
+pub fn envelope_metadata(bytes: &[u8]) -> Result<(EncryptionMode, Option<CollectionContext>)> {
+    let envelope = parse(bytes)?;
+    Ok((envelope.encryption, envelope.context))
 }
 
 /// Validate framing only. An untrusted server cannot authenticate client ciphertext.
@@ -219,6 +274,7 @@ impl UnlockedStore {
         Ok(Self {
             envelope: Envelope {
                 version: 1,
+                context: None,
                 encryption,
                 kem_ciphertext,
                 kdf: "argon2id-v19".into(),
@@ -244,13 +300,34 @@ impl UnlockedStore {
             &wrapping_key,
             &envelope.key_nonce,
             &envelope.wrapped_key,
-            envelope.encryption.key_aad(),
+            &envelope.aad(true),
         )?;
         let mut secret_material = Zeroizing::new([0; 32]);
         if unwrapped.len() != secret_material.len() {
             return Err(Error::Format);
         }
         secret_material.copy_from_slice(&unwrapped);
+        Self::open_material(envelope, secret_material)
+    }
+
+    pub(crate) fn access_material(&self) -> &[u8; 32] {
+        &self.secret_material
+    }
+
+    pub(crate) fn open_access(
+        bytes: &[u8],
+        material: Zeroizing<[u8; 32]>,
+        context: &CollectionContext,
+        mode: EncryptionMode,
+    ) -> Result<Self> {
+        let envelope = parse(bytes)?;
+        if envelope.context.as_ref() != Some(context) || envelope.encryption != mode {
+            return Err(Error::Authentication);
+        }
+        Self::open_material(envelope, material)
+    }
+
+    fn open_material(envelope: Envelope, secret_material: Zeroizing<[u8; 32]>) -> Result<Self> {
         let key = match envelope.encryption {
             EncryptionMode::Standard => Zeroizing::new(*secret_material),
             EncryptionMode::HybridPostQuantum => {
@@ -268,7 +345,7 @@ impl UnlockedStore {
             &key,
             &envelope.data_nonce,
             &envelope.ciphertext,
-            envelope.encryption.data_aad(),
+            &envelope.aad(false),
         )?;
         let entries: BTreeMap<String, Entry> =
             serde_json::from_slice(&plaintext).map_err(|_| Error::Format)?;
@@ -295,13 +372,70 @@ impl UnlockedStore {
             &self.key,
             &self.envelope.data_nonce,
             &plaintext,
-            self.envelope.encryption.data_aad(),
+            &self.envelope.aad(false),
         )?;
         let encoded = serde_json::to_vec(&self.envelope).map_err(|_| Error::Format)?;
         if encoded.len() > MAX_FILE_BYTES {
             return Err(Error::Format);
         }
         Ok(encoded)
+    }
+
+    pub fn context(&self) -> Option<&CollectionContext> {
+        self.envelope.context.as_ref()
+    }
+
+    /// Explicitly adopt collection binding, preserving the existing secret and mode.
+    /// The caller retains the original ciphertext until its migration commits.
+    pub fn migration_draft(
+        &self,
+        context: CollectionContext,
+        recovery_passphrase: &str,
+    ) -> Result<Self> {
+        let bytes = Zeroizing::new(serde_json::to_vec(&self.entries).map_err(|_| Error::Format)?);
+        let mut draft = Self {
+            envelope: self.envelope.clone(),
+            key: Zeroizing::new(*self.key),
+            secret_material: Zeroizing::new(*self.secret_material),
+            entries: serde_json::from_slice(&bytes).map_err(|_| Error::Format)?,
+        };
+        draft.bind_collection(context, recovery_passphrase)?;
+        Ok(draft)
+    }
+
+    pub fn bind_collection(
+        &mut self,
+        context: CollectionContext,
+        recovery_passphrase: &str,
+    ) -> Result<()> {
+        context.validate()?;
+        if self.envelope.context.is_some() || context.key_epoch != 1 {
+            return Err(Error::Format);
+        }
+        check_passphrase(recovery_passphrase)?;
+        self.envelope.context = Some(context);
+        self.envelope.version = 2;
+        if let Err(error) = self.change_passphrase(recovery_passphrase) {
+            self.envelope.context = None;
+            self.envelope.version = 1;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Fresh secret material and a fresh recovery wrapper for the next epoch.
+    /// Returns a separate draft so a failed server transaction preserves this session.
+    pub fn rotated(&self, recovery_passphrase: &str) -> Result<Self> {
+        let mut context = self.context().ok_or(Error::Format)?.clone();
+        context.key_epoch = context.key_epoch.checked_add(1).ok_or(Error::Format)?;
+        context.validate()?;
+        let mut next = Self::create_with_mode(recovery_passphrase, self.encryption())?;
+        next.envelope.context = Some(context);
+        next.envelope.version = 2;
+        next.change_passphrase(recovery_passphrase)?;
+        let bytes = Zeroizing::new(serde_json::to_vec(&self.entries).map_err(|_| Error::Format)?);
+        next.entries = serde_json::from_slice(&bytes).map_err(|_| Error::Format)?;
+        Ok(next)
     }
 
     pub fn encryption(&self) -> EncryptionMode {
@@ -336,7 +470,7 @@ impl UnlockedStore {
             &wrapping_key,
             &nonce,
             self.secret_material.as_ref(),
-            self.envelope.encryption.key_aad(),
+            &self.envelope.aad(true),
         )?;
         self.envelope.salt = salt;
         self.envelope.key_nonce = nonce;

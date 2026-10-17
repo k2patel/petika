@@ -1,7 +1,9 @@
 //! Local identities and collection authorization. Plaintext private and collection keys never enter this module.
+mod delivery;
 mod keys;
 use crate::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
+pub use delivery::DeliveryOperation;
 pub use keys::{IdentityState, KeyError, KeyOperation};
 use petika_core::StoreFile;
 use serde::{Deserialize, Serialize};

@@ -1,5 +1,6 @@
 mod account;
 mod import;
+mod keys;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use petika_core::{EncryptionMode, Entry, StoreFile, UnlockedStore, generate_password};
@@ -23,6 +24,9 @@ struct Cli {
     /// Saved managed session (sensitive bearer credential; defaults to user data directory).
     #[arg(long, global = true)]
     session_file: Option<PathBuf>,
+    /// Encrypted recipient identity used for group access.
+    #[arg(long, global = true)]
+    identity_file: Option<PathBuf>,
     /// Encrypted store file (defaults to the OS user data directory).
     #[arg(long, global = true)]
     store: Option<PathBuf>,
@@ -49,6 +53,11 @@ impl From<SetupEncryption> for EncryptionMode {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Enroll, verify, deliver, and rotate recipient access.
+    Keys {
+        #[command(subcommand)]
+        command: keys::Command,
+    },
     /// Sign in to a managed account by approving a code in your browser.
     Login {
         #[arg(long)]
@@ -194,6 +203,20 @@ fn run(cli: Cli) -> Result<()> {
             None => Ok(default_store()?.with_file_name("session.json")),
         }
     };
+    if let Command::Keys { command } = &cli.command {
+        let session_path = session()?;
+        let identity_path = cli
+            .identity_file
+            .clone()
+            .unwrap_or_else(|| session_path.with_file_name("identity.json"));
+        return keys::run(
+            &session_path,
+            &identity_path,
+            cli.store.as_deref(),
+            command,
+            cli.passphrase_stdin,
+        );
+    }
     match &cli.command {
         Command::Login { server } => return account::login(&session()?, server),
         Command::Logout { local } => return account::logout(&session()?, *local),
@@ -202,7 +225,7 @@ fn run(cli: Cli) -> Result<()> {
         Command::Status { collection } => return account::status(&session()?, collection),
         _ => {}
     }
-    let path = match cli.store {
+    let path = match cli.store.clone() {
         Some(path) => path,
         None => default_store()?,
     };
@@ -233,7 +256,7 @@ fn run(cli: Cli) -> Result<()> {
         }
         _ => {}
     }
-    let file = StoreFile::lock(path)?;
+    let file = StoreFile::lock(&path)?;
     if let Command::Init {
         encryption,
         ref import_gpg,
@@ -256,11 +279,15 @@ fn run(cli: Cli) -> Result<()> {
     if !file.exists() {
         return Err("store does not exist; run petika init first".into());
     }
-    let passphrase = secret("Passphrase: ", cli.passphrase_stdin)?;
-    let mut store = file.open(&passphrase)?;
-    drop(passphrase);
+    let mut store = if let Some(identity) = &cli.identity_file {
+        keys::open_local(identity, &file.read()?, &path, cli.passphrase_stdin)?
+    } else {
+        let passphrase = secret("Passphrase: ", cli.passphrase_stdin)?;
+        file.open(&passphrase)?
+    };
     match cli.command {
-        Command::Init { .. }
+        Command::Keys { .. }
+        | Command::Init { .. }
         | Command::Login { .. }
         | Command::Logout { .. }
         | Command::Whoami

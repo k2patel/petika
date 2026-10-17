@@ -48,4 +48,12 @@ same release until a stable compatibility policy is published.
 
 Recipient identity storage is a separate [local encrypted format](identity-format.md).
 Local identity backup migration is independent of account migration. Enrollment APIs
-store only encrypted bundles; group-key delivery remains pending.
+store only encrypted bundles; collection delivery uses the separate format below.
+
+## Recipient-enabled collections
+
+Explicit migration writes envelope v2 with authenticated deployment/collection/epoch
+context and collection-state schema 2 with encrypted grants and retry receipts. The exact
+original current snapshot is preserved as `snapshot.v1.backup.json` before the journal and
+current pointer change. Schema-1 stores stay unchanged until migration; legacy snapshot
+uploads cannot undo it. See [wire format](key-package-format.md) and [recovery workflow](group-access.md).

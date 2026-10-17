@@ -51,16 +51,14 @@ read access; membership is checked on every request. Read-only members cannot su
 updates. Disabled users lose server access and active sessions. An administrator can
 change group membership, so administration is still a trusted role.
 
-**Initial shared-key model:** group members receive the collection unlock passphrase
-through a separate trusted channel. There is no automatic per-user key delivery yet.
-Removing a member blocks API access but cannot erase downloaded ciphertext, known
-keys, or copied secrets. Rewrapping a passphrase does not rotate the underlying key.
-For a membership change requiring cryptographic exclusion, create a new collection
-with a fresh key and rotate affected website credentials. Automatic key rotation and
-per-recipient key packages remain future work.
+Legacy groups use a separately shared passphrase. [Recipient-enabled groups](group-access.md)
+use verified identity packages and support explicit fresh-key rotation after membership
+changes. Removing a member immediately blocks API access; rotation excludes its old keys
+from new ciphertext, but cannot erase previously downloaded data or copied secrets.
+Rewrapping a passphrase does not rotate the underlying key.
 
-The browser stores only encrypted snapshots and non-secret appearance/lock preferences
-in localStorage. Storage can be disabled or run out; errors instruct the user to export.
+The browser persists encrypted snapshots, identity bundles, transaction drafts, public
+highest-seen epochs, and appearance/lock preferences in localStorage. Storage can be disabled or run out; errors instruct the user to export.
 A conflict never silently overwrites a newer server revision. Secrets appear in browser
 memory while unlocked. Worker termination and DOM clearing reduce their lifetime but
 cannot guarantee erasure of all browser/clipboard/OS copies. Clipboard contents are not
@@ -70,8 +68,7 @@ automatically erased. Use a trusted browser and trusted server-delivered applica
 
 Cross-site autofill requires the Chromium/Firefox extension; the web page cannot fill
 another website. GPG import uses the native CLI today. Full GPG key management, biometric
-unlock, passkeys, optional OpenID Connect, account recovery, audit trails, and automated
-sharing-key delivery are not implemented. Their screens explicitly state current limits.
+unlock, passkeys, optional OpenID Connect, account recovery, audit trails, and identity replacement UI are not implemented. Their screens explicitly state current limits.
 Website TOTP is for saved external logins; it does not add MFA to Petika account sign-in.
 
 ## Verification

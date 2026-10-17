@@ -76,7 +76,9 @@ function rpc(action, ...args) {
     };
     worker.onerror = () => {
       for (const p of pending.values()) p.reject(new Error('Encryption module could not load. Check the web build.'));
-      pending.clear()
+      pending.clear();
+      discardWorker(); state.unlocked = false; state.rows = []; state.selected = null;
+      if (state.user) shell();
     };
   }
   return new Promise((resolve, reject) => {
@@ -94,6 +96,7 @@ function rpc(action, ...args) {
 }
 
 function discardWorker() {
+  state.identityUnlocked = false;
   worker?.terminate();
   worker = null;
   for (const p of pending.values()) p.reject(new Error('Session locked'));
@@ -126,7 +129,7 @@ async function api(path, {
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const value = await response.json();
-  if (!response.ok) throw new Error(value.error || 'Request failed');
+  if (!response.ok) throw new Error(value.error || value.message || 'Request failed');
   return value
 }
 
@@ -167,7 +170,7 @@ function dialog(title, body) {
   el.innerHTML = `<div class="dialog-head"><h2 id="dialog-title">${title}</h2>${button('','close','close','icon-only')}</div><div class="dialog-body">${body}</div>`;
   el.querySelector('[data-action=close]').setAttribute('aria-label', 'Close dialog');
   el.onclose = () => {
-    el.innerHTML = ''
+    if (!el.open) el.innerHTML = '';
   };
   el.showModal();
   bind(el)
@@ -233,7 +236,7 @@ async function loadCollection() {
   state.revision = 0;
   const draft = getDraft();
   try {
-    const response = await fetch(`/v1/collections/${state.collection.id}/snapshot`, {
+  const response = await fetch(`/v1/collections/${state.collection.id}/snapshot`, {
       credentials: 'same-origin',
       cache: 'no-store'
     });
@@ -268,7 +271,7 @@ function nav(label, view, i, count = '') {
 function shell() {
   clearInterval(otpInterval);
   const user = state.user;
-  $('#app').innerHTML = `<div class="shell"><aside class="sidebar">${brand()}<div class="workspace-switch"><span class="initial">P</span>Private workspace<span class="pill neutral">${state.demo?'Demo':'Self-hosted'}</span></div><nav aria-label="Main navigation">${nav('All items','items','box',state.unlocked?state.rows.length:'')}${nav('Security check','security','shield')}${nav('Password generator','generator','key')}<div class="nav-label">Tools</div>${nav('Import & export','transfer','download')}${nav('GPG keys','gpg','key')}${nav('Browser autofill','autofill','browser')}${user.admin?`<div class="nav-label">Administration</div>${nav('Users','users','user')}${nav('Groups','groups','users')}`:''}</nav><div class="sidebar-bottom">${nav('Sync & backup','sync','refresh')}${nav('Settings','settings','settings')}<button class="profile-btn" data-action="profile"><span class="avatar">${esc(user.name.slice(0,2).toUpperCase())}</span><span>${esc(user.name)}<small>${user.admin?'Administrator':'Member'}</small></span></button></div></aside><section class="workspace"><header class="topbar"><div class="breadcrumb">${button('','menu','menu','icon-only mobile-menu')}<span>Workspace</span><span>/</span><strong>${({items:'My collection',security:'Security check',generator:'Password generator',transfer:'Import & export',gpg:'GPG keys',autofill:'Browser autofill',users:'Users',groups:'Groups',sync:'Sync & backup',settings:'Settings'})[state.view]}</strong></div><div class="actions"><span class="pill ${state.unlocked?'':'neutral'}">${icon(state.unlocked?'shield':'lock')}${state.unlocked?'Unlocked locally':'Locked'}</span>${button(state.unlocked?'Lock':'Sign out',state.unlocked?'lock':'logout',state.unlocked?'lock':'logout','ghost')}</div></header>${state.demo?'<div class="demo-banner">Demo workspace — sample data only. Changes stay in memory and are never sent to the server.</div>':''}<main id="main" class="page"></main></section></div>`;
+  $('#app').innerHTML = `<div class="shell"><aside class="sidebar">${brand()}<div class="workspace-switch"><span class="initial">P</span>Private workspace<span class="pill neutral">${state.demo?'Demo':'Self-hosted'}</span></div><nav aria-label="Main navigation">${nav('All items','items','box',state.unlocked?state.rows.length:'')}${nav('Security check','security','shield')}${nav('Password generator','generator','key')}<div class="nav-label">Tools</div>${nav('Import & export','transfer','download')}${nav('GPG keys','gpg','key')}${nav('Browser autofill','autofill','browser')}${user.admin?`<div class="nav-label">Administration</div>${nav('Users','users','user')}${nav('Groups','groups','users')}`:''}</nav><div class="sidebar-bottom">${nav('Sync & backup','sync','refresh')}${nav('Settings','settings','settings')}<button class="profile-btn" data-action="profile"><span class="avatar">${esc(user.name.slice(0,2).toUpperCase())}</span><span>${esc(user.name)}<small>${user.admin?'Administrator':'Member'}</small></span></button></div></aside><section class="workspace"><header class="topbar"><div class="breadcrumb">${button('','menu','menu','icon-only mobile-menu')}<span>Workspace</span><span>/</span><strong>${({items:'My collection',security:'Security check',generator:'Password generator',transfer:'Import & export',gpg:'GPG keys',autofill:'Browser autofill',users:'Users',groups:'Groups',sync:'Sync & backup',settings:'Settings'})[state.view]}</strong></div><div class="actions"><span class="pill ${state.unlocked?'':'neutral'}">${icon(state.unlocked?'shield':'lock')}${state.unlocked?'Unlocked locally':'Locked'}</span>${button((state.unlocked||state.identityUnlocked)?'Lock':'Sign out',(state.unlocked||state.identityUnlocked)?'lock':'logout',(state.unlocked||state.identityUnlocked)?'lock':'logout','ghost')}</div></header>${state.demo?'<div class="demo-banner">Demo workspace — sample data only. Changes stay in memory and are never sent to the server.</div>':''}<main id="main" class="page"></main></section></div>`;
   $('.mobile-menu').setAttribute('aria-label', 'Toggle navigation');
   bind();
   renderPage().catch(e => {
@@ -285,7 +288,7 @@ function collectionTabs() {
 }
 
 function unlockView() {
-  return `${collectionTabs()}<div class="lock-panel"><div class="chest-tile">${mark()}</div><h2>${state.snapshot?'Unlock':'Set up'} ${esc(state.collection.name)}</h2><p>${state.snapshot?'Your passphrase stays on this device.':'Choose how to protect this collection.'}</p>${state.collection.group?'<div class="notice">This group uses a separate unlock passphrase. Share it with authorized members through a trusted channel. Membership alone does not provide the key.</div>':''}${!state.snapshot&&!state.collection.edit?'<div class="notice">A member with edit access must initialize this collection.</div>':`<form id="unlock-form">${field('Unlock passphrase','passphrase','password','','required autocomplete="'+(state.snapshot?'current-password':'new-password')+'"')}${!state.snapshot?field('Confirm passphrase','confirm','password','','required minlength="12" autocomplete="new-password"')+'<div class="choice-grid"><label class="choice"><input type="radio" name="mode" value="standard" checked><span><strong>Standard</strong><small>XChaCha20-Poly1305</small></span></label><label class="choice"><input type="radio" name="mode" value="hybrid"><span><strong>Hybrid</strong><small>Post-quantum · experimental</small></span></label></div>':''}<div class="form-error" role="alert"></div><button type="submit" class="btn primary full">${state.snapshot?'Unlock collection':'Create encrypted collection'}</button></form>${!state.snapshot?button('Import an encrypted Petika file','import','upload','full ghost'):''}`}<p class="auth-footer">Petika cannot recover a forgotten unlock passphrase.</p></div>`
+  return `${collectionTabs()}<div class="lock-panel"><div class="chest-tile">${mark()}</div><h2>${state.snapshot?'Unlock':'Set up'} ${esc(state.collection.name)}</h2><p>${state.snapshot?'Your passphrase stays on this device.':'Choose how to protect this collection.'}</p>${state.collection.group?'<div class="notice">Unlock with your verified recipient identity, or use the group recovery passphrase.</div>':''}${!state.snapshot&&!state.collection.edit?'<div class="notice">A member with edit access must initialize this collection.</div>':`${state.collection.group?button('Unlock with identity','identity-unlock','key','full'): ''}<form id="unlock-form">${field('Unlock passphrase','passphrase','password','','required autocomplete="'+(state.snapshot?'current-password':'new-password')+'"')}${!state.snapshot?field('Confirm passphrase','confirm','password','','required minlength="12" autocomplete="new-password"')+'<div class="choice-grid"><label class="choice"><input type="radio" name="mode" value="standard" checked><span><strong>Standard</strong><small>XChaCha20-Poly1305</small></span></label><label class="choice"><input type="radio" name="mode" value="hybrid"><span><strong>Hybrid</strong><small>Post-quantum · experimental</small></span></label></div>':''}<div class="form-error" role="alert"></div><button type="submit" class="btn primary full">${state.snapshot?'Unlock collection':'Create encrypted collection'}</button></form>${!state.snapshot?button('Import an encrypted Petika file','import','upload','full ghost'):''}`}<p class="auth-footer">Petika cannot recover a forgotten unlock passphrase.</p></div>`
 }
 
 function bindUnlock() {
@@ -337,7 +340,7 @@ async function renderPage() {
     main.innerHTML = title('Less typing. More control.', 'Website-aware filling, with your permission.') + `<section class="panel readable"><div class="panel-header"><h2>Browser autofill</h2><span class="pill neutral">Extension not connected</span></div><p>The web app can copy credentials and generate website verification codes. Filling forms on another website requires the Petika Chromium or Firefox extension, which is not implemented yet.</p><div class="settings-row"><div><h3>Match the website</h3><p>Save the complete HTTPS address on each login. The planned extension will check the destination before suggesting credentials.</p></div>${icon('browser')}</div><div class="settings-row"><div><h3>Fill only when you choose</h3><p>Explicit selection will fill the username, password, or current one-time code without automatically submitting the form.</p></div>${icon('check')}</div><div class="settings-row"><div><h3>Website OTP</h3><p>Add a setup key or otpauth link to a login to get time-based codes now.</p></div>${button('Go to items','items','key')}</div></section>`;
   }
   if (state.view === 'settings') {
-    main.innerHTML = title('A workspace that feels like yours', 'Profile, appearance, and local session preferences.') + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div><div class="settings-row"><div><h3>Biometric unlock</h3><p>Requires the native device integration. This web release uses a passphrase and cannot verify biometrics.</p></div><span class="pill neutral">Not available yet</span></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Change account password','account-password','key')} ${button('Sign out','logout','logout')}`;
+    main.innerHTML = title('A workspace that feels like yours', 'Profile, appearance, and local session preferences.') + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div><div class="settings-row"><div><h3>Biometric unlock</h3><p>Requires the native device integration. This web release uses a passphrase and cannot verify biometrics.</p></div><span class="pill neutral">Not available yet</span></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Recipient identity','identity','key')} ${state.collection.group?button('Group access','sharing','users'):''} ${button('Change account password','account-password','key')} ${button('Sign out','logout','logout')}`;
     form('#profile-form', async data => {
       state.user = state.demo ? {
         ...state.user,
@@ -454,6 +457,15 @@ async function persist() {
 async function sync() {
   if (state.demo || !state.dirty) return;
   if (state.conflict) throw new Error('Resolve the revision conflict in Sync & backup first.');
+  if (JSON.parse(state.snapshot).version === 2) {
+    const prefix = `/v1/collections/${state.collection.id}`;
+    const access = await keyAccess(prefix);
+    const result = await api(`${prefix}/recipient-snapshot`, {method:'POST', body:{expected_snapshot_revision:state.revision, expected_key_epoch:access.key_epoch, expected_membership_generation:access.membership_generation, packages:[], encrypted_snapshot:state.snapshot}});
+    state.revision = result.snapshot_revision;
+    state.dirty = false;
+    localStorage.setItem(draftKey(), JSON.stringify({encrypted:state.snapshot, revision:state.revision, dirty:false}));
+    return;
+  }
   const response = await fetch(`/v1/collections/${state.collection.id}/snapshot`, {
     method: 'PUT',
     credentials: 'same-origin',
@@ -635,6 +647,20 @@ async function groupDialog(group = null) {
   })
 }
 async function action(name, el) {
+  if (name === 'identity-backup') {
+    const blob = new Blob([localStorage.getItem(identityStorageKey())], {type:'application/json'});
+    const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'petika-identity-backup.json'; link.click(); URL.revokeObjectURL(url); return;
+  }
+  if (name === 'identity') return identityDialog();
+  if (name === 'sharing-retry') {
+    const draft = JSON.parse(localStorage.getItem(`${draftKey()}:access`));
+    if (!draft || !['key-packages','recipient-migration','key-rotation'].includes(draft.action)) throw new Error('No saved access update.');
+    await api(`/v1/collections/${state.collection.id}/${draft.action}`, {method:'POST',body:draft.body});
+    localStorage.removeItem(`${draftKey()}:access`); closeDialog(); await loadCollection(); shell(); return;
+  }
+  if (name === 'sharing') return sharingDialog();
+  if (name === 'identity-unlock') return identityDialog(true);
+
   lastActivity = Date.now();
   switch (name) {
     case 'account-password':
@@ -876,7 +902,7 @@ for (const event of ['pointerdown', 'keydown']) document.addEventListener(event,
   passive: true
 });
 setInterval(() => {
-  if (state.unlocked && Date.now() - lastActivity > lockMinutes() * 60000) lock()
+  if ((state.unlocked || state.identityUnlocked) && Date.now() - lastActivity > lockMinutes() * 60000) lock()
 }, 1000);
 window.addEventListener('pagehide', () => {
   if (state.unlocked) lock();
@@ -937,5 +963,144 @@ function cliApprovalScreen() {
     await api('/v1/auth/device/approve', {method:'POST',body:{user_code:data.get('user_code'),password:data.get('password'),approve:data.get('decision')==='approve'}});
     el.reset();
     $('.auth-form').innerHTML = `${brand()}<h1>Request answered</h1><p>Return to your terminal. You can close this page.</p><a href="/">Back to Petika</a>`;
+  });
+}
+
+function identityStorageKey() { return `petika-identity:${state.user.id}`; }
+async function identityDialog(unlockGroup = false) {
+  if (state.demo) throw new Error('Recipient enrollment requires a managed account.');
+  const cached = localStorage.getItem(identityStorageKey());
+  dialog('Recipient identity', `<form id="identity-form"><p>Your identity unlocks groups after an editor verifies your fingerprint and delivers access.</p><div class="field"><label for="identity-operation">Action</label><select id="identity-operation" name="operation">${cached?'<option value="unlock">Unlock saved identity</option><option value="retry">Retry saved enrollment</option>':'<option value="restore">Restore enrolled identity</option><option value="enroll">Enroll for the first time</option>'}</select></div>${field('Identity passphrase (local only)','identity-unlock','password','','required minlength="12" autocomplete="off"')}${cached?field('Account password for enrollment retry','account','password','','autocomplete="current-password"'):''}${!cached?field('Confirm passphrase for first enrollment','identity-confirm','password','','autocomplete="off"')+field('Account password for first enrollment','account','password','','autocomplete="current-password"')+field('Trusted fingerprint for restore','fingerprint','text','','maxlength="64"'):''}<p class="small">For restore, obtain the full fingerprint from your existing device or recovery backup. Keep a backup of your encrypted identity and its passphrase.</p><div class="form-error" role="alert"></div><div class="dialog-footer"><button class="btn primary" type="submit">Continue</button></div></form>`);
+  form('#identity-form', async (data, el) => {
+    const deployment = await api('/v1/keys/deployment');
+    const operation = data.get('operation'), pass = data.get('identity-unlock');
+    let backup, publicIdentity;
+    if (operation === 'enroll') {
+      if (pass !== data.get('identity-confirm')) throw new Error('Passphrases do not match.');
+      publicIdentity = await rpc('identity-generate', deployment.deployment_id, state.user.id);
+      backup = await rpc('identity-seal', pass);
+      localStorage.setItem(identityStorageKey(), JSON.stringify(backup));
+      const enrolled = await api('/v1/keys/identity', {method:'POST', body:{expected_bundle_revision:0,current_password:data.get('account'),public_identity:backup.public_identity,encrypted_bundle:backup.encrypted_bundle}});
+      localStorage.setItem(`${identityStorageKey()}:revision`, String(enrolled.bundle_revision));
+    } else {
+      if (operation === 'retry') {
+        const saved = JSON.parse(cached);
+        await rpc('identity-open', cached, pass, saved.public_identity.fingerprint);
+        if (saved.public_identity.user_id !== state.user.id || saved.public_identity.deployment_id !== deployment.deployment_id) throw new Error('Saved enrollment belongs to another account.');
+        try { await api('/v1/keys/identity', {method:'POST',body:{expected_bundle_revision:0,current_password:data.get('account'),public_identity:saved.public_identity,encrypted_bundle:saved.encrypted_bundle}}); }
+        catch (error) {
+          const existing = await api('/v1/keys/identity');
+          if (existing.public_identity.fingerprint !== saved.public_identity.fingerprint || existing.encrypted_bundle.ciphertext !== saved.encrypted_bundle.ciphertext) throw error;
+        }
+      }
+      const own = await api('/v1/keys/identity');
+      backup = cached ? JSON.parse(cached) : {backup_version:own.encrypted_bundle.bundle_version,public_identity:own.public_identity,encrypted_bundle:own.encrypted_bundle};
+      if (!cached || operation === 'retry') localStorage.setItem(`${identityStorageKey()}:revision`, String(own.bundle_revision));
+      const fingerprint = cached ? backup.public_identity.fingerprint : data.get('fingerprint').trim();
+      publicIdentity = await rpc('identity-open', JSON.stringify(backup), pass, fingerprint);
+      if (publicIdentity.fingerprint !== own.public_identity.fingerprint) throw new Error('Server identity changed. Restore explicitly from a trusted backup.');
+      if (publicIdentity.deployment_id !== deployment.deployment_id || publicIdentity.user_id !== state.user.id) throw new Error('Identity belongs to another account or deployment.');
+      localStorage.setItem(identityStorageKey(), JSON.stringify(backup));
+    }
+    state.identityUnlocked = true; lastActivity = Date.now();
+    el.reset(); closeDialog();
+    if (unlockGroup) await unlockWithIdentity(pass);
+    else dialog('Identity unlocked', `<p>Compare this full fingerprint through an independent trusted channel:</p><p class="mono fingerprint">${esc(publicIdentity.fingerprint)}</p>${button('Download encrypted identity backup','identity-backup','download')}${state.collection.group?button('Group access','sharing','users'):''}`);
+  });
+}
+function observeGroupEpoch(epoch, commit = true) {
+  const key = `${identityStorageKey()}:epoch:${state.collection.id}`;
+  const previous = Number(localStorage.getItem(key) || 0);
+  if (epoch < previous) throw new Error('Collection key epoch rolled back. Refusing older access.');
+  if (commit) localStorage.setItem(key, String(epoch));
+}
+async function unlockWithIdentity(passphrase) {
+  if (!state.identityUnlocked) return identityDialog(true);
+  const prefix = `/v1/collections/${state.collection.id}`;
+  const access = await keyAccess(prefix);
+  if (!access.recipient_enabled) throw new Error('An editor must first migrate this group using its recovery passphrase.');
+  const page = await api(`${prefix}/key-packages`);
+  if (!page.packages.length) throw new Error('Access is pending. An unlocked editor must verify your fingerprint and deliver your package.');
+  const packageRecord = page.packages[0];
+  const issuer = await api(`/v1/keys/users/${packageRecord.issuer_user_id}`);
+  const snapshot = JSON.parse(state.snapshot);
+  observeGroupEpoch(access.key_epoch, false);
+  try {
+  await rpc('key-unlock', packageRecord, issuer, state.snapshot, {deployment_id:packageRecord.deployment_id,collection_id:state.collection.id,key_epoch:access.key_epoch}, snapshot.encryption === 'hybrid-post-quantum');
+  } finally {
+    const backup = await rpc('identity-seal', passphrase);
+    localStorage.setItem(identityStorageKey(), JSON.stringify(backup));
+  }
+  observeGroupEpoch(access.key_epoch);
+  state.unlocked = true; state.mode = await rpc('mode'); lastActivity = Date.now();
+  await refreshRows(); shell();
+}
+async function keyAccess(prefix) {
+  const state = await api(`${prefix}/key-access`);
+  for (let pages = 0; state.next_cursor && pages < 100; pages++) {
+    const page = await api(`${prefix}/key-access?cursor=${encodeURIComponent(state.next_cursor)}`);
+    if (page.snapshot_revision !== state.snapshot_revision || page.membership_generation !== state.membership_generation) throw new Error('Group changed while reading members.');
+    state.deliveries.push(...page.deliveries); state.next_cursor = page.next_cursor;
+  }
+  if (state.next_cursor) throw new Error('Group roster limit exceeded.');
+  return state;
+}
+async function sharingDialog() {
+  if (!state.collection.group) throw new Error('Select a group collection.');
+  const prefix = `/v1/collections/${state.collection.id}`;
+  const access = await keyAccess(prefix);
+  dialog('Group access', `${localStorage.getItem(`${draftKey()}:access`)?button('Retry saved access update','sharing-retry','refresh'):''}<p>${access.recipient_enabled?'Recipient access enabled.':'An unlocked editor can migrate this group.'} ${access.rotation_required?'Key rotation is required before further writes.':''}</p><ul>${access.deliveries.map(d=>`<li><span class="mono fingerprint">${esc(d.user_id)}</span>: ${esc(d.state)}</li>`).join('')}</ul><form id="sharing-form"><div class="field"><label for="sharing-operation">Action</label><select name="operation" id="sharing-operation"><option value="verify">Verify a contact fingerprint</option>${state.collection.edit?'<option value="deliver">Deliver to verified members</option><option value="migrate">Enable recipient access</option><option value="rotate">Rotate group keys</option>':''}</select></div>${field('Contact user ID (verification)','user','text','','maxlength="64"')}${field('Independently confirmed fingerprint (verification)','fingerprint','text','','maxlength="64"')}${field('Identity passphrase (save trust changes)','identitypass','password','','required autocomplete="off"')}${field('New recovery passphrase (migration or rotation)','recovery','password','','autocomplete="new-password"')}${field('Confirm recovery passphrase','confirm','password','','autocomplete="new-password"')}<p class="small">Verify fingerprints through a separate trusted channel. Unenrolled or unverified members remain pending. Rotation excludes removed members from new ciphertext, but cannot erase old copies.</p><div class="form-error" role="alert"></div><div class="dialog-footer"><button class="btn primary" type="submit">Apply</button></div></form>`);
+  form('#sharing-form', async (data, el) => {
+    if (!state.identityUnlocked) throw new Error('Unlock your recipient identity in Settings first.');
+    const own = await api('/v1/keys/identity');
+    const cached = JSON.parse(localStorage.getItem(identityStorageKey()));
+    // Validate the passphrase before changing trust or collection state.
+    await rpc('identity-open', JSON.stringify(cached), data.get('identitypass'), cached.public_identity.fingerprint);
+    const operation = data.get('operation');
+    await rpc('access-abort');
+    if (operation === 'verify') {
+      if (Number(localStorage.getItem(`${identityStorageKey()}:revision`)) !== own.bundle_revision) throw new Error('Trust bundle changed on another device. Your local copy is preserved; restore the remote bundle in a separate browser profile before reconciling.');
+      const user = data.get('user').trim();
+      if (!/^[a-f0-9]{64}$/.test(user)) throw new Error('Enter the full contact user ID.');
+      const publicIdentity = await api(`/v1/keys/users/${user}`);
+      await rpc('identity-verify', publicIdentity, data.get('fingerprint').trim());
+      const backup = await rpc('identity-seal', data.get('identitypass'));
+      localStorage.setItem(identityStorageKey(), JSON.stringify(backup));
+      const updated = await api('/v1/keys/identity/bundle', {method:'PUT',body:{expected_bundle_revision:own.bundle_revision,encrypted_bundle:backup.encrypted_bundle}});
+      localStorage.setItem(`${identityStorageKey()}:revision`, String(updated.bundle_revision));
+    } else {
+      if (!state.unlocked || state.dirty) throw new Error('Unlock and sync the collection before changing access.');
+      if (operation === 'migrate' || operation === 'rotate') {
+        if (data.get('recovery') !== data.get('confirm') || data.get('recovery').length < 12) throw new Error('Choose and confirm a recovery passphrase of at least 12 characters.');
+        if (operation === 'migrate') await rpc('bind-collection', own.public_identity.deployment_id, state.collection.id, data.get('recovery'));
+        else await rpc('rotate', data.get('recovery'));
+      }
+      const packages = [], pendingMembers = [];
+      for (const delivery of access.deliveries) {
+        if (!delivery.identity_version) { pendingMembers.push(delivery.user_id); continue; }
+        if (operation === 'deliver' && delivery.state === 'package-available') continue;
+        const recipient = await api(`/v1/keys/users/${delivery.user_id}`);
+        try { packages.push(await rpc('key-package', recipient, access.membership_generation)); }
+        catch { pendingMembers.push(delivery.user_id); }
+      }
+      const backup = await rpc('identity-seal', data.get('identitypass'));
+      localStorage.setItem(identityStorageKey(), JSON.stringify(backup));
+      if (!packages.length) throw new Error('No verified members ready for delivery.');
+      packages.sort((a,b) => Number(b.recipient_user_id === state.user.id) - Number(a.recipient_user_id === state.user.id));
+      pendingMembers.push(...packages.slice(100).map(p => p.recipient_user_id)); packages.splice(100);
+      const body = {expected_snapshot_revision:access.snapshot_revision,expected_key_epoch:access.key_epoch,expected_membership_generation:access.membership_generation,packages};
+      if (operation !== 'deliver') body.encrypted_snapshot = await rpc('access-seal');
+      const action = {deliver:'key-packages',migrate:'recipient-migration',rotate:'key-rotation'}[operation];
+      localStorage.setItem(`${draftKey()}:access`, JSON.stringify({action,body}));
+      const result = await api(`${prefix}/${action}`, {method:'POST',body});
+      observeGroupEpoch(result.key_epoch);
+      await rpc('access-commit');
+      state.revision = result.snapshot_revision;
+      if (body.encrypted_snapshot) state.snapshot = body.encrypted_snapshot;
+      localStorage.setItem(draftKey(), JSON.stringify({encrypted:state.snapshot,revision:state.revision,dirty:false}));
+      localStorage.removeItem(`${draftKey()}:access`);
+      toast(`${pendingMembers.length} members pending enrollment or verification.`);
+    }
+    el.reset(); closeDialog(); shell();
   });
 }

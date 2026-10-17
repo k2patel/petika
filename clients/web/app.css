@@ -25,3 +25,5 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(
 :root[data-theme=dark]{--control-line:#718f9c}
 @media(prefers-color-scheme:dark){:root:not([data-theme=light]){--control-line:#718f9c}}
 .field input,.field textarea,.field select,.search input,select.control,.group-member select{border-color:var(--control-line)}
+
+.fingerprint { overflow-wrap: anywhere; }

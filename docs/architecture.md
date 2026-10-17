@@ -28,21 +28,18 @@ Accepted snapshots are journaled and mirrored to separate local Git repositories
 is a one-way recovery mirror, not a writable synchronization peer. Remote Git replication
 is an operator task. Accounts and memberships are server metadata outside the mirror.
 
-Group members currently share a collection passphrase out of band. Automatic per-user
-group-key delivery is the [next milestone](roadmap.md). Server administrators can manage
-membership but do not automatically receive collection decryption keys. The core now
-implements local recipient identity generation, encrypted storage, and pinned recovery;
-verified contact storage and key-change checks are also implemented locally. Authenticated enrollment, replacement, directory, and encrypted-bundle synchronization
-APIs are implemented. Client trust UI and package delivery remain pending.
+Legacy groups use a collection passphrase out of band. Explicitly migrated groups use
+verified per-user encrypted packages; enrollment, trust verification, delivery, and fresh-key
+rotation are implemented in CLI/web. Administrators can manage membership but do not
+automatically receive decryption keys. See [group access](group-access.md).
 
 ## Remaining design gates
 
-The [group-key delivery proposal](decisions/0002-per-user-group-key-delivery.md) defines
-recipient enrollment, identity verification, packages, recovery, and migration boundaries.
-Validate protocol encodings and dependencies before implementation integration; fresh-key
-rotation still needs its own implementation decision. Keep account
-login separate from decryption authorization. Preserve standard and experimental hybrid
-mode semantics without silently downgrading protection.
+The [group-key delivery design](decisions/0002-per-user-group-key-delivery.md) and
+[wire format](key-package-format.md) define enrollment, packages, recovery, migration,
+and explicit rotation. Keep account login separate from decryption authorization and
+preserve Standard/Hybrid mode semantics. Independent cryptographic review and exhaustive
+crash/concurrency hardening remain necessary before a production-readiness claim.
 
 Planned extensions use native messaging; mobile clients need platform autofill and
 biometric bindings. Platform packaging must preserve the no-npm requirement.

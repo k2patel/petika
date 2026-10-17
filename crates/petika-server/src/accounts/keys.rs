@@ -171,7 +171,7 @@ fn validate_identity(
 }
 
 impl Accounts {
-    fn key_context(&mut self, token: &str) -> Result<(StoreFile, Database, User)> {
+    pub(super) fn key_context(&mut self, token: &str) -> Result<(StoreFile, Database, User)> {
         let session = self
             .sessions
             .get(token)

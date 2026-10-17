@@ -1,8 +1,8 @@
 # Local recipient identity format
 
-Implemented in `petika-core::identity`. This is the client-core foundation for group-key
-delivery, not an enrollment API or a user-facing CLI/web enrollment workflow. Existing
-collections, accounts, and synchronization are unchanged. Local verified contact pins
+Implemented in `petika-core::identity`. This format underpins the implemented
+[CLI/browser recipient workflows](group-access.md). Existing legacy collections remain
+unchanged until explicit migration. Local verified contact pins
 are now implemented in encrypted bundle v2. The format is experimental.
 
 ## API and lifecycle
@@ -60,8 +60,7 @@ can establish trust.
   of the local pin shown at the start of verification, or `None` for a new contact.
   A mismatched current pin produces `ContactConflict` and preserves the existing pin.
 - `require_verified_contact(user_id, record)` rejects every status except `Verified`.
-  Future package code must use this gate. It does not confer server membership or
-  implement package encryption/delivery.
+  Package creation and opening use this gate. It does not confer server membership.
 - `contact_pin(user_id)` exposes read-only pin metadata for verification and display.
 
 An observed valid changed or older record suspends the current pin and advances its local
@@ -118,7 +117,7 @@ A deliberately restored older backup can lose newer trust decisions; offline res
 no trusted global version oracle. Keep the latest encrypted identity backup and fingerprint
 separately from its passphrase. Account-password resets cannot recover identity keys.
 Server enrollment, replacement, directory lookup, and bundle synchronization remain
-proposed in the [API contract](api/group-key-delivery.md).
+described in the [API contract](api/group-key-delivery.md).
 
 ## Verification and provenance
 
@@ -142,5 +141,5 @@ and big-endian `struct` encoding. The X-Wing vector is reused under its MIT lice
 preserve the upstream notice in `tests/fixtures/X-WING-LICENSE-MIT`.
 
 Run `cargo test -p petika-core --locked`; the normal workspace CI includes these tests.
-A successful WASM compile establishes build compatibility, not a tested browser identity
-workflow or delivery protocol. See [test actions](testing/group-key-delivery.md).
+Native/WASM workflow tests additionally run both delivery modes. A compile alone is not
+a workflow test; see [test actions](testing/group-key-delivery.md).

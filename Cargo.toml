@@ -30,3 +30,6 @@ ed25519-dalek = { version = "2.2.0", features = ["zeroize"] }
 x25519-dalek = { version = "3.0.0", features = ["static_secrets", "zeroize"] }
 x-wing = { version = "0.1.1", features = ["getrandom", "zeroize"] }
 gix = { version = "0.89", default-features = false, features = ["sha1"] }
+hpke = { version = "=0.13.0", default-features = false, features = ["alloc", "x25519"] }
+rand_chacha = { version = "0.9", default-features = false }
+sha3 = "0.11"

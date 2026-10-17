@@ -104,13 +104,19 @@ jobs:
       - name: Install browser test tools
         run: |
           python3 -m venv /tmp/petika-browser-tests
-          /tmp/petika-browser-tests/bin/pip install playwright==1.60.0
+          /tmp/petika-browser-tests/bin/pip install playwright==1.60.0 -r scripts/requirements-contracts.txt
           /tmp/petika-browser-tests/bin/playwright install --with-deps chromium
       - name: Browser workflows and permissions
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
+      - name: Actual delivery request and response schemas
+        run: |
+          PETIKA_CONTRACT_CAPTURE=target/delivery-contracts.json cargo test -p petika-server --test delivery --locked
+          /tmp/petika-browser-tests/bin/python scripts/check_api_contracts.py --runtime target/delivery-contracts.json
+      - name: CLI and browser group delivery in both encryption modes
+        run: /tmp/petika-browser-tests/bin/python scripts/test_group_delivery.py
       - name: Screenshots
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: petika-web-ui
-          path: output/web-ui
+          path: output/

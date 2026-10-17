@@ -120,20 +120,18 @@ The server stores encrypted collections but receives account passwords for authe
 and retains account/group metadata. Collection passphrases stay on the client.
 The browser must trust the application code delivered by your server.
 
-Group sharing currently uses a collection passphrase distributed through a separate
-trusted channel. Removing membership blocks API access but cannot retract downloaded
-ciphertext, known keys, or copied secrets. Automatic per-user key delivery and key
-rotation remain unfinished.
+Legacy groups use a separately shared passphrase. Explicitly migrated groups use verified
+per-user encrypted packages. Removing membership blocks API access; fresh-key rotation
+excludes removed recipients from new ciphertext, but cannot retract old ciphertext,
+known keys, or copied secrets. Independent security review remains unfinished.
 
 The Git mirror hides entry names and folder structure, but exposes ciphertext sizes,
 revision history, and timing. Remote Git pushes remain an operator task. Keep independent
 backups of server data, mirrors, configuration, and client recovery material.
 
-**Next milestone: [automatic per-user group-key delivery](docs/roadmap.md#next-milestone-automatic-per-user-group-key-delivery).**
-Membership-change key rotation follows it. The [roadmap](docs/roadmap.md) tracks the
-complete implementation checklist. The shared core now generates and encrypts recipient
-identities with fingerprint-checked recovery and encrypted contact pins that suspend changed
-keys. Enrollment, directory, replacement, and encrypted-bundle revision APIs are implemented. Verified-contact UI and CLI/web delivery flows remain pending. See the [local identity format](docs/identity-format.md).
+**Per-user group access and explicit key rotation are implemented experimentally.**
+See the [group-access guide](docs/group-access.md), [identity format](docs/identity-format.md),
+and [roadmap](docs/roadmap.md) for workflows, limits, and remaining hardening.
 
 Still planned:
 
@@ -141,7 +139,7 @@ Still planned:
 - Mobile apps and configurable biometric unlock.
 - Full GPG key creation, export, expiry, and revocation management in the UI.
 - Optional OpenID Connect, account MFA/passkeys, recovery, and audit trails.
-- Automatic sharing-key delivery/rotation and OS-backed CLI credential storage.
+- OS-backed CLI credential storage and identity replacement UI.
 - Independent security review and broader deployment/recovery validation.
 
 Website TOTP generates codes for saved external logins; it is not MFA for Petika login.
@@ -185,3 +183,11 @@ Petika's original code is licensed under [MIT](LICENSE), copyright 2026 K2patel.
 Third-party dependencies retain their own licenses; the container includes generated
 third-party notices. Petika does not contain or translate the GPL implementation of
 `pass`. GPG import invokes separately installed GnuPG, which retains its own license.
+
+### Per-user group access
+
+Enrolled members can unlock migrated groups with their own verified recipient identity.
+Editors deliver encrypted access packages and explicitly rotate keys after membership
+removal. Standard and experimental X-Wing draft-06 modes are supported. See the
+[group-access guide](docs/group-access.md) for CLI/browser setup, verification, migration,
+rotation, and recovery.

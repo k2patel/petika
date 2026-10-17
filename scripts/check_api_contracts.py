@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate proposed API schemas and test mappings, not runtime conformance."""
+import argparse
 import json
 from pathlib import Path
 
@@ -27,6 +28,9 @@ def expand_refs(value, spec):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--runtime', type=Path, help='Captured actual requests/responses from the Rust delivery tests')
+    args = parser.parse_args()
     spec = read("docs/api/group-key-delivery.openapi.json")
     validate_spec(spec)
     operations = [operation for path in spec["paths"].values()
@@ -47,6 +51,8 @@ def main():
     fixtures = read("docs/testing/group-key-delivery-fixtures.json")
     if not fixtures or {fixture["valid"] for fixture in fixtures} != {True, False}:
         raise ValueError("Positive and negative schema fixtures required")
+    if args.runtime:
+        fixtures.extend(json.loads(args.runtime.read_text()))
     for fixture in fixtures:
         schema = expand_refs(spec["components"]["schemas"][fixture["schema"]], spec)
         errors = list(OAS30Validator(schema).iter_errors(fixture["value"]))
@@ -54,7 +60,7 @@ def main():
             detail = errors[0].message if errors else "invalid fixture was accepted"
             raise ValueError(f'{fixture["name"]}: {detail}')
     print(f"PASS: OpenAPI, {len(ids)} operation mappings, {len(fixtures)} schema fixtures")
-    print("Identity runtime tests run separately in Cargo; collection delivery tests remain planned.")
+    print("Behavioral authorization, crypto, and recovery tests run separately in Cargo and browser CI.")
 
 
 if __name__ == "__main__":

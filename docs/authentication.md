@@ -16,8 +16,8 @@ available, including on headless Linux. Canceling a prompt leaves the client loc
 The web client already provides configurable inactivity locking and reauthentication
 for CLI approval. Native unlock and security-setting reauthentication policies remain open. API hosting machines do not need biometric hardware.
 
-Current sharing is at collection level with read/edit membership. Automatic per-user
-group-key delivery is the [next milestone](roadmap.md). Individual selected-password
+Current sharing is at collection level with read/edit membership. Verified per-user
+[group access](group-access.md) and explicit fresh-key rotation are implemented. Individual selected-password
 sharing still requires a design for recipient accounts and cryptographic access grants.
 Decide whether recipients can edit, whether changes remain linked, invitation expiry,
 and how grants rotate when a recipient is removed. Do not assume a link alone safely

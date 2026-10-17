@@ -275,6 +275,18 @@ fn run() -> Result<()> {
                 web::json(request, 404, serde_json::json!({"error":"Not found"}), None);
                 continue;
             };
+            let action = action.split('?').next().unwrap_or(action);
+            if matches!(
+                action,
+                "key-access"
+                    | "key-packages"
+                    | "recipient-migration"
+                    | "key-rotation"
+                    | "recipient-snapshot"
+            ) {
+                web::delivery_route(request, &mut accounts, id, action);
+                continue;
+            }
             let write = request.method() != &Method::Get;
             let user = accounts
                 .authenticate(&web::session(&request))

@@ -1,11 +1,11 @@
 # 0002: Per-user group-key delivery
 
 Date: 2026-10-15.
-Status: implementation proposal for the next milestone; local recipient identity
-generation/storage is implemented in the shared core (see [format](../identity-format.md)).
-Local encrypted contact pins and key-change checks are also implemented. Enrollment
-APIs, CLI/web trust-pin workflows, and group-key delivery are not implemented. This
-is not an audited protocol or stable wire-format commitment.
+Status: implemented experimental design as of 2026-10-17. Identity enrollment,
+verified recipient delivery, explicit migration, and fresh-key rotation are exposed in
+CLI/web. See [current workflow](../group-access.md) and [frozen package encoding](../key-package-format.md).
+This design is not an independent security audit. Historical "existing implementation"
+constraints below describe the baseline that motivated the migration.
 
 ## Outcome and scope
 
@@ -15,7 +15,7 @@ exchange group passphrases. An authorized, unlocked editor creates packages; the
 stores and relays ciphertext and enforces current membership.
 
 This decision covers enrollment, identity verification, delivery, recovery, and mode
-compatibility. Automatic removal rotation is the following milestone. Delivery alone
+compatibility. Explicit removal rotation is implemented; an unlocked editor must initiate it. Delivery alone
 must not be presented as cryptographic revocation.
 
 ## Existing implementation constraints
@@ -265,8 +265,7 @@ testing the same implementation. Logs and error messages must contain no secret 
 Before adopting dependencies, check Rust 1.90/WASM compatibility, permissive licenses,
 and upstream vectors. Freeze exact encoding and algorithm adapters with those tests.
 Automatic fresh-key rotation, PQ signatures, transparency/consensus over membership,
-and per-device identities require separate decisions. This document completes the design
-checklist item; the remaining implementation items stay unchecked.
+and per-device identities require separate decisions. The [roadmap](../roadmap.md) records current implementation and verification status.
 
 ## Sources
 

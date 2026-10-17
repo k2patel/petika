@@ -15,6 +15,26 @@ pub struct Snapshot {
     pub schema_version: u32,
     pub revision: u64,
     pub encrypted: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub delivery: Option<DeliveryState>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryState {
+    pub packages: Vec<petika_core::identity::KeyPackage>,
+    pub rotation_generation: u64,
+    pub transactions: Vec<DeliveryReceipt>,
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DeliveryReceipt {
+    pub digest: String,
+    pub revision: u64,
+    pub key_epoch: u64,
+    pub membership_generation: u64,
+    pub package_ids: Vec<String>,
 }
 
 fn snapshot_version() -> u32 {
@@ -24,7 +44,7 @@ fn read_snapshot_version<'de, D: serde::Deserializer<'de>>(
     d: D,
 ) -> std::result::Result<u32, D::Error> {
     let version = u32::deserialize(d)?;
-    if version == 1 {
+    if matches!(version, 1 | 2) {
         Ok(version)
     } else {
         Err(serde::de::Error::custom("unsupported snapshot schema"))
@@ -59,9 +79,25 @@ impl Repository {
     }
     pub fn update(&self, expected: u64, encrypted: String) -> Result<Update> {
         validate_envelope(encrypted.as_bytes())?;
+        if petika_core::envelope_metadata(encrypted.as_bytes())?
+            .1
+            .is_some()
+        {
+            return Err(
+                "Recipient-enabled updates require the managed collection transaction".into(),
+            );
+        }
         let file = StoreFile::lock(&self.path)?;
         let current = if file.exists() {
-            serde_json::from_slice::<Snapshot>(&file.read()?)?.revision
+            let saved = serde_json::from_slice::<Snapshot>(&file.read()?)?;
+            if saved.delivery.is_some()
+                || petika_core::envelope_metadata(saved.encrypted.as_bytes())?
+                    .1
+                    .is_some()
+            {
+                return Err("Recipient-enabled collections cannot be downgraded".into());
+            }
+            saved.revision
         } else {
             0
         };
@@ -73,6 +109,7 @@ impl Repository {
             schema_version: 1,
             revision,
             encrypted,
+            delivery: None,
         })?;
         // Journal first. A failed current-pointer write leaves an unacknowledged revision,
         // which the next attempt may replace. Mirror only through the current pointer.
@@ -132,7 +169,11 @@ pub fn mirror_once(repository: &Repository, directory: &Path) -> Result<Option<u
         if saved.revision != revision {
             return Err("invalid journal revision".into());
         }
-        let blob = git.write_blob(&bytes)?;
+        // Recovery mirrors contain snapshots only, never directories or recipient grants.
+        let mirror_bytes = serde_json::to_vec(
+            &serde_json::json!({"schema_version": 1, "revision": saved.revision, "encrypted": saved.encrypted}),
+        )?;
+        let blob = git.write_blob(&mirror_bytes)?;
         let mut tree = git.empty_tree().edit()?;
         tree.upsert("snapshot.json", gix::object::tree::EntryKind::Blob, blob)?;
         let tree = tree.write()?;
