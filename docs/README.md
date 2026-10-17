@@ -16,6 +16,7 @@ and limitations.
 - [Local recipient identity format](identity-format.md)
 - [Development and verification](development.md)
 - [Container and source deployment](deployment.md)
+- [Reverse proxy and optional HTTPS](reverse-proxy.md)
 - [Brand identity](branding.md)
 - [Self-hosting](self-hosting.md)
 - [GPG store import](import.md)

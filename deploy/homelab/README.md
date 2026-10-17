@@ -1,5 +1,8 @@
 # Homelab deployment
 
+See the [reverse-proxy guide](../../docs/reverse-proxy.md) for Nginx/Caddy,
+external TLS termination, and HTTP/HTTPS settings.
+
 The private Gitea source mirror at `https://git.k2patel.in/k2patel/petika`
 pulls GitHub every ten minutes. `.gitea/workflows/image.yml` builds AMD64 images
 in the existing Gitea runners using the account-level `CONTAINER_TOKEN` secret.

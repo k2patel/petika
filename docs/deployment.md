@@ -65,6 +65,9 @@ The image includes both Rust binaries. Use `--entrypoint /usr/local/bin/petika` 
 the CLI. Run GPG imports with the native CLI on a host with GnuPG installed.
 Keep the client store and GPG keys separate from server volumes.
 
+For Nginx/Caddy and external TLS termination, see the
+[reverse-proxy guide](reverse-proxy.md).
+
 ## Kubernetes
 
 The supplied manifests use a single replica, Recreate updates, two persistent volumes,
