@@ -110,8 +110,8 @@ jobs:
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
       - name: Actual delivery request and response schemas
         run: |
-          PETIKA_CONTRACT_CAPTURE=target/delivery-contracts.json cargo test -p petika-server --test delivery --locked
-          /tmp/petika-browser-tests/bin/python scripts/check_api_contracts.py --runtime target/delivery-contracts.json
+          PETIKA_CONTRACT_CAPTURE="$RUNNER_TEMP/delivery-contracts.json" cargo test -p petika-server --test delivery --locked
+          /tmp/petika-browser-tests/bin/python scripts/check_api_contracts.py --runtime "$RUNNER_TEMP/delivery-contracts.json"
       - name: CLI and browser group delivery in both encryption modes
         run: /tmp/petika-browser-tests/bin/python scripts/test_group_delivery.py
       - name: Screenshots
