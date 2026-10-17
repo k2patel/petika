@@ -127,11 +127,13 @@ function toast(message) {
 function errorText(error) {
   return error?.message || String(error)
 }
+let apiEndpoint = location.origin;
+const apiUrl = path => new URL(path, apiEndpoint).href;
 async function api(path, {
   method = 'GET',
   body
 } = {}) {
-  const response = await fetch(path, {
+  const response = await fetch(apiUrl(path), {
     method,
     credentials: 'same-origin',
     cache: 'no-store',
@@ -249,7 +251,7 @@ async function loadCollection() {
   state.revision = 0;
   const draft = getDraft();
   try {
-  const response = await fetch(`/v1/collections/${state.collection.id}/snapshot`, {
+  const response = await fetch(apiUrl(`/v1/collections/${state.collection.id}/snapshot`), {
       credentials: 'same-origin',
       cache: 'no-store'
     });
@@ -483,7 +485,7 @@ async function sync() {
     localStorage.setItem(draftKey(), JSON.stringify({encrypted:state.snapshot, revision:state.revision, dirty:false}));
     return;
   }
-  const response = await fetch(`/v1/collections/${state.collection.id}/snapshot`, {
+  const response = await fetch(apiUrl(`/v1/collections/${state.collection.id}/snapshot`), {
     method: 'PUT',
     credentials: 'same-origin',
     headers: {
@@ -941,6 +943,16 @@ window.addEventListener('beforeunload', event => {
 });
 (async () => {
   try {
+    const configResponse = await fetch('/config.json', {cache: 'no-store', credentials: 'omit'});
+    if (!configResponse.ok) throw new Error('Unable to load deployment endpoint configuration.');
+    const config = await configResponse.json();
+    const endpoint = new URL(config.endpoint || location.origin);
+    if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) throw new Error('Invalid deployment endpoint.');
+    apiEndpoint = endpoint.origin;
+    if (apiEndpoint !== location.origin) {
+      location.replace(new URL(location.pathname + location.search + location.hash, apiEndpoint).href);
+      return;
+    }
     if (!isSecureContext) throw new Error('Petika requires HTTPS or localhost for browser encryption.');
     const status = await api('/v1/auth/status');
     if (status.user) {

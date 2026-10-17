@@ -47,6 +47,36 @@ and `tls.key`. The initial local certificate is for IP `10.10.12.115`; use a
 matching certificate when changing the address. External termination with `off`
 does not mount or require that Secret.
 
+## Public domain or endpoint address
+
+Set `PETIKA_ENDPOINT=https://petika.example.com` for the browser-facing domain,
+or `PETIKA_ENDPOINT=http://10.10.12.115` for direct IP testing. Include the scheme
+and optional port, but no credentials, subpath, query, or fragment. Leave it empty
+to use whichever origin served the page. This does not change `PETIKA_LISTEN`,
+create DNS records, allocate an IP, or configure a TLS certificate.
+
+The server reads this at startup and exposes only this public value at
+`/config.json` with caching disabled. If a browser opens a different origin,
+it moves to the configured origin before making authenticated API calls. The
+frontend and API then share that origin, keeping cookies and identity state
+consistent; this is not a separate cross-origin API/CORS setting.
+
+```sh
+# Create the repository variable once; use PUT to update an existing variable.
+tea api -X PUT repos/k2patel/petika/actions/variables/PETIKA_ENDPOINT \
+  -f value=https://petika.example.com
+PETIKA_ENDPOINT=https://petika.example.com HTTPS=off PETIKA_COOKIE_SECURE=true \
+  python3 scripts/deploy_homelab.py \
+  --image git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA --apply
+```
+
+The deployment script reads `PETIKA_ENDPOINT` from Gitea unless overridden in
+the environment. Changing the endpoint needs a rollout, not an image rebuild.
+The hostname must resolve to the proxy that serves Petika; pointing it back to
+an address which redirects elsewhere can cause a redirect loop. To test using
+localhost while a canonical address is configured, temporarily deploy with
+`PETIKA_ENDPOINT=''`, then restore the public setting afterward.
+
 ## Nginx
 
 Place this configuration inside the proxy's `http` context. Replace the hostname

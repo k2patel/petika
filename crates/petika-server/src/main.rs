@@ -165,6 +165,7 @@ fn run() -> Result<()> {
     if !(32..=256).contains(&token.len()) || !token.bytes().all(|b| b.is_ascii_alphanumeric()) {
         return Err("token must contain 32–256 ASCII letters/digits; generate it randomly".into());
     }
+    let endpoint = web::public_endpoint(&env::var("PETIKA_ENDPOINT").unwrap_or_default())?;
     let listen = env::var("PETIKA_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let data =
         PathBuf::from(env::var_os("PETIKA_DATA_DIR").unwrap_or_else(|| "./petika-data".into()));
@@ -261,7 +262,7 @@ fn run() -> Result<()> {
     for request in server.incoming_requests() {
         let path = request.url().to_owned();
         if !path.starts_with("/v1/") && path != "/healthz" && path != "/readyz" {
-            web::static_file(request, &web_root);
+            web::static_file(request, &web_root, &endpoint);
         } else if path.starts_with("/v1/keys/") {
             web::key_route(request, &mut accounts);
         } else if path.starts_with("/v1/auth/")

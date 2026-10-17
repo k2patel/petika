@@ -1897,6 +1897,7 @@ dependencies = [
  "subtle",
  "tempfile",
  "tiny_http",
+ "url",
  "zeroize",
 ]
 

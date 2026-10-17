@@ -20,7 +20,7 @@ def setting(name, default):
     return value.get('value', value.get('data', default))
 
 
-def configure(document, image, https, cookie_secure):
+def configure(document, image, https, cookie_secure, endpoint=""):
     if https not in ('off', 'on', 'both'):
         raise ValueError('HTTPS must be off, on, or both')
     if cookie_secure not in ('true', 'false'):
@@ -39,6 +39,7 @@ def configure(document, image, https, cookie_secure):
                 if container['name'] == 'petika':
                     container['image'] = image
                     container['env'].append({'name': 'PETIKA_COOKIE_SECURE', 'value': cookie_secure})
+                    container['env'].append({'name': 'PETIKA_ENDPOINT', 'value': endpoint})
             if https == 'off':
                 spec['containers'] = [c for c in spec['containers'] if c['name'] != 'tls']
                 spec['volumes'] = [v for v in spec['volumes'] if v['name'] not in ('tls', 'proxy', 'proxy-tmp')]
@@ -52,6 +53,7 @@ def main():
     args = parser.parse_args()
     https = setting('HTTPS', 'off').lower()
     secure = setting('PETIKA_COOKIE_SECURE', 'true').lower()
+    endpoint = setting('PETIKA_ENDPOINT', '')
     stream = run('kubectl', 'create', '--dry-run=client', '-k', 'deploy/homelab', '-o', 'json').strip()
     items = []
     while stream:
@@ -59,7 +61,7 @@ def main():
         items.append(item)
         stream = stream[end:].strip()
     document = {'apiVersion': 'v1', 'kind': 'List', 'items': items}
-    rendered = json.dumps(configure(document, args.image, https, secure), indent=2)
+    rendered = json.dumps(configure(document, args.image, https, secure, endpoint), indent=2)
     if args.apply:
         subprocess.run(['kubectl', 'apply', '-f', '-'], input=rendered, text=True, check=True)
         subprocess.run(['kubectl', '-n', 'petika', 'rollout', 'status', 'deployment/petika', '--timeout=300s'], check=True)

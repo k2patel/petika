@@ -23,7 +23,9 @@ exposes both. Petika itself always receives HTTP; TLS may terminate at any upstr
 proxy. `PETIKA_COOKIE_SECURE=true` is independent and should be used whenever the
 browser connects over HTTPS, including external TLS termination. For direct HTTP
 testing only, set it to `false`. Initial Gitea values are `HTTPS=off` and
-`PETIKA_COOKIE_SECURE=false`. No kubeconfig is stored in Gitea.
+`PETIKA_COOKIE_SECURE=false`. `PETIKA_ENDPOINT` sets the public browser origin
+(initially `http://10.10.12.115`); an empty value uses the current origin.
+No kubeconfig is stored in Gitea.
 
 Required namespace secrets: `petika-auth` (`token`, `admin-password`),
 `petika-backup-auth` (`token`), `petika-tls` (`tls.crt`, `tls.key`), and

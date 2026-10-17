@@ -63,7 +63,11 @@ pending until an editor can issue grants. Larger rosters use batches of 100.
 - [x] WASM release compilation and workspace compilation/Clippy during development.
 - [x] Final local verification: 57 Rust tests; 12 operation mappings and 47 static/runtime
   schema fixtures; dependency licenses accepted for 287 packages; documentation links and whitespace.
-- [ ] Remote CI for the new implementation.
+- [x] Remote CI for group delivery/rotation: all six jobs passed at `7b3d634`
+  ([run](https://github.com/k2patel/petika/actions/runs/39073875417)).
+- [x] Homelab LoadBalancer deployment, Gitea source mirror and image build,
+  and ciphertext-only private Git replication; synthetic round-trip verified.
+- [x] Reverse-proxy guide and configurable HTTP/HTTPS listeners.
 
 Further hardening remains: exhaustive power-loss fault injection, independent cryptographic
 review, multi-device trust-conflict merging UX, and identity replacement UI. The identity

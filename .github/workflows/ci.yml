@@ -110,6 +110,8 @@ jobs:
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
       - name: HTTP demo without secure-context-only APIs
         run: /tmp/petika-browser-tests/bin/python scripts/test_http_demo.py
+      - name: Configured public endpoint and login cookies
+        run: /tmp/petika-browser-tests/bin/python scripts/test_endpoint.py
       - name: Actual delivery request and response schemas
         run: |
           PETIKA_CONTRACT_CAPTURE="$RUNNER_TEMP/delivery-contracts.json" cargo test -p petika-server --test delivery --locked

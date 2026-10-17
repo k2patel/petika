@@ -12,6 +12,7 @@ change passwords, reset memberships, or re-import a snapshot.
 | `PETIKA_ADMIN_PASSWORD_FILE` | unset | Mounted secret containing that password; preferred |
 | `PETIKA_INITIAL_SNAPSHOT_FILE` | unset | Optional pre-encrypted Petika file for the initial personal collection |
 | `PETIKA_TOKEN_FILE` | required | Existing API/setup bearer token file; also authorizes the manual wizard |
+| `PETIKA_ENDPOINT` | unset | Canonical public HTTP(S) origin, e.g. `https://vault.example.com`; unset uses the current browser origin |
 | `PETIKA_COOKIE_SECURE` | `true` | Set `false` only for local HTTP testing |
 | `PETIKA_WEB_DIR` | `clients/web` | Built frontend asset directory |
 

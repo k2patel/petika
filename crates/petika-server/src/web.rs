@@ -242,7 +242,46 @@ pub fn account_route(
     }
 }
 
-pub fn static_file(request: Request, root: &Path) {
+/// Optional canonical browser origin; never derive it from untrusted request headers.
+pub fn public_endpoint(value: &str) -> Result<String> {
+    if value.is_empty() {
+        return Ok(String::new());
+    }
+    let url = url::Url::parse(value).map_err(|_| "PETIKA_ENDPOINT must be an HTTP(S) origin")?;
+    if value.trim() != value
+        || !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.path() != "/"
+        || url.query().is_some()
+        || url.fragment().is_some()
+        || value.chars().any(char::is_control)
+        || value.contains('\\')
+    {
+        return Err("PETIKA_ENDPOINT must be an HTTP(S) origin without credentials, path, query or fragment".into());
+    }
+    Ok(url.origin().ascii_serialization())
+}
+
+pub fn static_file(request: Request, root: &Path, endpoint: &str) {
+    if request.url().split('?').next() == Some("/config.json") {
+        return if request.method() == &Method::Get {
+            json(
+                request,
+                200,
+                serde_json::json!({"endpoint": endpoint}),
+                None,
+            )
+        } else {
+            json(
+                request,
+                405,
+                serde_json::json!({"error": "Method not allowed"}),
+                None,
+            )
+        };
+    }
     let (file, mime) = match request.url().split('?').next().unwrap_or("") {
         "/" => ("index.html", "text/html; charset=utf-8"),
         "/app.css" => ("app.css", "text/css"),
@@ -647,5 +686,36 @@ mod key_http_tests {
             .0,
             200
         );
+    }
+}
+
+#[cfg(test)]
+mod endpoint_tests {
+    use super::public_endpoint;
+
+    #[test]
+    fn canonical_endpoint_accepts_origins_only() {
+        for (input, expected) in [
+            ("", ""),
+            ("https://Vault.Example.com/", "https://vault.example.com"),
+            ("http://10.10.12.115", "http://10.10.12.115"),
+            ("http://localhost:8080/", "http://localhost:8080"),
+            ("https://[::1]:8443", "https://[::1]:8443"),
+        ] {
+            assert_eq!(public_endpoint(input).unwrap(), expected);
+        }
+        for invalid in [
+            "vault.example.com",
+            "ftp://example.com",
+            "https://user:pass@example.com",
+            "https://example.com/path",
+            "https://example.com?x=1",
+            "https://example.com#x",
+            " https://example.com",
+            "https://exam\nple.com",
+            "https://example.com\\path",
+        ] {
+            assert!(public_endpoint(invalid).is_err(), "{invalid}");
+        }
     }
 }
