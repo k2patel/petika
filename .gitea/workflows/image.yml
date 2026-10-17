@@ -2,6 +2,17 @@ name: Build Petika image
 on:
   push:
     branches: [main]
+    paths:
+      - Dockerfile
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/**
+      - clients/web/**
+      - scripts/build_web.sh
+      - scripts/check_licenses.py
+      - scripts/third_party_notices.py
+      - LICENSE
   workflow_dispatch:
 jobs:
   image:

@@ -7,16 +7,29 @@ Images use full commit SHA tags. Deployment is performed with local kubectl;
 the build runner receives no Kubernetes credentials. Dispatch the workflow after
 synchronizing the mirror when an immediate build is needed.
 
-Render `kubectl kustomize deploy/homelab`, replace `REPLACE_WITH_COMMIT` with the
-built commit SHA (or deploy its registry digest), then apply to the homelab context.
+Deploy a published image with local kubectl:
+
+```sh
+python3 scripts/deploy_homelab.py --image git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA --apply
+```
+
+Omit `--apply` to render for review. The script reads Gitea repository Actions
+variables, with environment overrides: `HTTPS=off` exposes HTTP port 80,
+`HTTPS=on` exposes HTTPS port 443 with the optional TLS proxy, and `HTTPS=both`
+exposes both. Petika itself always receives HTTP; TLS may terminate at any upstream
+proxy. `PETIKA_COOKIE_SECURE=true` is independent and should be used whenever the
+browser connects over HTTPS, including external TLS termination. For direct HTTP
+testing only, set it to `false`. Initial Gitea values are `HTTPS=off` and
+`PETIKA_COOKIE_SECURE=false`. No kubeconfig is stored in Gitea.
+
 Required namespace secrets: `petika-auth` (`token`, `admin-password`),
 `petika-backup-auth` (`token`), `petika-tls` (`tls.crt`, `tls.key`), and
 `gitea-registry` (registry pull credential). Never commit their values.
 The initial administrator is `owner`; after provisioning remove the bootstrap
 password and configure setup mode `disabled` as described in `docs/setup.md`.
 
-The LoadBalancer exposes HTTPS on port 443. The initial IP is `10.10.12.115`.
-Its local TLS certificate must be trusted on each testing device; HTTP on a LAN
+The initial LoadBalancer IP is `10.10.12.115`. HTTP is enabled initially.
+When using the optional local TLS proxy, its certificate must be trusted on each testing device; HTTP on a LAN
 IP cannot provide the secure browser context required for encryption and OTP.
 If the IP changes, replace the certificate with a matching IP SAN certificate.
 
