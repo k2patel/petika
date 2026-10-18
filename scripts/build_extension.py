@@ -33,7 +33,7 @@ for name in ['app.css', 'worker.js', 'otp.js']:
 shutil.copytree(source/'wasm', args.output/'wasm', dirs_exist_ok=True)
 (args.output/'config.json').write_text(json.dumps({'endpoint':endpoint}))
 (args.output/'manifest.json').write_text(json.dumps({
-    'manifest_version':3, 'name':'Petika — Chromium preview', 'version':'0.2.0',
+    'manifest_version':3, 'name':'Petika — Chromium preview', 'version':'0.2.1',
     'minimum_chrome_version':'127',
     'description':'Locally decrypt and explicitly fill logins and time-based verification codes.',
     'permissions':['activeTab','scripting','storage'],

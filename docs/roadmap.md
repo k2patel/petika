@@ -98,6 +98,8 @@ parallel. Feature backlog items remain open but do not replace these security ga
   filling, existing-login preservation and concurrent-write protection.
 - [x] Opt-in, document-bound inline signup launcher with expiry and trusted-popup
   generation; website scripts receive no suggestion or vault data.
+- [x] Explicit split TOTP fill for complete six/eight-box forms, with leading-zero
+  preservation and rejection of incomplete, ambiguous or cross-origin groups.
 - [ ] Chromium/Firefox release extensions with automatic inline suggestions and saved-login selection, broader login/TOTP filling,
   QR capture, and enforced exact-origin website permissions (see [UX requirements](settings-experience.md#password-and-totp-browser-experience)).
 - [x] In-vault password suggestions, account-scoped active-client listing/revocation,

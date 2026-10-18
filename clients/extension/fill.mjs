@@ -38,7 +38,17 @@ export function fillPage(expectedOrigin, kind, values, expiresAt) {
   let pairs;
   if (kind === 'otp') {
     if (!/^\d{6}(\d{2})?$/.test(values.code)) throw new Error('Invalid verification code.');
-    pairs = [[unique(inputs.filter(el => ['text','tel','number','password'].includes(el.type) && otp(el))), values.code]];
+    const fields = inputs.filter(el => ['text','tel','number','password'].includes(el.type) && otp(el));
+    if (fields.length === 1) {
+      pairs = [[fields[0], values.code]];
+    } else {
+      // Require an explicitly marked, complete group; never guess neighbouring inputs.
+      const form = fields[0]?.form;
+      if (!form || fields.length !== values.code.length || fields.some(el =>
+        el.form !== form || el.autocomplete !== 'one-time-code' || el.maxLength !== 1 || !['text','tel','password'].includes(el.type)
+      )) throw new Error('No unambiguous verification-code group found. Use copy from Petika instead.');
+      pairs = fields.map((el,index) => [el,values.code[index]]);
+    }
   } else if (kind === 'new-password') {
     const fields = inputs.filter(el => el.type === 'password' && el.autocomplete === 'new-password' && !otp(el));
     if (fields.length < 1 || fields.length > 2 || (fields.length === 2 && (!fields[0].form || fields[0].form !== fields[1].form))) throw new Error('No unambiguous new-password form found. Use copy from Petika instead.');
@@ -58,6 +68,7 @@ export function fillPage(expectedOrigin, kind, values, expiresAt) {
   for (const [el, value] of pairs) {
     if (location.origin !== expectedOrigin || !el.isConnected || !visible(el) || Date.now() >= expiresAt) throw new Error('Page changed before filling.');
     if (el.form && new URL(el.form.action || location.href,location.href).origin !== expectedOrigin) throw new Error('Form destination changed.');
+    if (el.maxLength >= 0 && value.length > el.maxLength) throw new Error('Field length changed before filling.');
     setter.call(el, value);
     el.dispatchEvent(new Event('input', {bubbles:true}));
     el.dispatchEvent(new Event('change', {bubbles:true}));

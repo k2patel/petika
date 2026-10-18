@@ -92,7 +92,8 @@ confirmation code to finish enabling MFA. Code generation/copy exists today.
 
 The [Chromium toolbar preview](../clients/extension/README.md) now fills matching
 logins and TOTP codes with explicit actions, live permissions/session checks, and
-document-bound injection. Its generator saves a separate encrypted login before
+document-bound injection. Code filling supports one field or complete, explicitly
+marked six/eight-box groups in the same form. Its generator saves a separate encrypted login before
 explicitly filling new-password fields, preserving the existing login and using
 revision guards to reject concurrent writes. It uses the same shared `app.css`.
 An opt-in inline signup prompt now opens the trusted popup generator after unlock;

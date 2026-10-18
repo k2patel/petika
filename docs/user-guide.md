@@ -111,9 +111,12 @@ build instructions are in the [extension guide](../clients/extension/README.md).
 
 Closing the popup locks the collection. Reopen and unlock it for a later MFA page.
 Codes close to expiry require waiting a few seconds and selecting **Fill code**
-again. The preview does not support inline saved-login lists, QR capture, split code
-boxes, username-only steps, or forms inside frames/shadow DOM; copy from the web
-app when a form is unsupported.
+again. A code can fill one field or six/eight separate digit boxes when the website
+marks all boxes as verification-code fields in the same form. Incomplete or
+ambiguous groups are rejected; use the web app to copy the code when unsupported.
+The preview does not support inline saved-login lists, QR capture, username-only
+steps, or forms inside frames/shadow DOM. Some websites submit themselves once
+the last digit is entered; Petika does not click Submit.
 
 ### Generate a password in the extension
 

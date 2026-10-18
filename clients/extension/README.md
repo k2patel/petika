@@ -45,6 +45,15 @@ TOTP setup still happens in the web app: enter the website's Base32 setup key or
 `otpauth://totp/` link into the login item, then confirm MFA on the website using a
 generated code. The preview never enables website MFA by itself.
 
+**Fill code** supports a single code field or a complete group of six/eight visible
+single-character fields. For a split group, every field must have
+`autocomplete="one-time-code"`, `maxlength="1"`, a text/tel/password input type,
+and the same form owner. The digit count must match the generated code; fields
+are filled in DOM order, preserving leading zeroes. Missing digits, mixed forms,
+competing code fields, and cross-origin form actions are rejected. Custom widgets
+without these markers still require manual entry. Petika does not submit forms;
+a website may react to input events and submit its own form.
+
 ## Generate a password for signup or a password change
 
 On an allowed HTTPS website, unlock a writable collection and choose **Generate a
@@ -113,7 +122,7 @@ page-window message listener, or persistent website permission.
 ## Not implemented
 
 Automatic suggestions on every visit, inline saved-login selection, updating an existing login from the extension,
-QR capture, Firefox/Safari packaging, split OTP fields, username-only login steps,
+QR capture, Firefox/Safari packaging, unmarked/custom OTP widgets, username-only login steps,
 iframe/shadow-DOM forms, device-key unlocking, native biometrics, narrowly scoped
 extension credentials, browser-store publishing, and independent security review.
 The web app already offers generated passwords when creating/editing items.

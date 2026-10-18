@@ -96,6 +96,11 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             popup.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Fill code').click()")
             expect(target.locator('[name=otp]')).to_have_value(__import__('re').compile(r'^\d{6}$'))
             assert target.url==ORIGIN+'/'
+            target.set_content('<form>'+('<input type="tel" autocomplete="one-time-code" maxlength="1" size="1">'*6)+'</form>')
+            if int(time.time())%30>=24: time.sleep(31-int(time.time())%30)
+            popup.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Fill code').click()")
+            expect(target.locator('input').first).to_have_value(__import__('re').compile(r'^\d$'))
+            assert target.locator('input').evaluate_all('(els)=>els.every(el=>/^\d$/.test(el.value))')
             # Inline UI carries no vault data and is installed only on explicit request.
             target.set_content('<form><input name="new" type="password" autocomplete="new-password"><input name="current" type="password" autocomplete="current-password"></form>')
             popup.evaluate("document.querySelector('#inline').click()")
@@ -246,8 +251,8 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             # Test the actual serialized fill function against hostile DOM layouts.
             fill_source=(ROOT/'clients/extension/fill.mjs').read_text().split('export function fillPage',1)[1]
             fill_js='function fillPage'+fill_source
-            def fill_dom(kind='login', expiry=None):
-                return target.evaluate("(args) => { try { return {ok:("+fill_js+")(...args)}; } catch(e) { return {error:e.message}; } }",[ORIGIN,kind,{'username':'qa','password':'synthetic','code':'123456'},expiry or int(time.time()*1000)+5000])
+            def fill_dom(kind='login', expiry=None, code='123456'):
+                return target.evaluate("(args) => { try { return {ok:("+fill_js+")(...args)}; } catch(e) { return {error:e.message}; } }",[ORIGIN,kind,{'username':'qa','password':'synthetic','code':code},expiry or int(time.time()*1000)+5000])
             for markup in [
                 '<input type="password" style="display:none">',
                 '<div style="opacity:0"><input type="password"></div>',
@@ -270,8 +275,36 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
                 target.set_content(markup)
                 assert 'error' in fill_dom('new-password'),markup
                 assert target.locator('input').evaluate_all('(els)=>els.every(el=>el.value.length===0)')
-            target.set_content('<input autocomplete="one-time-code" maxlength="1"><input autocomplete="one-time-code" maxlength="1">')
-            assert 'error' in fill_dom('otp')  # Split codes are not yet supported.
+            # Complete split codes preserve leading zeroes and emit normal input events.
+            digit='<input type="tel" autocomplete="one-time-code" maxlength="1" size="1">'
+            for code in ['012345','00123456']:
+                target.set_content('<form>'+digit*len(code)+'</form>')
+                target.evaluate("() => {window.events=[]; document.addEventListener('input',e=>events.push(e.target.value)); document.querySelector('form').addEventListener('submit',e=>{e.preventDefault();events.push('submit');});}")
+                result=fill_dom('otp',code=code)
+                assert result=={'ok':{'filled':len(code)}},result
+                assert target.locator('input').evaluate_all('(els)=>els.map(el=>el.value).join("")')==code
+                assert target.evaluate('events')==list(code)
+            for markup in [
+                '<form>'+digit*5+'</form>',
+                '<form>'+digit*7+'</form>',
+                digit*6,  # No shared form.
+                '<form>'+digit*3+'</form><form>'+digit*3+'</form>',
+                '<form action="https://evil.test">'+digit*6+'</form>',
+                '<form>'+digit*5+digit.replace('size="1"','hidden')+'</form>',
+                '<form>'+digit*5+digit.replace('size="1"','readonly')+'</form>',
+                '<form>'+digit*5+digit.replace('maxlength="1"','maxlength="2"')+'</form>',
+                '<form>'+digit*5+digit.replace('type="tel"','type="number"')+'</form>',
+                '<form>'+digit*6+'<input autocomplete="one-time-code"></form>',
+                '<form>'+digit*12+'</form>',
+            ]:
+                target.set_content(markup)
+                assert 'error' in fill_dom('otp'),markup
+                assert target.locator('input').evaluate_all('(els)=>els.every(el=>el.value.length===0)')
+            # Page mutation after the first event must stop later digits.
+            target.set_content('<form>'+digit*6+'</form>')
+            target.evaluate("document.querySelector('input').addEventListener('input',()=>document.querySelector('form').action='https://evil.test')")
+            assert 'error' in fill_dom('otp')
+            assert target.locator('input').evaluate_all('(els)=>els.slice(1).every(el=>el.value.length===0)')
             target.set_content('<input autocomplete="one-time-code">')
             assert 'error' in fill_dom('otp',1)  # Expired fill request.
             target.set_content('<iframe srcdoc="<input type=password>"></iframe>')
@@ -290,6 +323,6 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             assert popup.evaluate('chrome.storage.session.get(null)')=={}
             assert not errors,errors
             context.close()
-        print('Extension pairing, inline prompts and popup handoff, encrypted generation/save, concurrent-write rejection, login/new-password/TOTP fill, permission revocation, document binding and storage checks passed.')
+        print('Extension pairing, inline prompts and popup handoff, encrypted generation/save, concurrent-write rejection, login/new-password/single and split TOTP fill, permission revocation, document binding and storage checks passed.')
     finally:
         server.terminate();server.wait(timeout=10)
