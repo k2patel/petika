@@ -290,8 +290,11 @@ production credentials, authentication requirements or running deployments.
 
 ## Open research: multiple device keys and biometric unlock
 
-Recorded 2026-10-18 for the next research session. Status: unanswered design questions;
-not an accepted protocol or implemented feature. Related controls: SEC-04–09.
+Recorded 2026-10-18. Initial research is documented in the
+[multi-device biometric-key proposal](research/multi-device-biometric-keys.md).
+Status: feasibility researched; protocol decisions and hardware validation remain open.
+The checklist below remains an implementation/review backlog, not a completed design.
+Related controls: SEC-04–09.
 
 Can each authorized device have its own client-side key and use Face ID, Touch ID,
 Android biometrics or another local authenticator to unlock the same encrypted vault?

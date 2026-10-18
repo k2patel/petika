@@ -4,6 +4,7 @@ Use the [implementation roadmap](roadmap.md) for completed milestones and remain
 and limitations.
 
 - [Security and compliance alignment plan](security-alignment-plan.md)
+- [Multi-device biometric-key research](research/multi-device-biometric-keys.md)
 - [Client encryption and explicit recovery decision](decisions/0003-security-and-recovery-baseline.md)
 - [Per-user group access and rotation](group-access.md)
 - [Package and envelope wire formats](key-package-format.md)
