@@ -3,6 +3,10 @@
 Use the [implementation roadmap](roadmap.md) for completed milestones and remaining work. Feature guides document implemented behavior
 and limitations.
 
+- [User installation and everyday tasks](user-guide.md)
+- [Administrator installation, buckets, backups and recovery](administrator-guide.md)
+- [Chromium extension preview installation and build](../clients/extension/README.md)
+- [Off-site backup configuration](offsite-backups.md)
 - [Simple security configuration and UI contract](settings-experience.md)
 - [Security and compliance alignment plan](security-alignment-plan.md)
 - [Multi-device biometric-key research](research/multi-device-biometric-keys.md)
@@ -32,7 +36,7 @@ and limitations.
 Implemented: encrypted CLI and Rust/WASM web client, standard/hybrid setup modes,
 local GPG import, managed accounts, user/group permissions, website OTP, encrypted
 snapshot API and Git mirroring, first-run/environment provisioning, versioned storage,
-and distroless deployment. The shared core also implements local recipient identities
+distroless/push-runtime deployment, and an experimental Chromium toolbar extension. The shared core also implements local recipient identities
 and encrypted recovery, plus verified contact pins and key-change suspension. CLI/browser enrollment, verified encrypted group delivery, explicit migration, and
 fresh-key rotation are implemented.
 See the roadmap for completed work, next actions, and remaining integrations.

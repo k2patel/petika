@@ -23,7 +23,9 @@ Point that hostname to your proxy and provision a certificate trusted by clients
 homelab Service and optional TLS sidecar. `PETIKA_COOKIE_SECURE` controls the
 session cookie's Secure attribute. Petika does not infer cookie security from
 `X-Forwarded-Proto`; set it explicitly according to the browser-facing URL.
-Initial testing values in Gitea are `HTTPS=off` and `PETIKA_COOKIE_SECURE=false`.
+As of 2026-10-18, the homelab uses `HTTPS=both`, `PETIKA_COOKIE_SECURE=true`,
+and `PETIKA_ENDPOINT=https://petika.k2patel.in`. The public domain terminates TLS
+at the external proxy; the bundled IP TLS listener remains available.
 
 For external TLS termination, update the repository Actions variables and reapply:
 

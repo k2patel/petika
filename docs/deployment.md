@@ -2,9 +2,14 @@
 
 Experimental web UI and local managed accounts, with personal/group encrypted collections.
 Verified group-key delivery and explicit rotation are implemented; native biometrics and
-browser extensions remain planned. The bearer token authorizes ciphertext
+mobile clients remain planned. An experimental Chromium toolbar extension
+is available for local QA; see the [user guide](user-guide.md). The bearer token authorizes ciphertext
 access; it cannot decrypt the store. Use synthetic data until the security design and
 implementation have been independently reviewed.
+
+For an installation walkthrough and routine operations, start with the
+[administrator guide](administrator-guide.md). Ordinary users can use the web app
+without installing server tools; see the [user guide](user-guide.md).
 
 ## Build from source
 

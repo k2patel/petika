@@ -46,8 +46,18 @@ The worker does not automatically prune repository history.
 
 ## Configure push destinations in Settings
 
-For each destination, enter its name, repository URL, schedule, repository password,
-and provider credentials. Use independent storage outside the homelab:
+For new destinations, use the guided location fields: **Storage endpoint**, **Bucket
+name**, and **Folder in bucket (optional)** for S3; **SSH host**, **SSH username**,
+**SSH port**, and **Backup folder (absolute path)** for SSH. Enter a name, repository
+encryption password (at least 16 characters), provider credentials, and interval.
+Check **Enable scheduled server push** to turn on recurring jobs; otherwise use
+**Back up now** manually. Saving a destination alone does not run a backup.
+
+Existing destinations open with **Use an advanced repository URL** selected so their
+saved URL is preserved. This mode is also available for new advanced configurations.
+See the [administrator bucket/storage setup](administrator-guide.md#prepare-an-off-site-s3-bucket)
+before entering credentials. Use independent storage outside the homelab:
+
 
 - S3: `s3:https://s3.example.net/bucket/petika`, access key, secret key, optional
   session token and region. Renew expiring session tokens before they expire.
@@ -109,8 +119,8 @@ python3 scripts/user_backup.py --server https://petika.example.net \
 
 The key file must be owner-only (`chmod 600`). HTTPS is required except on loopback;
 redirects are rejected. API pulls capture collections sequentially rather than as
-one transactional snapshot. The current homelab HTTP endpoint needs HTTPS or a
-protected loopback tunnel for remote API pull clients.
+one transactional snapshot. The homelab public endpoint is `https://petika.k2patel.in`; use it for remote
+API pull clients with normal certificate validation.
 
 ## Recover independently of the server
 

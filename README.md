@@ -12,8 +12,14 @@ Petika is an open-source, self-hosted password manager built in Rust. Its name m
 collections on infrastructure you control, with encryption performed on your device.
 
 **Experimental and unaudited. Use synthetic data only for now.**
-Petika is not yet published to crates.io, and no prebuilt container image is published.
+Petika is not yet published to crates.io, and no public prebuilt container image is published.
 Build from this repository. There is no npm build or runtime dependency.
+
+## Start here
+
+- **Everyday users:** [Sign in, save passwords, set up TOTP, install the extension preview, and keep backups](docs/user-guide.md).
+- **Administrators:** [Install the server, onboard users, prepare S3 buckets/SSH storage, and operate backups/recovery](docs/administrator-guide.md).
+- **Developers:** [Build and verify changes](docs/development.md).
 
 ## What works today
 
@@ -24,6 +30,9 @@ Build from this repository. There is no npm build or runtime dependency.
 - **Managed accounts:** first-administrator setup, sign-in, profiles, password changes,
   user administration, disabling accounts, and group read/edit permissions.
 - **Website OTP:** encrypted TOTP seeds, live verification codes, and code copying.
+- **Chromium preview:** unpacked toolbar extension with local unlock and explicit login/TOTP
+  filling; exact website permissions and client revocation. Not a browser-store release.
+- **Off-site backups:** user/operator S3 and SSH server push, plus user-scoped API pull keys.
 - **Encryption choices:** standard or experimental hybrid post-quantum encryption at
   collection creation. Neither mode is a guarantee against all future attacks.
 - **Encrypted Git mirror:** durable API revision checks and a one-way ciphertext mirror.
@@ -40,7 +49,7 @@ setup-token command. The repository pins Rust 1.90.0. GnuPG is needed only for n
 GPG imports.
 
 ```sh
-git clone git@github.com:k2patel/petika.git
+git clone https://github.com/k2patel/petika.git
 cd petika
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.114 --locked
