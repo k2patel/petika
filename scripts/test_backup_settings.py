@@ -28,7 +28,12 @@ with tempfile.TemporaryDirectory() as temporary:
                 page.get_by_role('button',name='Add S3 or SSH destination').click()
                 page.get_by_label('Name',exact=True).fill(name)
                 page.get_by_label('Storage type').select_option(kind)
-                page.get_by_label('Repository URL').fill(repository)
+                if kind=='s3':
+                    page.get_by_label('Storage endpoint',exact=True).fill('https://storage.example.com')
+                    page.get_by_label('Bucket name',exact=True).fill('bucket')
+                else:
+                    page.get_by_label('SSH host',exact=True).fill('backup.example.com')
+                    page.get_by_label('SSH username',exact=True).fill('backup')
                 page.get_by_label('Repository encryption password',exact=True).fill('synthetic repository password')
                 page.get_by_label('Initialize a new encrypted repository on first run',exact=True).check()
                 page.get_by_label('Enable scheduled server push',exact=True).check()
@@ -41,6 +46,7 @@ with tempfile.TemporaryDirectory() as temporary:
                 page.get_by_role('button',name='Save destination').click()
                 expect(page.get_by_text(name,exact=True)).to_be_visible()
             page.locator('[data-edit-destination="0"]').click()
+            expect(page.get_by_label('Repository URL',exact=True)).to_have_value('s3:https://storage.example.com/bucket/petika')
             expect(page.get_by_label('S3 secret key',exact=True)).to_have_value('')
             expect(page.get_by_label('Repository encryption password',exact=True)).to_have_value('')
             page.get_by_role('button',name='Save destination').click()

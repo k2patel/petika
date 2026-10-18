@@ -725,12 +725,51 @@ async function backupDialog(operator = false) {
   });
 }
 
+// Guided fields deliberately cover common destinations; advanced URLs preserve all existing configurations.
+function backupRepository(data) {
+  if (data.has('advanced_repository')) return String(data.get('repository') || '').trim();
+  if (data.get('kind') === 's3') {
+    let endpoint;
+    try { endpoint = new URL(String(data.get('s3_endpoint') || '').trim()); }
+    catch { throw new Error('Enter a complete HTTPS storage endpoint, such as https://s3.example.com.'); }
+    if (endpoint.protocol !== 'https:' || !endpoint.hostname || endpoint.username || endpoint.password || endpoint.search || endpoint.hash || endpoint.pathname !== '/') throw new Error('Use an HTTPS endpoint without credentials, a path, or query parameters. Use advanced configuration for a custom repository URL.');
+    const bucket = String(data.get('s3_bucket') || '').trim();
+    const folder = String(data.get('s3_folder') || '').trim().replace(/^\/+|\/+$/g, '');
+    if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error('Enter a bucket name of 3–63 lowercase letters, numbers, dots or hyphens.');
+    if (folder && !safeBackupPath(folder)) throw new Error('Use letters, numbers, dots, underscores, hyphens and slashes in the backup folder. Do not use . or .. path segments.');
+    return `s3:${endpoint.origin}/${bucket}${folder?'/'+folder:''}`;
+  }
+  const host = String(data.get('ssh_host') || '').trim();
+  const user = String(data.get('ssh_user') || '').trim();
+  const path = String(data.get('ssh_path') || '').trim();
+  const port = String(data.get('ssh_port') || '22');
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9.-]*$/.test(host)) throw new Error('Enter a hostname or IPv4 address without a scheme or port. Use advanced configuration for IPv6.');
+  if (!/^[a-zA-Z0-9_][a-zA-Z0-9_.-]*$/.test(user)) throw new Error('Enter the SSH username without spaces or @.');
+  if (!/^\d+$/.test(port) || Number(port)<1 || Number(port)>65535) throw new Error('Choose an SSH port between 1 and 65535.');
+  if (!path.startsWith('/') || !safeBackupPath(path.slice(1))) throw new Error('Enter an absolute backup folder, such as /backups/petika, without . or .. path segments.');
+  return `sftp://${user}@${host}${Number(port)===22?'':':'+Number(port)}/${path}`;
+}
+function safeBackupPath(path) {
+  return /^[a-zA-Z0-9_./-]+$/.test(path) && path.split('/').every(part=>part && part!=='.' && part!=='..');
+}
+
 function destinationDialog(operator, existing = null) {
   dialog(existing ? 'Edit backup destination' : 'Add backup destination', `<form id="destination-form">
     ${field('Name','destination_name','text',existing?.name||'','required maxlength="100"')}
     <div class="field"><label for="destination-kind">Storage type</label><select id="destination-kind" name="kind" class="control"><option value="s3">S3-compatible storage</option><option value="sftp" ${existing?.kind==='sftp'?'selected':''}>SSH / SFTP</option></select></div>
-    ${field('Repository URL','repository','text',existing?.repository||'','required maxlength="2048"')}
-    <p class="small">S3: s3:https://endpoint/bucket/petika<br>SSH: sftp://user@host//absolute/path</p>
+    <label class="check"><input name="advanced_repository" id="advanced-repository" type="checkbox" ${existing?'checked':''}> Use an advanced repository URL</label>
+    <p class="small">${existing?'Your saved URL is preserved exactly. Turn off advanced configuration only to enter a replacement destination.':'Start with your storage details. Use advanced configuration if you already have a repository URL.'}</p>
+    <div id="repository-url-fields">${field('Repository URL','repository','text',existing?.repository||'','required maxlength="2048"')}<p class="small">S3: s3:https://endpoint/bucket/petika · SSH: sftp://user@host//absolute/path</p></div>
+    <div id="s3-location-fields">
+      ${field('Storage endpoint','s3_endpoint','url','','required placeholder="https://s3.example.com" maxlength="1024"')}
+      ${field('Bucket name','s3_bucket','text','','required placeholder="my-backups" maxlength="63"')}
+      ${field('Folder in bucket (optional)','s3_folder','text','petika','maxlength="1024"')}
+    </div>
+    <div id="ssh-location-fields">
+      ${field('SSH host','ssh_host','text','','required placeholder="backup.example.com" maxlength="253"')}
+      <div class="two-fields">${field('SSH username','ssh_user','text','','required maxlength="100"')}${field('SSH port','ssh_port','number','22','required min="1" max="65535"')}</div>
+      ${field('Backup folder (absolute path)','ssh_path','text','/backups/petika','required maxlength="1024"')}
+    </div>
     <label><input name="enabled" type="checkbox" ${existing?.enabled?'checked':''}> Enable scheduled server push</label>
     ${field('Back up every (hours)','interval_hours','number',existing?.interval_hours||24,'required min="1" max="720"')}
     ${field('Existing repository ID','repository_id','text',existing?.repository_id||'','pattern="[0-9a-f]{64}" maxlength="64"')}
@@ -749,13 +788,18 @@ function destinationDialog(operator, existing = null) {
     <div class="form-error" role="alert"></div><button class="btn primary" type="submit">Save destination</button></form>`);
   const updateKind=()=>{
     const ssh=$('#destination-kind').value==='sftp';
+    const advanced=$('#advanced-repository').checked;
+    for (const [selector,visible] of [['#repository-url-fields',advanced],['#s3-location-fields',!advanced&&!ssh],['#ssh-location-fields',!advanced&&ssh]]) {
+      $(selector).hidden=!visible;
+      $(selector).querySelectorAll('input').forEach(el=>el.disabled=!visible);
+    }
     $('#s3-credentials').hidden=ssh; $('#ssh-credentials').hidden=!ssh;
     $('#s3-credentials').querySelectorAll('input').forEach(el=>el.disabled=ssh);
     $('#ssh-credentials').querySelectorAll('textarea').forEach(el=>el.disabled=!ssh);
   };
-  $('#destination-kind').onchange=updateKind; updateKind();
+  $('#destination-kind').onchange=updateKind; $('#advanced-repository').onchange=updateKind; updateKind();
   form('#destination-form',async data=>{
-    const body = {name:data.get('destination_name'),kind:data.get('kind'),repository:data.get('repository'),enabled:data.has('enabled'),interval_hours:Number(data.get('interval_hours')),repository_id:data.get('repository_id'),initialize_repository:data.has('initialize_repository')};
+    const body = {name:data.get('destination_name'),kind:data.get('kind'),repository:backupRepository(data),enabled:data.has('enabled'),interval_hours:Number(data.get('interval_hours')),repository_id:data.get('repository_id'),initialize_repository:data.has('initialize_repository')};
     if(existing) body.id=existing.id;
     const fields=['repository_password','access_key','secret_key','session_token','region','ssh_private_key','ssh_known_hosts'];
     if(fields.some(key=>data.get(key))) body.credentials=Object.fromEntries(fields.map(key=>[key,data.get(key)||'']));

@@ -37,8 +37,9 @@ on a feature flag or a biometric badge based only on device capability.
 
 Use ordinary storage labels such as endpoint, bucket and folder where possible;
 construct provider-specific repository syntax internally after validation. Preserve
-an advanced URL field for compatible configurations. This backup-form improvement
-is planned, not part of the initial Settings grouping change.
+an advanced URL field for compatible configurations. New destinations now use these guided fields. Existing destinations open in advanced
+mode to preserve saved URLs exactly; users can explicitly switch to guided fields
+to replace the destination. Connection/restore verification improvements remain planned.
 
 Saving an edited destination must explain whether blank credentials preserve existing
 secrets. Never echo saved secrets. Errors belong beside the relevant field and must
