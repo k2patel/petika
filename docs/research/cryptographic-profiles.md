@@ -2,6 +2,9 @@
 
 Date: 2026-10-18. Baseline: `bc48aa1`. Status: initial source/code assessment and
 review draft. No new cryptographic implementation or external review completed.
+Follow-up: [implemented synthetic AES-GCM spike and evidence](aws-lc-provider-spike.md).
+The initial assessment below remains the baseline; production integration is still pending.
+
 Direction: [ADR 0004](../decisions/0004-cryptographic-profile-direction.md).
 
 ## Profile separation
