@@ -3,6 +3,7 @@
 Use the [implementation roadmap](roadmap.md) for completed milestones and remaining work. Feature guides document implemented behavior
 and limitations.
 
+- [Try Petika before browser-store releases](preview-installation.md)
 - [User installation and everyday tasks](user-guide.md)
 - [Administrator installation, buckets, backups and recovery](administrator-guide.md)
 - [Chromium extension preview installation and build](../clients/extension/README.md)

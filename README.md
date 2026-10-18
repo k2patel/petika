@@ -17,6 +17,10 @@ Build from this repository. There is no npm build or runtime dependency.
 
 ## Start here
 
+**Trying Petika from GitHub?** Read [Use the preview before browser-store releases](docs/preview-installation.md)
+for web-only access, unpacked Chrome installation, updates, and the Chrome/Firefox
+signing and store-release plans. No browser extension is needed for the web app.
+
 - **Everyday users:** [Sign in, save passwords, set up TOTP, install the extension preview, and keep backups](docs/user-guide.md).
 - **Administrators:** [Install the server, onboard users, prepare S3 buckets/SSH storage, and operate backups/recovery](docs/administrator-guide.md).
 - **Developers:** [Build and verify changes](docs/development.md).

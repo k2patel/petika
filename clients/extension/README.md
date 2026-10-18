@@ -5,6 +5,9 @@ Rust/WASM worker and the single web stylesheet; it loads no remote executable co
 It supports explicit toolbar-popup filling of saved usernames/passwords and fresh
 TOTP codes. No account password is entered into the extension.
 
+For public preview installation and Chrome/Firefox distribution status, see
+[Try Petika before browser-store releases](../../docs/preview-installation.md).
+
 For a user receiving a prepared package, start with the
 [user installation guide](../../docs/user-guide.md#install-the-chromium-extension-preview).
 Administrators preparing packages can follow the build steps below.
