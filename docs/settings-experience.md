@@ -24,6 +24,17 @@ Unavailable features have no working-looking switches. Keep research status in t
 advanced section until there is a usable setup flow. Never display a FIPS badge based
 on a feature flag or a biometric badge based only on device capability.
 
+## Appearance
+
+Use three compact icon buttons: Light (sun), Dark (moon), and System (display).
+Selecting an active Light or Dark button returns to System. Buttons expose their
+selected state with `aria-pressed`, accessible names, tooltips, and visible focus.
+The authenticated `POST /v1/appearance` endpoint accepts `appearance` as `light`,
+`dark`, or `system` and updates only the session user. The account preference is
+restored on sign-in and reload across devices; System follows each device’s OS.
+Existing accounts default to System. Signed-out appearance remains browser-local
+and does not overwrite an account preference. Failed saves restore the prior choice.
+
 ## Future configuration flows
 
 | Task | User-facing flow | Required outcome |

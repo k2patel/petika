@@ -299,6 +299,7 @@ fn run() -> Result<()> {
         } else if path.starts_with("/v1/auth/")
             || path.starts_with("/v1/admin/")
             || path == "/v1/profile"
+            || path == "/v1/appearance"
             || path == "/v1/collections"
         {
             web::account_route(request, &mut accounts, &token, secure_cookie);

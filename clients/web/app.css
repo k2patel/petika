@@ -37,3 +37,8 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(
 .settings-details summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
 .settings-details-body{display:grid;gap:12px;padding:12px 0 0;max-width:70ch}
 @media(max-width:800px){.settings-security .settings-row>.actions{width:100%}.settings-security .settings-row .btn{white-space:normal;text-align:left}.settings-details-body .btn{white-space:normal}}
+
+.theme-picker{display:inline-flex;flex-shrink:0;gap:3px;padding:3px;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.theme-picker button{display:grid;place-items:center;width:44px;height:44px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted)}
+.theme-picker button:hover{background:var(--bg)}
+.theme-picker button[aria-pressed=true]{background:var(--tint);color:var(--accent);border-color:var(--accent)}

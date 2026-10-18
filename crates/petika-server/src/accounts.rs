@@ -24,10 +24,15 @@ pub struct User {
     pub admin: bool,
     pub disabled: bool,
     pub password_hash: String,
+    #[serde(default = "default_appearance")]
+    pub appearance: String,
+}
+fn default_appearance() -> String {
+    "system".into()
 }
 impl User {
     pub fn public(&self) -> serde_json::Value {
-        serde_json::json!({"id": self.id, "username": self.username, "name": self.name, "admin": self.admin, "disabled": self.disabled})
+        serde_json::json!({"id": self.id, "username": self.username, "name": self.name, "admin": self.admin, "disabled": self.disabled, "appearance": self.appearance})
     }
 }
 #[derive(Serialize, Deserialize, Clone)]
@@ -276,6 +281,7 @@ impl Accounts {
             admin,
             disabled: false,
             password_hash: hash(&password)?,
+            appearance: default_appearance(),
         };
         if bootstrap && let Some(encrypted) = &self.initial_snapshot {
             let repository = crate::Repository::new(
@@ -575,6 +581,22 @@ impl Accounts {
         self.sessions
             .retain(|token, s| s.user_id != user.id || token == keep_session);
         Ok(())
+    }
+    pub fn appearance(&self, user: &User, appearance: &str) -> Result<User> {
+        if !matches!(appearance, "system" | "light" | "dark") {
+            return Err("Choose System, Light, or Dark appearance".into());
+        }
+        let file = StoreFile::lock(&self.path)?;
+        let mut db = Self::load(&file)?;
+        let saved = db
+            .users
+            .iter_mut()
+            .find(|u| u.id == user.id)
+            .ok_or("User not found")?;
+        saved.appearance = appearance.into();
+        let saved = saved.clone();
+        file.write(&serde_json::to_vec(&db)?, false)?;
+        Ok(saved)
     }
     pub fn profile(&self, user: &User, name: &str) -> Result<User> {
         if !label(name) {

@@ -186,6 +186,9 @@ pub fn account_route(
                 )?;
                 Ok(serde_json::json!({"ok":true}))
             }
+            ("POST", "/v1/appearance") => Ok(accounts
+                .appearance(user, text(&payload, "appearance"))?
+                .public()),
             ("POST", "/v1/profile") => Ok(accounts.profile(user, text(&payload, "name"))?.public()),
             ("GET", "/v1/admin/users") if user.admin => Ok(serde_json::json!(accounts.users()?)),
             ("GET", "/v1/admin/groups") if user.admin => Ok(serde_json::json!(accounts.groups()?)),

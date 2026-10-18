@@ -14,7 +14,7 @@ spec:
             - name: PETIKA_SETUP_MODE
               value: auto
             - name: PETIKA_ADMIN_USERNAME
-              value: owner
+              value: admin
             - name: PETIKA_ADMIN_PASSWORD_FILE
               value: /run/secrets/admin-password
         - name: tls

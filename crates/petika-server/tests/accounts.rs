@@ -277,3 +277,73 @@ fn device_pending_denial_and_throttling() {
     }
     assert!(accounts.device_start().is_err());
 }
+
+#[test]
+fn appearance_is_account_scoped_persistent_and_validated() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("accounts.json");
+    let accounts = Accounts::new(path.clone());
+    accounts.migrate().unwrap();
+    let first = accounts
+        .create_user(
+            "first",
+            "First",
+            "synthetic password one".into(),
+            true,
+            true,
+        )
+        .unwrap();
+    let second = accounts
+        .create_user(
+            "second",
+            "Second",
+            "synthetic password two".into(),
+            false,
+            false,
+        )
+        .unwrap();
+    assert_eq!(first.appearance, "system");
+    accounts.appearance(&first, "dark").unwrap();
+    accounts.profile(&first, "Renamed").unwrap();
+    assert!(accounts.appearance(&first, "invalid").is_err());
+    let mut reopened = Accounts::new(path.clone());
+    assert_eq!(
+        reopened
+            .login("first", "synthetic password one".into())
+            .unwrap()
+            .1
+            .appearance,
+        "dark"
+    );
+    assert_eq!(
+        reopened
+            .login("second", "synthetic password two".into())
+            .unwrap()
+            .1
+            .appearance,
+        "system"
+    );
+    assert_eq!(
+        reopened.appearance(&second, "light").unwrap().appearance,
+        "light"
+    );
+    assert_eq!(
+        reopened.appearance(&first, "system").unwrap().appearance,
+        "system"
+    );
+    // Existing account databases without a preference retain System appearance.
+    let mut old: serde_json::Value =
+        serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    for user in old["users"].as_array_mut().unwrap() {
+        user.as_object_mut().unwrap().remove("appearance");
+    }
+    std::fs::write(&path, serde_json::to_vec(&old).unwrap()).unwrap();
+    assert_eq!(
+        reopened
+            .login("first", "synthetic password one".into())
+            .unwrap()
+            .1
+            .appearance,
+        "system"
+    );
+}

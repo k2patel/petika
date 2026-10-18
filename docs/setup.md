@@ -26,7 +26,7 @@ Example with secret files:
 
 ```sh
 PETIKA_SETUP_MODE=auto \
-PETIKA_ADMIN_USERNAME=owner \
+PETIKA_ADMIN_USERNAME=admin \
 PETIKA_ADMIN_NAME='Workspace owner' \
 PETIKA_ADMIN_PASSWORD_FILE=/run/secrets/admin-password \
 PETIKA_INITIAL_SNAPSHOT_FILE=/run/secrets/initial.petika \

@@ -30,7 +30,9 @@ No kubeconfig is stored in Gitea.
 Required namespace secrets: `petika-auth` (`token`, `admin-password`),
 `petika-backup-auth` (`token`), `petika-tls` (`tls.crt`, `tls.key`), and
 `gitea-registry` (registry pull credential). Never commit their values.
-The initial administrator is `owner`; after provisioning remove the bootstrap
+New installations use administrator username `admin`. Changing this bootstrap
+setting does not rename accounts in an existing database; older deployments may
+still use `owner`. After provisioning, remove the bootstrap
 password and configure setup mode `disabled` as described in `docs/setup.md`.
 
 The initial LoadBalancer IP is `10.10.12.115`. HTTP is enabled initially.

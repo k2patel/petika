@@ -44,13 +44,20 @@ const paths = {
   menu: 'M4 6h16M4 12h16M4 18h16',
   edit: 'm16 3 5 5-12 12-6 1 1-6L16 3Zm-3 3 5 5',
   trash: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7',
+  moon: 'M21 13a9 9 0 1 1-10-10 7 7 0 0 0 10 10Z',
+  system: 'M3 3h18v13H3V3Zm9 13v5m-5 0h10',
   sun: 'M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0'
 };
 const icon = name => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${paths[name]||paths.box}"/></svg>`;
 const button = (label, action, i = '', cls = '') => `<button type="button" class="btn ${cls}" data-action="${action}">${i?icon(i):''}${label}</button>`;
 const mark = (alt = '') => `<span class="theme-mark"><img class="mark-light" src="/brand.png" alt="${alt}"><img class="mark-dark" src="/brand-dark.png" alt="${alt}"></span>`;
 const brand = () => `<div class="brand">${mark("Petika chest")}<span>Petika<small>Your private workspace</small></span></div>`;
-const themeSelect = () => `<select class="control" aria-label="Appearance" data-theme-picker>${['system','light','dark'].map(t=>`<option value="${t}" ${document.documentElement.dataset.theme===t?'selected':''}>${({system:'System appearance',light:'Light',dark:'Dark'})[t]}</option>`).join('')}</select>`;
+const themeSelect = () => `<div class="theme-picker" role="group" aria-label="Appearance">${['light','dark','system'].map(t=>`<button type="button" data-theme-picker="${t}" aria-label="${({light:'Light',dark:'Dark',system:'System'})[t]} appearance" title="${({light:'Light',dark:'Dark',system:'System'})[t]} appearance" aria-pressed="${(document.documentElement.dataset.theme || 'system')===t}">${icon(({light:'sun',dark:'moon',system:'system'})[t])}</button>`).join('')}</div>`;
+function applyTheme(value) {
+  document.documentElement.dataset.theme = ['light', 'dark'].includes(value) ? value : 'system';
+  document.querySelectorAll('[data-theme-picker]').forEach(el => el.setAttribute('aria-pressed', String(el.dataset.themePicker === document.documentElement.dataset.theme)));
+}
+
 const state = {
   user: null,
   collections: [],
@@ -150,11 +157,28 @@ async function api(path, {
 
 function bind(root = document) {
   root.querySelectorAll('[data-action]').forEach(el => el.onclick = () => Promise.resolve(action(el.dataset.action, el)).catch(e => toast(errorText(e))));
-  root.querySelectorAll('[data-theme-picker]').forEach(el => el.onchange = () => {
-    document.documentElement.dataset.theme = el.value;
+  root.querySelectorAll('[data-theme-picker]').forEach(el => el.onclick = async () => {
+    const previous = document.documentElement.dataset.theme || 'system';
+    const value = previous === el.dataset.themePicker ? 'system' : el.dataset.themePicker;
+    const user = state.user;
+    const controls = [...document.querySelectorAll('[data-theme-picker]')];
+    controls.forEach(control => control.disabled = true);
+    applyTheme(value);
     try {
-      localStorage.setItem('petika-theme', el.value)
-    } catch {}
+      if (user && !state.demo) {
+        const saved = await api('/v1/appearance', {method: 'POST', body: {appearance: value}});
+        if (state.user?.id === user.id) {
+          state.user.appearance = saved.appearance;
+          toast('Appearance saved');
+        }
+      } else if (user) user.appearance = value;
+      else localStorage.setItem('petika-theme', value);
+    } catch (e) {
+      if (state.user === user) applyTheme(previous);
+      toast(errorText(e));
+    } finally {
+      controls.forEach(control => control.disabled = false);
+    }
   })
 }
 
@@ -196,6 +220,7 @@ function closeDialog() {
 }
 
 function authScreen(initialized = true) {
+  try { applyTheme(localStorage.getItem('petika-theme')); } catch { applyTheme('system'); }
   clearInterval(otpInterval);
   $('#app').innerHTML = `<div class="auth-layout"><section class="auth-story">${brand()}<div class="auth-art"><div class="chest-tile">${mark()}</div><h1>A private place.<br>For your digital life.</h1><p>Keep passwords, verification codes, and shared secrets together. On infrastructure you control.</p><div class="actions"><span class="pill">${icon('lock')}Encrypted on your device</span></div></div><div class="trust-line">${icon('shield')}Open source. Self-hosted. Yours.</div></section><main id="main" class="auth-panel"><div class="theme-top">${themeSelect()}</div><div class="auth-form"><h2>${initialized?'Welcome back':'Make Petika yours'}</h2><p>${initialized?'Sign in to your private workspace.':'Create the first administrator for this instance.'}</p><form id="auth-form">${!initialized?field('Setup token','token','password','','required autocomplete="off"')+field('Your name','name','text','','required maxlength="100" autocomplete="name"'):''}${field('Username','username','text','','required autocomplete="username" maxlength="100"')}${field(initialized?'Account password':'Create an account password','password','password','','required minlength="12" maxlength="1024" autocomplete="'+(initialized?'current-password':'new-password')+'"')}${!initialized?'<p class="small muted">Use at least 12 characters. Your collection unlock passphrase is set separately.</p>':''}<div class="form-error" role="alert"></div><button class="btn primary full" type="submit">${initialized?'Sign in':'Create administrator'}</button></form><div class="separator">Just looking around?</div>${button('Explore the demo','demo','arrow','full')}<p class="auth-footer">Experimental release • Use test data only</p></div></main></div>`;
   bind();
@@ -219,6 +244,7 @@ function authScreen(initialized = true) {
   })
 }
 async function enter() {
+  applyTheme(state.user.appearance);
   if (new URLSearchParams(location.search).get('cli') === '1') return cliApprovalScreen();
   state.collections = await api('/v1/collections');
   state.collection = state.collections[0];
@@ -371,7 +397,7 @@ async function renderPage() {
     main.innerHTML = title('Less typing. More control.', 'Website-aware filling, with your permission.') + `<section class="panel readable"><div class="panel-header"><h2>Browser autofill</h2><span class="pill neutral">Extension not connected</span></div><p>The web app can copy credentials and generate website verification codes. Filling forms on another website requires the Petika Chromium or Firefox extension, which is not implemented yet.</p><div class="settings-row"><div><h3>Match the website</h3><p>Save the complete HTTPS address on each login. The planned extension will check the destination before suggesting credentials.</p></div>${icon('browser')}</div><div class="settings-row"><div><h3>Fill only when you choose</h3><p>Explicit selection will fill the username, password, or current one-time code without automatically submitting the form.</p></div>${icon('check')}</div><div class="settings-row"><div><h3>Website OTP</h3><p>Add a setup key or otpauth link to a login to get time-based codes now.</p></div>${button('Go to items','items','key')}</div></section>`;
   }
   if (state.view === 'settings') {
-    main.innerHTML = title('Settings', 'Manage protection, backups, and your preferences.') + securitySettings() + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Sign out','logout','logout')}`;
+    main.innerHTML = title('Settings', 'Manage protection, backups, and your preferences.') + securitySettings() + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Saved to your account. Select Light or Dark; select it again to follow your system.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Sign out','logout','logout')}`;
     form('#profile-form', async data => {
       state.user = state.demo ? {
         ...state.user,
