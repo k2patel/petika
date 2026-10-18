@@ -27,7 +27,9 @@ A content-cipher change requires a new authenticated envelope version and re-enc
 Initial candidate: AWS-LC through `aws-lc-rs` for native Rust. NIST lists the static
 AWS-LC 3 module under active FIPS 140-3 certificate 5314, with approved-mode and
 installation/configuration caveats. Upstream release notes associate the v1.17.x
-Rust wrapper with FIPS v3. This is a shortlist, not a dependency selection or proof
+Rust wrapper with FIPS v3. Follow-up runtime inspection found that our resolved module
+is 3.6.0, whereas this certificate policy names 3.1.0; see the spike evidence above.
+This is a shortlist, not a dependency selection or proof
 that a Petika binary uses the validated configuration.
 [NIST certificate 5314](https://csrc.nist.gov/projects/cryptographic-module-validation-program/certificate/5314),
 [upstream release notes](https://github.com/aws/aws-lc-rs/releases).

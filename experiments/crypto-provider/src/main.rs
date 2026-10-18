@@ -4,11 +4,39 @@ compile_error!("Select either non-fips or fips; use --no-default-features for fi
 
 use aws_lc_rs::aead::{AES_256_GCM, Aad, RandomizedNonceKey};
 
+#[cfg(feature = "fips")]
+mod evidence;
+
 fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    if !args.is_empty() {
+        if args.len() != 2 || args[0] != "--expect-module" {
+            eprintln!("usage: petika-crypto-provider-spike [--expect-module EXACT_VERSION]");
+            std::process::exit(2);
+        }
+        #[cfg(feature = "fips")]
+        {
+            let actual = evidence::module_version();
+            if actual != args[1] {
+                eprintln!(
+                    "module mismatch: expected {:?}, observed {:?}",
+                    args[1], actual
+                );
+                std::process::exit(2);
+            }
+        }
+        #[cfg(not(feature = "fips"))]
+        {
+            eprintln!("module expectation requires the FIPS-provider build");
+            std::process::exit(2);
+        }
+    }
     println!("Synthetic AES-256-GCM probe; no Petika/FIPS validation claim");
     println!("fips feature requested: {}", cfg!(feature = "fips"));
     #[cfg(feature = "fips")]
     aws_lc_rs::try_fips_mode().expect("requested FIPS provider must report FIPS mode");
+    #[cfg(feature = "fips")]
+    println!("runtime module: {}", evidence::module_version());
     let mut key_bytes = [0u8; 32];
     aws_lc_rs::rand::fill(&mut key_bytes).expect("provider randomness");
     let key = RandomizedNonceKey::new(&AES_256_GCM, &key_bytes).expect("AES-256-GCM key");
@@ -39,6 +67,22 @@ mod tests {
             .seal_in_place_append_tag(Aad::from(b"collection-A:epoch-1"), &mut encrypted)
             .unwrap();
         (key, *nonce.as_ref(), encrypted)
+    }
+
+    #[cfg(feature = "fips")]
+    #[test]
+    fn randomized_gcm_reports_approved_services() {
+        aws_lc_rs::try_fips_mode().unwrap();
+        let key = RandomizedNonceKey::new(&AES_256_GCM, &[42; 32]).unwrap();
+        let mut data = b"synthetic indicator check".to_vec();
+        let (sealed, approved) =
+            evidence::approved(|| key.seal_in_place_append_tag(Aad::from(b"context"), &mut data));
+        let nonce = sealed.unwrap();
+        assert!(approved, "encryption did not report approved service");
+        let (opened, approved) =
+            evidence::approved(|| key.open_in_place(nonce, Aad::from(b"context"), &mut data));
+        assert_eq!(opened.unwrap(), b"synthetic indicator check");
+        assert!(approved, "decryption did not report approved service");
     }
 
     #[test]

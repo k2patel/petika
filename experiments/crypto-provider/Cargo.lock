@@ -230,6 +230,7 @@ dependencies = [
 name = "petika-crypto-provider-spike"
 version = "0.0.0"
 dependencies = [
+ "aws-lc-fips-sys",
  "aws-lc-rs",
 ]
 

@@ -18,10 +18,21 @@ build on failure. Keep the lockfile and inspect the exact resolved module versio
 The explicit 1.17.0 wrapper pin is an experimental candidate, not a security update policy.
 
 The probe uses provider-generated randomness and the provider's randomized-nonce API.
+FIPS tests additionally observe per-operation service indicators using the same native
+module bindings. The runtime reports its actual module version; a strict diagnostic
+check is available (currently expected to exit 2 because the module is 3.6.0):
+
+```sh
+cargo run --manifest-path experiments/crypto-provider/Cargo.toml --locked \
+  --no-default-features --features fips -- --expect-module "AWS-LC FIPS 3.1.0"
+```
+
+This is a version comparison, not a certificate-verification command.
+
 Tests reject modified ciphertext, tags, nonce, context, wrong keys and truncated tags.
 They are integration checks, not a cryptographic audit or exhaustive algorithm vectors.
 The sample imports synthetic key bytes and does not prove approved key-generation,
-zeroization, service indicators or production multi-writer nonce policy.
+zeroization or production multi-writer nonce policy.
 
 See the [validation mapping](../../docs/research/aws-lc-provider-spike.md) for results
 and limits. A production profile additionally needs provider self-test/error handling,

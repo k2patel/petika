@@ -12,7 +12,10 @@ license = "MIT"
 [features]
 default = ["non-fips"]
 non-fips = ["aws-lc-rs/non-fips"]
-fips = ["aws-lc-rs/fips"]
+fips = ["aws-lc-rs/fips", "dep:aws-lc-fips-sys"]
 
 [dependencies]
 aws-lc-rs = { version = "=1.17.0", default-features = false, features = ["alloc", "prebuilt-nasm"] }
+
+# Same generated bindings/module as aws-lc-rs, for diagnostic service indicators only.
+aws-lc-fips-sys = { version = "=0.13.17", optional = true }
