@@ -287,3 +287,52 @@ lifecycle. Start SEC-08 FIPS feasibility alongside this work. Recovery-authority
 new encryption-format changes require their own reviewed decision records before
 implementation. This planning change itself does not change encryption formats,
 production credentials, authentication requirements or running deployments.
+
+## Open research: multiple device keys and biometric unlock
+
+Recorded 2026-10-18 for the next research session. Status: unanswered design questions;
+not an accepted protocol or implemented feature. Related controls: SEC-04–09.
+
+Can each authorized device have its own client-side key and use Face ID, Touch ID,
+Android biometrics or another local authenticator to unlock the same encrypted vault?
+The working hypothesis is yes: protect a separate device key locally, then use it to
+unwrap that device's authorized vault-key package. Biometrics would authorize key
+use, rather than supply reproducible encryption-key bytes. The vault data key could
+remain shared among authorized devices while each device has a distinct protected
+access path. This needs review against Petika's existing per-user identity model.
+
+Initial primary sources for continued research:
+
+- [Apple biometric key access](https://support.apple.com/guide/security/uses-for-optic-id-face-id-and-touch-id-secc5227ff3c/web)
+  describes biometric-gated Keychain access and Secure Enclave key operations.
+- [Android Keystore](https://developer.android.com/privacy-and-security/keystore)
+  and [biometric cryptographic operations](https://developer.android.com/identity/sign-in/biometric-auth)
+  describe non-exportable keys, hardware protection and authentication-bound use.
+- [W3C WebAuthn PRF explainer](https://github.com/w3c/webauthn/blob/main/explainers/prf-extension.md)
+  describes credential-associated secrets usable for encryption. Ordinary WebAuthn
+  authentication signatures are not a vault-decryption mechanism.
+
+Research TODOs:
+
+- [ ] Compare per-device vault-key wrapping with protecting the existing shared
+  user identity. Identify what must change to support meaningful device revocation.
+- [ ] Specify new-device enrollment approved by an existing trusted client or
+  explicit recovery authority, with verified key binding and substitution defenses.
+- [ ] Compare native Secure Enclave/Android Keystore/Windows hardware-backed options
+  with browser WebAuthn PRF. Verify actual platform, browser and authenticator support;
+  distinguish device-bound credentials from synced passkeys.
+- [ ] Define biometric/PIN fallback, biometric enrollment changes, hardware loss,
+  offline unlock, lock timeout and sensitive-operation reauthentication. A successful
+  biometric dialog must be cryptographically bound to protected key use.
+- [ ] Identify which keys remain in secure hardware and which secrets/plaintext enter
+  application memory. Preserve the malicious-browser-code limitation; biometric
+  gating does not make an already unlocked or compromised client safe.
+- [ ] Specify lost-device revocation and rotation of future vault-key epochs. Removing
+  a device from the server cannot erase its copied keys, plaintext or old ciphertext.
+- [ ] Design recovery when all devices are lost without introducing a universal
+  server-held decryption key. Test backup restoration onto replacement hardware.
+- [ ] Assess compatibility with Standard and experimental Hybrid suites, supported
+  hardware algorithms and the FIPS feasibility track; biometric support alone proves
+  neither post-quantum protection nor an authentication assurance level.
+- [ ] Produce a platform capability matrix, reviewed key-flow diagram, threat analysis
+  and proposed decision record before implementing or changing the encryption UI.
