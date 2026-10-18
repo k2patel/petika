@@ -92,7 +92,10 @@ confirmation code to finish enabling MFA. Code generation/copy exists today.
 
 The [Chromium toolbar preview](../clients/extension/README.md) now fills matching
 logins and TOTP codes with explicit actions, live permissions/session checks, and
-document-bound injection. Inline suggestions, QR capture, broader field support and
+document-bound injection. Its generator saves a separate encrypted login before
+explicitly filling new-password fields, preserving the existing login and using
+revision guards to reject concurrent writes. It uses the same shared `app.css`.
+Inline suggestions, QR capture, broader field support and
 other browser platforms remain open. The full target experience remains:
 - Offer generated passwords at signup/change-password fields; explicitly save or update the login.
 - Capture a TOTP QR code or setup key with consent and confirm on the website.

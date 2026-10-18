@@ -51,11 +51,11 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
                 if r.request.url.startswith(API):
                     # Preserve extension Fetch Metadata/Origin: this also checks the
                     # existing API's CSRF handling of privileged extension fetches.
-                    headers={k:v for k,v in r.request.headers.items() if k.lower() in ['authorization','content-type','x-petika-request','sec-fetch-site','origin']}
+                    headers={k:v for k,v in r.request.headers.items() if k.lower() in ['authorization','content-type','x-petika-request','sec-fetch-site','origin','if-match']}
                     req=urllib.request.Request(base+r.request.url[len(API):], data=r.request.post_data_buffer,headers=headers,method=r.request.method)
                     try: res=urllib.request.urlopen(req,timeout=10)
                     except urllib.error.HTTPError as e: res=e
-                    return r.fulfill(status=res.status,body=res.read(),headers={'Content-Type':res.headers.get('Content-Type','application/json')})
+                    return r.fulfill(status=res.status,body=res.read(),headers={'Content-Type':res.headers.get('Content-Type','application/json'),**({'ETag':res.headers['ETag']} if res.headers.get('ETag') else {})})
                 if r.request.url.startswith(ORIGIN):
                     return r.fulfill(content_type='text/html',body='<html><body><form><input name="username" autocomplete="username"><input name="password" type="password" autocomplete="current-password"><input name="otp" autocomplete="one-time-code"><button type="submit">Sign in</button></form></body></html>')
                 r.continue_()
@@ -85,7 +85,7 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             popup.locator('#passphrase').fill('synthetic collection password')
             target.bring_to_front()
             popup.evaluate("document.querySelector('#unlock').requestSubmit()")
-            expect(popup.get_by_role('button',name='Fill login',exact=True)).to_be_visible(timeout=30000)
+            expect(popup.get_by_role('button',name='Fill login',exact=True).first).to_be_visible(timeout=30000)
             (ROOT/'output/extension-qa').mkdir(parents=True,exist_ok=True)
             popup.screenshot(path=str(ROOT/'output/extension-qa/popup.png'))
             popup.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Fill login').click()")
@@ -96,6 +96,85 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             popup.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Fill code').click()")
             expect(target.locator('[name=otp]')).to_have_value(__import__('re').compile(r'^\d{6}$'))
             assert target.url==ORIGIN+'/'
+            # Save before filling, preserve the old login, and reject stale writes.
+            target.set_content('<form><input name="password" type="password" autocomplete="current-password"><input name="new" type="password" autocomplete="new-password"><input name="confirm" type="password" autocomplete="new-password"></form>')
+            popup.evaluate("document.querySelector('#generate').click()")
+            expect(popup.locator('#generator')).to_be_visible()
+            expect(popup.locator('#regenerate')).to_be_enabled()
+            popup.locator('#generated-name').fill('Generated QA login')
+            popup.locator('#generated-username').fill('new-user')
+            generated=popup.locator('#generated-password').input_value()
+            assert len(generated)==24
+            popup.screenshot(path=str(ROOT/'output/extension-qa/generator.png'))
+            target.bring_to_front()
+            popup.evaluate("document.querySelector('#generator').requestSubmit()")
+            expect(popup.locator('#message')).to_contain_text('Encrypted login saved',timeout=30000)
+            expect(target.locator('[name=new]')).to_have_value('')
+            saved_response=api(f'/v1/collections/{user["id"]}/snapshot',cookie=cookie)
+            saved_revision=saved_response.headers['ETag']; saved_snapshot=saved_response.read().decode()
+            assert generated not in saved_snapshot
+            entries=popup.evaluate('''async snapshot => {
+                const w=new Worker('./worker.js',{type:'module'}); let id=0;
+                const call=(action,...args)=>new Promise((resolve,reject)=>{w.onmessage=({data})=>data.error?reject(Error(data.error)):resolve(data.value);w.postMessage({id:++id,action,args});});
+                await call('open',snapshot,'synthetic collection password');
+                const old=await call('get','QA login'), added=await call('get','Generated QA login');
+                w.terminate(); return {old,added};
+            }''',saved_snapshot)
+            assert entries['old']['password']=='synthetic vault password'
+            assert entries['added']['password']==generated
+            popup.evaluate("[...document.querySelectorAll('.match')].find(el=>el.querySelector('h3').textContent==='Generated QA login').querySelectorAll('button')[1].click()")
+            expect(target.locator('[name=new]')).to_have_value(generated)
+            expect(target.locator('[name=confirm]')).to_have_value(generated)
+            expect(target.locator('[name=password]')).to_have_value('')
+            # An independent writer advances the revision before this popup saves.
+            api(f'/v1/collections/{user["id"]}/snapshot',saved_snapshot,cookie,method='PUT',extra={'If-Match':saved_revision}).close()
+            popup.evaluate("document.querySelector('#generate').click()")
+            expect(popup.locator('#generator')).to_be_visible()
+            expect(popup.locator('#regenerate')).to_be_enabled()
+            popup.locator('#generated-name').fill('Conflicting login')
+            target.bring_to_front()
+            popup.evaluate("document.querySelector('#generator').requestSubmit()")
+            expect(popup.locator('#message')).to_contain_text('changed on another device',timeout=30000)
+            expect(popup.locator('#message')).to_contain_text('Nothing was filled')
+            expect(popup.locator('#matches')).not_to_contain_text('Conflicting login')
+            assert api(f'/v1/collections/{user["id"]}/snapshot',cookie=cookie).read().decode()==saved_snapshot
+            expect(target.locator('[name=new]')).to_have_value(generated)
+            # Exercise the recipient-aware group save route with a real migrated vault.
+            group=json.load(api('/v1/admin/groups',{'name':'Extension group','members':[{'user_id':user['id'],'edit':True}]},cookie))
+            api(f'/v1/collections/{group["id"]}/snapshot',snapshot,cookie,method='PUT',extra={'If-Match':'"0"'}).close()
+            session_file=work/'cli-session.json'
+            session_file.write_text(json.dumps({'version':1,'server':base,'token':popup.evaluate('chrome.storage.session.get("token")')['token']}))
+            session_file.chmod(0o600)
+            def cli(arguments, lines):
+                result=subprocess.run([str(ROOT/'target/debug/petika'),'--session-file',str(session_file),'--identity-file',str(work/'identity.json'),'--passphrase-stdin',*arguments],input='\n'.join(lines)+'\n',text=True,capture_output=True,timeout=60)
+                assert result.returncode==0,result.stderr
+            cli(['keys','enroll'],['synthetic identity password','synthetic identity password','synthetic account password'])
+            cli(['keys','migrate','--collection',group['id']],['synthetic identity password','synthetic collection password','synthetic collection password','synthetic collection password'])
+            popup.reload()
+            expect(popup.locator('#unlock')).to_be_visible()
+            popup.locator('#collection').select_option(group['id'])
+            popup.locator('#passphrase').fill('synthetic collection password')
+            target.bring_to_front()
+            popup.evaluate("document.querySelector('#unlock').requestSubmit()")
+            expect(popup.locator('#generate')).to_be_visible(timeout=30000)
+            popup.evaluate("document.querySelector('#generate').click()")
+            expect(popup.locator('#generator')).to_be_visible()
+            expect(popup.locator('#regenerate')).to_be_enabled()
+            popup.locator('#generated-name').fill('Group generated login')
+            target.bring_to_front()
+            popup.evaluate("document.querySelector('#generator').requestSubmit()")
+            expect(popup.locator('#message')).to_contain_text('Encrypted login saved',timeout=30000)
+            group_snapshot=json.load(api(f'/v1/collections/{group["id"]}/snapshot',cookie=cookie))
+            assert group_snapshot['version']==2
+            # Changing this membership to read-only blocks writes in an unlocked popup.
+            api('/v1/admin/groups',{'id':group['id'],'name':group['name'],'members':[{'user_id':user['id'],'edit':False}]},cookie).close()
+            popup.evaluate("document.querySelector('#generate').click()")
+            expect(popup.locator('#generator')).to_be_visible()
+            expect(popup.locator('#regenerate')).to_be_enabled()
+            target.bring_to_front()
+            popup.evaluate("document.querySelector('#generator').requestSubmit()")
+            expect(popup.locator('#message')).to_contain_text('read-only')
+            popup.evaluate("document.querySelector('#cancel-generation').click()")
             # Revoked permissions stop later fills even with an already-unlocked vault.
             target.locator('[name=password]').fill('')
             api('/v1/auth/websites',{'origin':ORIGIN,'allow':False},cookie).close()
@@ -113,7 +192,8 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             popup.locator('#passphrase').fill('synthetic collection password')
             target.bring_to_front()
             popup.evaluate("document.querySelector('#unlock').requestSubmit()")
-            expect(popup.get_by_role('button',name='Fill login',exact=True)).to_be_visible(timeout=30000)
+            expect(popup.get_by_role('button',name='Fill login',exact=True).first).to_be_visible(timeout=30000)
+            expect(popup.locator('#generate')).to_be_hidden()  # Read-only after re-unlock.
             clients=json.load(api('/v1/auth/clients',cookie=cookie))['clients']
             client=next(c for c in clients if c['kind']=='CLI')
             api('/v1/auth/clients/revoke',{'id':client['id']},cookie).close()
@@ -138,6 +218,15 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
                 target.set_content(markup)
                 assert 'error' in fill_dom(),markup
                 assert target.locator('input').evaluate_all('(els)=>els.every(el=>el.value.length===0)')
+            for markup in [
+                '<input type="password" autocomplete="current-password">',
+                '<input type="password" autocomplete="new-password"><input type="password" autocomplete="new-password">',
+                '<form action="https://evil.test"><input type="password" autocomplete="new-password"></form>',
+                '<form><input type="password" autocomplete="new-password"><input type="password" autocomplete="new-password" maxlength="2"></form>',
+            ]:
+                target.set_content(markup)
+                assert 'error' in fill_dom('new-password'),markup
+                assert target.locator('input').evaluate_all('(els)=>els.every(el=>el.value.length===0)')
             target.set_content('<input autocomplete="one-time-code" maxlength="1"><input autocomplete="one-time-code" maxlength="1">')
             assert 'error' in fill_dom('otp')  # Split codes are not yet supported.
             target.set_content('<input autocomplete="one-time-code">')
@@ -158,6 +247,6 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             assert popup.evaluate('chrome.storage.session.get(null)')=={}
             assert not errors,errors
             context.close()
-        print('Extension pairing, packaged WASM unlock, login/TOTP fill, permission revocation, document binding and storage checks passed.')
+        print('Extension pairing, encrypted generation/save, concurrent-write rejection, login/new-password/TOTP fill, permission revocation, document binding and storage checks passed.')
     finally:
         server.terminate();server.wait(timeout=10)

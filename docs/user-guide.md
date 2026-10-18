@@ -115,6 +115,24 @@ again. The preview does not support inline suggestions, QR capture, split code
 boxes, username-only steps, or forms inside frames/shadow DOM; copy from the web
 app when a form is unsupported.
 
+### Generate a password in the extension
+
+1. On the allowed signup or password-change page, open Petika and unlock a writable
+   collection. Choose **Generate a password**.
+2. Enter a login name and username. Keep the suggested 24-character password or
+   choose another length and **Generate another**.
+3. Choose **Save encrypted login** and wait for confirmation. This creates a new
+   login; your previous password remains in its existing entry.
+4. Choose **Fill new password** on the new login. Petika fills explicit new-password
+   and confirmation fields in the same form, leaving current-password fields alone.
+   Enter the username separately and complete the website form yourself.
+5. Verify the new password works before removing any obsolete entry in Petika.
+
+If the website's fields are unsupported, copy from the saved item in the web app.
+Closing the popup discards an unsaved suggestion. If a save conflicts or its result
+is uncertain, reopen and check the collection before retrying. Never assume a
+password was changed on the website merely because it was saved in Petika.
+
 ### Update or remove the extension
 
 For an update, get the new prepared package from your administrator, replace the

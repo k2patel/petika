@@ -94,6 +94,8 @@ parallel. Feature backlog items remain open but do not replace these security ga
 
 - [x] Experimental Chromium toolbar login/TOTP filling with local WASM and per-fill
   origin, permission, session and document checks ([preview](../clients/extension/README.md)).
+- [x] Chromium toolbar password generation, encrypted save before explicit new-password
+  filling, existing-login preservation and concurrent-write protection.
 - [ ] Chromium/Firefox release extensions with inline password suggestions, broader login/TOTP filling,
   QR capture, and enforced exact-origin website permissions (see [UX requirements](settings-experience.md#password-and-totp-browser-experience)).
 - [x] In-vault password suggestions, account-scoped active-client listing/revocation,

@@ -39,6 +39,11 @@ export function fillPage(expectedOrigin, kind, values, expiresAt) {
   if (kind === 'otp') {
     if (!/^\d{6}(\d{2})?$/.test(values.code)) throw new Error('Invalid verification code.');
     pairs = [[unique(inputs.filter(el => ['text','tel','number','password'].includes(el.type) && otp(el))), values.code]];
+  } else if (kind === 'new-password') {
+    const fields = inputs.filter(el => el.type === 'password' && el.autocomplete === 'new-password' && !otp(el));
+    if (fields.length < 1 || fields.length > 2 || (fields.length === 2 && (!fields[0].form || fields[0].form !== fields[1].form))) throw new Error('No unambiguous new-password form found. Use copy from Petika instead.');
+    if (typeof values.password !== 'string' || !values.password) throw new Error('No saved password to fill.');
+    pairs = fields.map(el => [el, values.password]);
   } else if (kind === 'login') {
     const password = unique(inputs.filter(el => el.type === 'password' && !otp(el) && el.autocomplete !== 'new-password'));
     const users = inputs.filter(el => ['email','text'].includes(el.type) && !otp(el) && (el.autocomplete === 'username' || el.type === 'email' || /^(user(name)?|email|login)$/i.test(el.name || el.id)));

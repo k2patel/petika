@@ -2,16 +2,20 @@ import {authorizeFill, httpsOrigin, fillPage} from './fill.mjs';
 const $ = id => document.getElementById(id);
 const {endpoint} = await (await fetch('./config.json')).json();
 let token, worker, sequence = 0, collection, target, unlocked = false, timer;
+let collections = [], snapshotRevision = 0, accessState = null, editable = false, saveBlocked = false, generation = 0;
 const pending = new Map();
 const message = text => { $('message').textContent = text; };
-async function request(path, body, raw = false) {
+async function request(path, body, raw = false, method, headers = {}) {
   const response = await fetch(endpoint + path, {
-    method:body === undefined ? 'GET' : 'POST', credentials:'omit', cache:'no-store', redirect:'error',
-    headers:{'Content-Type':'application/json','X-Petika-Request':'1',...(token ? {Authorization:`Bearer ${token}`} : {})},
-    body:body === undefined ? undefined : JSON.stringify(body), signal:AbortSignal.timeout(15000)
+    method:method || (body === undefined ? 'GET' : 'POST'), credentials:'omit', cache:'no-store', redirect:'error',
+    headers:{'Content-Type':'application/json','X-Petika-Request':'1',...(token ? {Authorization:`Bearer ${token}`} : {}),...headers},
+    body:body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body), signal:AbortSignal.timeout(15000)
   });
-  if (!response.ok) throw new Error(`Petika request failed (${response.status}). Check your connection and account session.`);
-  return raw ? response.text() : response.json();
+  if (!response.ok) {
+    const error = new Error(response.status === 409 ? 'This collection changed on another device. Reopen and unlock before saving again.' : `Petika request failed (${response.status}). Check your connection and account session.`);
+    error.status = response.status; throw error;
+  }
+  return raw === 'response' ? response : raw ? response.text() : response.json();
 }
 function rpc(action, ...args) {
   if (!worker) {
@@ -29,6 +33,8 @@ function rpc(action, ...args) {
   });
 }
 function lock() {
+  generation++; snapshotRevision = 0; accessState = null; editable = false; saveBlocked = false;
+  clearGenerator(); $('generate').hidden = true;
   worker?.terminate(); worker = null; unlocked = false; clearTimeout(timer);
   for (const p of pending.values()) p.reject(new Error('Vault locked.'));
   pending.clear(); $('passphrase').value = ''; $('matches').replaceChildren();
@@ -42,7 +48,7 @@ async function showAccount() {
     $('connect').hidden = false; $('disconnect').hidden = true;
     throw new Error('Session ended. Connect to Petika again.');
   }
-  const collections = await request('/v1/collections');
+  collections = await request('/v1/collections');
   $('collection').replaceChildren(...collections.map(c => new Option(c.name,c.id)));
   $('connect').hidden = true; $('unlock').hidden = false; $('disconnect').hidden = false;
   message(`Signed in as ${status.user.username}. Unlock to find matching logins.`);
@@ -80,7 +86,7 @@ async function fill(name, kind) {
   try {
     const results = await chrome.scripting.executeScript({target:{tabId:target.tabId,documentIds:[target.documentId]},world:'ISOLATED',func:fillPage,args:[current.origin,kind,values,expiresAt]});
     if (!results[0]?.result?.filled) throw new Error('No field was filled. Use copy from the Petika web app.');
-    message(kind === 'otp' ? 'Verification code filled. Submit when ready.' : 'Login filled. Submit when ready.');
+    message(kind === 'otp' ? 'Verification code filled. Submit when ready.' : kind === 'new-password' ? 'Saved password filled into the new-password fields. Complete the website change yourself.' : 'Login filled. Submit when ready.');
     touch();
   } finally { values = null; entry.password = ''; }
 }
@@ -113,27 +119,36 @@ $('unlock').onsubmit = run(async () => {
   target = await capturedDocument(); $('site').textContent = target.origin; collection = $('collection').value;
   const {origins} = await request('/v1/auth/websites');
   if (!origins.includes(target.origin)) throw new Error('Allow this website under Browser autofill → Manage websites in Petika.');
-  const snapshot = await request(`/v1/collections/${collection}/snapshot`,undefined,true);
+  const response = await request(`/v1/collections/${collection}/snapshot`,undefined,'response');
+  snapshotRevision = readRevision(response.headers.get('ETag'));
+  const snapshot = await response.text();
+  accessState = JSON.parse(snapshot).version === 2 ? await request(`/v1/collections/${collection}/key-access`) : null;
+  if (accessState && accessState.snapshot_revision !== snapshotRevision) throw new Error('Collection changed while unlocking. Try again.');
+  collections = await request('/v1/collections');
+  editable = Boolean(collections.find(c => c.id === collection)?.edit);
   // Passphrase is read below by the form handler before lock clears it.
   await rpc('open',snapshot,unlockPassphrase);
   unlockPassphrase = ''; unlocked = true; touch();
+  await renderMatches(origins);
+  $('unlock').hidden=true; $('vault').hidden=false;
+});
+async function renderMatches(origins) {
   const rows = await rpc('list');
   $('matches').replaceChildren(); let count = 0;
   for (const row of rows) {
-    const entry = row;
-    try { authorizeFill(target.origin,entry.url,origins); } catch { continue; }
+    try { authorizeFill(target.origin,row.url,origins); } catch { continue; }
     const section = document.createElement('div'); section.className = 'match';
     const title = document.createElement('h3'); title.textContent = row.name; section.append(title);
     const actions = document.createElement('div'); actions.className = 'actions';
-    for (const [label,kind] of [['Fill login','login'],...(entry.otp ? [['Fill code','otp']] : [])]) {
+    for (const [label,kind] of [['Fill login','login'],['Fill new password','new-password'],...(row.otp ? [['Fill code','otp']] : [])]) {
       const button = document.createElement('button'); button.type='button'; button.className='btn'; button.textContent=label;
       button.onclick=run(() => fill(row.name,kind)); actions.append(button);
     }
-    entry.password = ''; section.append(actions); $('matches').append(section); count++;
+    section.append(actions); $('matches').append(section); count++;
   }
-  $('unlock').hidden=true; $('vault').hidden=false;
-  message(count ? 'Choose what to fill. Petika will not submit the form.' : 'No matching logins. Add one with this exact website in Petika.');
-});
+  $('generate').hidden = !editable || saveBlocked;
+  message(count ? 'Choose what to fill. Petika will not submit the form.' : editable ? 'No matching logins. Generate and save one here, or add one in the web app.' : 'No matching logins in this read-only collection.');
+}
 // Capture before lock() clears the input; clear on both success and failure.
 let unlockPassphrase = '';
 const unlockHandler = $('unlock').onsubmit;
@@ -156,3 +171,82 @@ try {
   try { $('site').textContent=httpsOrigin(tab.url); } catch { $('site').textContent='Open the toolbar popup on an HTTPS website.'; }
   if (token) await showAccount();
 } catch(e) { message(e.message); }
+
+function readRevision(value) {
+  if (!/^"[0-9]+"$/.test(value || '')) throw new Error('Missing collection revision. Reopen and unlock.');
+  const revision = Number(value.slice(1,-1));
+  if (!Number.isSafeInteger(revision)) throw new Error('Invalid collection revision.');
+  return revision;
+}
+function clearGenerator() {
+  $('generator').reset(); $('generator').hidden = true; $('matches').hidden = false;
+  $('generated-password').value = '';
+  $('generate').hidden = !unlocked || !editable || saveBlocked;
+}
+async function generatePassword() {
+  if (!unlocked || !editable || saveBlocked) throw new Error('Unlock a writable collection first.');
+  const activeGeneration = generation;
+  const password = await rpc('generate', Number($('generated-length').value));
+  if (activeGeneration !== generation || !unlocked) throw new Error('Vault locked.');
+  $('generated-password').value = password; touch();
+}
+$('generate').onclick = run(async () => {
+  clearGenerator();
+  $('generated-name').value = `${new URL(target.origin).hostname.slice(0,180)} ${new Date().toISOString()}`;
+  await generatePassword(); $('generator').hidden = false; $('matches').hidden = true; $('generate').hidden = true;
+  message('Generate a password, then save the encrypted login before filling.');
+});
+$('regenerate').onclick = run(generatePassword);
+$('generated-length').onchange = run(generatePassword);
+$('cancel-generation').onclick = clearGenerator;
+$('generator').onsubmit = run(async () => {
+  if (!unlocked || !editable || saveBlocked) throw new Error('Reopen and unlock a writable collection first.');
+  const activeGeneration = generation;
+  const current = await capturedDocument();
+  if (current.tabId !== target.tabId || current.documentId !== target.documentId || current.origin !== target.origin) throw new Error('Website changed. Reopen Petika.');
+  const status = await request('/v1/auth/status');
+  if (!status.user) { lock(); throw new Error('Account session revoked.'); }
+  const permissions = await request('/v1/collections');
+  if (!permissions.find(c => c.id === collection)?.edit) throw new Error('This collection is read-only.');
+  const {origins} = await request('/v1/auth/websites');
+  authorizeFill(current.origin,current.origin,origins);
+  const name = $('generated-name').value.trim();
+  if (!name || !$('generated-password').value) throw new Error('Enter a login name and generate a password.');
+  // Never replace an existing login; retain the old password during website changes.
+  if ((await rpc('list')).some(row => row.name === name)) throw new Error('That login name already exists. Choose a new name to preserve it.');
+  const revision = snapshotRevision;
+  const guard = accessState;
+  const entry = {username:$('generated-username').value,password:$('generated-password').value,url:current.origin,notes:'Generated by Petika. Complete signup or the password change on the website.',otp:null};
+  let staged = false, saved = false;
+  try {
+    if (activeGeneration !== generation || !unlocked) throw new Error('Vault locked.');
+    await rpc('put',name,entry,false); staged = true;
+    const encrypted = await rpc('seal');
+    if (activeGeneration !== generation || !unlocked) throw new Error('Vault locked.');
+    if (guard) {
+      const result = await request(`/v1/collections/${collection}/recipient-snapshot`,{
+        expected_snapshot_revision:revision,expected_key_epoch:guard.key_epoch,
+        expected_membership_generation:guard.membership_generation,packages:[],encrypted_snapshot:encrypted
+      });
+      if (!Number.isSafeInteger(result.snapshot_revision) || result.snapshot_revision !== revision+1) throw new Error('Save acknowledgement was invalid. Reopen to check the server copy.');
+      snapshotRevision = result.snapshot_revision;
+    } else {
+      const response = await request(`/v1/collections/${collection}/snapshot`,encrypted,'response','PUT',{'If-Match':`"${revision}"`});
+      const next = readRevision(response.headers.get('ETag'));
+      if (next !== revision+1) throw new Error('Save acknowledgement was invalid. Reopen to check the server copy.');
+      snapshotRevision = next;
+    }
+    saved = true;
+    if (activeGeneration !== generation || !unlocked) throw new Error('Saved encrypted login. Reopen and unlock to fill it.');
+    clearGenerator(); await renderMatches(origins); touch();
+    message('Encrypted login saved. Choose Fill new password to use it on the website. Your previous login is unchanged.');
+  } catch (error) {
+    if (staged && !saved && activeGeneration === generation && unlocked) {
+      saveBlocked = true; $('generate').hidden = true;
+      try { await rpc('remove',name); } catch { lock(); }
+      // A network failure may happen after server acceptance. Never fill an unconfirmed draft.
+      error.message += ' Nothing was filled. Reopen and check the server before trying again; the save may have reached it.';
+    }
+    throw error;
+  } finally { entry.password = ''; }
+});

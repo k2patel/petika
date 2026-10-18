@@ -45,6 +45,24 @@ TOTP setup still happens in the web app: enter the website's Base32 setup key or
 `otpauth://totp/` link into the login item, then confirm MFA on the website using a
 generated code. The preview never enables website MFA by itself.
 
+## Generate a password for signup or a password change
+
+On an allowed HTTPS website, unlock a writable collection and choose **Generate a
+password**. Enter a login name and username, choose a length (24 characters by
+default), and select **Save encrypted login**. After confirmation, choose **Fill new
+password** on the saved login. Only visible fields explicitly marked
+`autocomplete="new-password"` are supported, including a confirmation field in the
+same form. Current-password fields are left intact; enter the username separately.
+The extension never submits the website form.
+
+The suggestion is generated locally using the existing Rust/WASM generator. Saving
+creates a separate encrypted login and preserves existing entries. Complete the
+website change, verify the new login works, then remove obsolete entries in Petika.
+Closing the popup before saving discards the suggestion. Concurrent changes or an
+uncertain save acknowledgement block further saves until reopening: check the server
+copy before retrying. Read-only collections cannot save new logins. Version-2 group
+saves retain the existing key epoch and check membership and snapshot revisions.
+
 ## Boundaries
 
 - Host permission is scoped to the configured Petika server. Website access uses
@@ -70,7 +88,7 @@ generated code. The preview never enables website MFA by itself.
 
 ## Not implemented
 
-Inline website suggestions, signup password generation/save from the extension,
+Inline website suggestions, updating an existing login from the extension,
 QR capture, Firefox/Safari packaging, split OTP fields, username-only login steps,
 iframe/shadow-DOM forms, device-key unlocking, native biometrics, narrowly scoped
 extension credentials, browser-store publishing, and independent security review.
