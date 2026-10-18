@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Petika</title><link rel="stylesheet" href="app.css"><script type="module" src="popup.mjs"></script></head>
+<body class="extension-popup"><main class="panel"><h1>Petika</h1><p id="site" class="website-origin"></p><p id="message" role="status" aria-live="polite"></p>
+<section id="connect"><p>Connect using a code you approve in Petika. The initial extension uses Petika’s CLI approval flow.</p><button class="btn primary" id="start">Connect to Petika</button><div id="approval" hidden><p>Your approval code: <strong id="code"></strong></p><button class="btn" id="approve">Open approval page</button><button class="btn primary" id="finish">Finish connecting</button></div></section>
+<form id="unlock" hidden><div class="field"><label for="collection">Collection</label><select id="collection"></select></div><div class="field"><label for="passphrase">Collection passphrase</label><input id="passphrase" type="password" required autocomplete="off"></div><button class="btn primary" type="submit">Unlock locally</button><p class="small muted">Closing this popup locks the vault. Keys and passphrases are never stored.</p></form>
+<section id="vault" hidden><div id="matches"></div><div class="actions"><button class="btn" id="lock">Lock</button></div></section>
+<div class="actions"><button class="btn ghost" id="open">Open Petika</button><button class="btn ghost" id="disconnect" hidden>Disconnect</button></div>
+<p class="small muted">Experimental Chromium preview. Fill only when you choose. Forms are never submitted automatically.</p></main></body></html>

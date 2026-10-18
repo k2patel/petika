@@ -6,7 +6,9 @@ See the [web UI guide](../docs/web-ui.md) for features, build steps, and limitat
 The native CLI lives in `crates/petika-cli` and supports offline storage and managed
 account synchronization.
 
-Chromium/Firefox extensions and iOS/Android apps are not implemented. The desktop
+An experimental [Chromium toolbar extension](extension/README.md) supports explicit
+login and TOTP filling with local WASM decryption. Firefox and iOS/Android clients
+are not implemented. The desktop
 integration crate is a placeholder for native messaging and OS authentication.
 
 Planned clients should reuse the Rust core and native platform bindings for autofill

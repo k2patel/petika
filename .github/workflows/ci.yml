@@ -105,6 +105,8 @@ jobs:
           sh scripts/build_web.sh
       - name: OTP reference vectors
         run: node scripts/test_otp.mjs
+      - name: Extension origin policy
+        run: node scripts/test_extension_policy.mjs
       - name: Backup integrity and clean-directory recovery
         run: |
           python3 scripts/test_backup_recovery.py
@@ -128,6 +130,8 @@ jobs:
           /tmp/petika-browser-tests/bin/playwright install --with-deps chromium
       - name: Browser workflows and permissions
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
+      - name: Chromium extension approval and autofill
+        run: /tmp/petika-browser-tests/bin/python scripts/test_extension.py
       - name: Backup Settings workflows
         run: /tmp/petika-browser-tests/bin/python scripts/test_backup_settings.py
       - name: HTTP demo without secure-context-only APIs

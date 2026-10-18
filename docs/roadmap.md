@@ -92,10 +92,12 @@ parallel. Feature backlog items remain open but do not replace these security ga
 
 ## Remaining backlog
 
-- [ ] Chromium/Firefox extensions with inline password suggestions, explicit login/TOTP filling,
+- [x] Experimental Chromium toolbar login/TOTP filling with local WASM and per-fill
+  origin, permission, session and document checks ([preview](../clients/extension/README.md)).
+- [ ] Chromium/Firefox release extensions with inline password suggestions, broader login/TOTP filling,
   QR capture, and enforced exact-origin website permissions (see [UX requirements](settings-experience.md#password-and-totp-browser-experience)).
 - [x] In-vault password suggestions, account-scoped active-client listing/revocation,
-  and preparatory website-permission management. Extension enforcement remains unavailable.
+  and website-permission management, enforced by the Chromium preview before filling.
 - [ ] iOS/Android apps, desktop native messaging, and configurable biometric unlock.
 - [ ] Full GPG key creation/export/expiry/revocation UI.
 - [ ] OTP QR scanning.

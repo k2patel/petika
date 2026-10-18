@@ -90,7 +90,10 @@ retain it. Existing passwords are never automatically replaced. TOTP setup accep
 a setup key or otpauth URI, encrypted in the login item; the website still needs a
 confirmation code to finish enabling MFA. Code generation/copy exists today.
 
-The browser-extension work remains open:
+The [Chromium toolbar preview](../clients/extension/README.md) now fills matching
+logins and TOTP codes with explicit actions, live permissions/session checks, and
+document-bound injection. Inline suggestions, QR capture, broader field support and
+other browser platforms remain open. The full target experience remains:
 - Offer generated passwords at signup/change-password fields; explicitly save or update the login.
 - Capture a TOTP QR code or setup key with consent and confirm on the website.
 - Offer “Fill verification code” for the selected matching login, including a multi-step sign-in.
@@ -108,6 +111,7 @@ under Off-site backups. Revocation stops new server requests, not use of copied 
 
 Browser autofill → Allowed websites stores an account-scoped list of exact HTTPS
 origins (including port); there is no wildcard or inherited subdomain permission.
-The list is server-readable configuration, not encrypted vault metadata. The API
-reports `enforced: false` and the UI explicitly says no extension currently enforces
-these permissions. Saving a permission does not enable autofill.
+The list is server-readable configuration, not encrypted vault metadata. The Chromium preview checks this list before each fill. The API
+reports `enforced: false` because the server cannot enforce browser-side behavior;
+a modified client with decrypted vault access can ignore it. Saving a permission
+does not install or connect an extension.

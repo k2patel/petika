@@ -1,0 +1,38 @@
+{
+  "date": "2026-10-18",
+  "status": "local Chromium preview; not browser-store published or independently reviewed",
+  "local_checks": {
+    "origin_policy": "passed",
+    "packaged_extension_integration": "passed",
+    "coverage": [
+      "approved client connection using the existing CLI protocol",
+      "packaged Rust/WASM collection unlock",
+      "explicit username/password and fresh TOTP filling",
+      "website permission and account client revocation",
+      "document navigation binding",
+      "hidden, offscreen, covered, read-only and ambiguous field rejection",
+      "cross-origin form and iframe rejection",
+      "expired fill request rejection",
+      "server-bound session storage without persisted vault keys or passphrases"
+    ],
+    "test_limitations": [
+      "synthetic HTTPS routes forward to a disposable local API",
+      "test-only target host permission substitutes for a manual toolbar gesture",
+      "real-site compatibility and manual unpacked installation still require QA"
+    ]
+  },
+  "supporting_server_deployment": {
+    "endpoint": "https://petika.k2patel.in",
+    "commit": "9e9b6ddb41c1a878efb65e4611744f1efea98ba6",
+    "image": "git.k2patel.in/k2patel/petika@sha256:41c1fe1035332380cb04a1d228f9a2cc2b22edeab3a2374e0978c9bccc9963a7",
+    "gitea_build": 342,
+    "ready_containers": "3/3",
+    "preupgrade_backup": "private configuration and data/mirror archive; writers paused; readability and SHA-256 verified; 83 archive members",
+    "checks": [
+      "public HTTPS certificate validation and readyz",
+      "canonical endpoint config.json",
+      "live login, appearance controls, Connected clients and sign-out",
+      "guided backup dialogs and mobile layout without saving destinations or editing vaults"
+    ]
+  }
+}
