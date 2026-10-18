@@ -1,6 +1,6 @@
 # Implementation roadmap
 
-Status reviewed against the repository on 2026-10-17. This is the central checklist;
+Status reviewed against the repository on 2026-10-18. This is the central checklist;
 feature guides describe current behavior. Checked items are implemented experimental
 capabilities, not a production-readiness certification.
 
@@ -82,7 +82,10 @@ replacement API already exists; it is intentionally separate from enrollment ret
 - [ ] Optional OIDC, account MFA/passkeys, account recovery, and audit trails.
 - [ ] OS-backed CLI credential storage and private-CA trust configuration.
 - [ ] Individual selected-item sharing semantics beyond existing collection sharing.
-- [ ] Backup retention policy, historical restore tooling, and clean-host recovery drills.
+- [x] Offline full-backup integrity/restore tooling, authenticated historical Git recovery,
+  retention runbook, and synthetic clean-directory recovery drill in both modes.
+- [ ] Configure independent off-site retained storage and run a physical-host/Kubernetes
+  recovery drill; measure deployment recovery objectives.
 - [ ] Independent security review, accessibility review, native-platform validation,
   and real-cluster deployment hardening.
 - [ ] Simplified favicon.

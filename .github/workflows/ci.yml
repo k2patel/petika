@@ -99,6 +99,10 @@ jobs:
           sh scripts/build_web.sh
       - name: OTP reference vectors
         run: node scripts/test_otp.mjs
+      - name: Backup integrity and clean-directory recovery
+        run: |
+          python3 scripts/test_backup_recovery.py
+          python3 scripts/test_backup_recovery.py --drill
       - name: Provisioning
         run: python3 scripts/test_setup.py
       - name: Install browser test tools

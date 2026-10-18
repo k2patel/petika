@@ -48,6 +48,7 @@ scope; basic user/group administration is already implemented.
 
 The recipient enrollment/verification design is [documented](decisions/0002-per-user-group-key-delivery.md)
 and implemented. Individual item-sharing semantics, native UI stacks and supported OS versions, native auto-lock
-policy, and backup retention/recovery objectives still need decisions. The web client
+policy, and deployment-specific recovery objectives still need decisions. The
+[recovery runbook](recovery.md) defines the baseline backup retention policy. The web client
 already has configurable inactivity locking. Deployment manifests target a single
 server with persistent filesystem storage; multi-replica operation is unsupported.

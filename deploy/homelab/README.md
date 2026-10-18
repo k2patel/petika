@@ -48,6 +48,10 @@ No keys, accounts, identity bundles, contact pins, or grants enter this backup.
 Back up the data PVC separately and retain client identity/recovery backups;
 the Git repository alone does not restore server accounts or recipient access.
 Gitea and Petika share this homelab: arrange an off-site backup independently.
+Use the [backup and recovery runbook](../../docs/recovery.md) for complete offline
+backups, historical ciphertext recovery, retention, and isolated restore validation.
+The operator tool requires stopped writers; the ciphertext sidecar cannot back up accounts
+or recipient grants.
 
 Check rollout and replication:
 
