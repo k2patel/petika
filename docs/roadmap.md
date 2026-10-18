@@ -73,6 +73,23 @@ Further hardening remains: exhaustive power-loss fault injection, independent cr
 review, multi-device trust-conflict merging UX, and identity replacement UI. The identity
 replacement API already exists; it is intentionally separate from enrollment retry.
 
+## Security alignment implementation priority
+
+The [security and compliance alignment plan](security-alignment-plan.md) defines a
+common high-assurance target for every deployment. Its statuses describe remaining
+assessment work; completed experimental features above are not compliance claims.
+
+- [ ] Phase 0: threat model, exact standards/control mappings, owners and evidence register.
+- [ ] Phase 1: secure transport defaults, account-password migration, passkeys/MFA and sessions.
+- [ ] Phase 2: key custody, device lifecycle, rotation, migration and FIPS feasibility.
+- [ ] Phase 3: explicit personal, trusted-person and organization recovery policies.
+- [ ] Phase 4: independently retained audit events, alerts, incident response and real backup drills.
+- [ ] Phase 5: signed releases, SBOM/provenance, update verification and privacy controls.
+- [ ] Phase 6: independent assessment, remediation/retest and scoped assurance evidence.
+
+Start Phase 0 and transport/authentication work first; begin FIPS feasibility in
+parallel. Feature backlog items remain open but do not replace these security gates.
+
 ## Remaining backlog
 
 - [ ] Chromium/Firefox extensions and explicit, destination-checked autofill.

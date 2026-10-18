@@ -16,6 +16,20 @@
 - Encrypted Git copies and recoverable backups must be addressed in the design.
 - Cargo and native binary distribution; no domain purchase required.
 
+## Security direction
+
+Use client-side vault encryption with optional, explicitly configured recovery.
+Separate encryption method from key ownership and account authentication. Do not
+introduce a universal server-held vault key. Personal, shared and company vaults
+have explicit access and recovery boundaries; GPG remains import/interoperability
+tooling, and server push-backup credentials remain separate from vault keys.
+
+Pursue the strongest practical alignment with NIST, OWASP and relevant assurance
+and privacy guidance for every deployment, independent of audience size. Track
+technical controls, operating duties and external validation separately. See the
+[accepted decision](decisions/0003-security-and-recovery-baseline.md) and
+[implementation and evidence plan](security-alignment-plan.md).
+
 ## Implemented experimental capabilities
 
 The CLI and Rust/WASM web client support local encryption, password management,
