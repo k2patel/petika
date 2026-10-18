@@ -95,7 +95,9 @@ logins and TOTP codes with explicit actions, live permissions/session checks, an
 document-bound injection. Its generator saves a separate encrypted login before
 explicitly filling new-password fields, preserving the existing login and using
 revision guards to reject concurrent writes. It uses the same shared `app.css`.
-Inline suggestions, QR capture, broader field support and
+An opt-in inline signup prompt now opens the trusted popup generator after unlock;
+it expires after five minutes or navigation and contains no vault data. Automatic
+inline suggestions and saved-login selection, QR capture, broader field support and
 other browser platforms remain open. The full target experience remains:
 - Offer generated passwords at signup/change-password fields; explicitly save or update the login.
 - Capture a TOTP QR code or setup key with consent and confirm on the website.

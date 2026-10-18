@@ -48,3 +48,12 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(
 /* The packaged extension reuses this stylesheet and the same controls. */
 .extension-popup{width:380px;min-height:300px}.extension-popup .panel{margin:0;border:0;display:grid;gap:16px}.extension-popup section,.extension-popup form{display:grid;gap:12px}.extension-popup #message{overflow-wrap:anywhere}.extension-popup .match{padding:12px 0;border-bottom:1px solid var(--line);display:grid;gap:10px}
 .extension-popup .match h3{overflow-wrap:anywhere}
+
+/* PETIKA_INLINE_START: extracted into the prompt's shadow root by the extension. */
+:host{all:initial;display:block;margin:6px 0;font:14px/1.4 system-ui,sans-serif;color-scheme:light dark}
+.petika-inline button{font:inherit;cursor:pointer;min-height:44px;padding:8px 12px;border:1px solid #087f7b;border-radius:8px;background:#087f7b;color:#fff;margin:0 6px 4px 0}
+.petika-inline button+button{background:#fff;color:#12313d;border-color:#78949e}
+.petika-inline button:focus-visible{outline:3px solid #087f7b;outline-offset:3px}
+.petika-inline button:disabled{cursor:default;opacity:.7}
+@media(prefers-color-scheme:dark){.petika-inline button+button{background:#142a33;color:#eef7f7;border-color:#718f9c}}
+/* PETIKA_INLINE_END */

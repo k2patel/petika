@@ -83,7 +83,7 @@ must contain `manifest.json`, the popup files, and a `wasm` directory. The admin
 build instructions are in the [extension guide](../clients/extension/README.md).
 
 1. Extract the supplied ZIP to a folder you will keep, if necessary.
-2. Open `chrome://extensions` in Chrome/Chromium.
+2. Open `chrome://extensions` in Chrome/Chromium 127 or newer.
 3. Turn on **Developer mode**, choose **Load unpacked**, and select the prepared
    folder containing `manifest.json`.
 4. Pin Petika using the browser's Extensions menu. This preview is installed locally;
@@ -111,7 +111,7 @@ build instructions are in the [extension guide](../clients/extension/README.md).
 
 Closing the popup locks the collection. Reopen and unlock it for a later MFA page.
 Codes close to expiry require waiting a few seconds and selecting **Fill code**
-again. The preview does not support inline suggestions, QR capture, split code
+again. The preview does not support inline saved-login lists, QR capture, split code
 boxes, username-only steps, or forms inside frames/shadow DOM; copy from the web
 app when a form is unsupported.
 
@@ -132,6 +132,19 @@ If the website's fields are unsupported, copy from the saved item in the web app
 Closing the popup discards an unsaved suggestion. If a save conflicts or its result
 is uncertain, reopen and check the collection before retrying. Never assume a
 password was changed on the website merely because it was saved in Petika.
+
+### Show a signup prompt beside the website field
+
+On an allowed website, unlock Petika and choose **Show signup suggestions on this
+page**. Close the popup and focus the website's new-password field. Select
+**Create password in Petika**, then unlock in the extension to open the generator.
+Save the encrypted login and choose **Fill new password** as described above.
+
+The prompt expires after five minutes or navigation. **Dismiss** removes it until
+you enable suggestions again. It never displays a password or asks for your
+passphrase on the website. If it cannot open Petika, use the toolbar. Fields must
+be visible, marked as new-password, and belong to a same-origin form. Automatic
+prompts on every website visit and inline saved-login selection are not included.
 
 ### Update or remove the extension
 

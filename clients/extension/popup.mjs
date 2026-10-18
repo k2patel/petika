@@ -1,3 +1,4 @@
+import {installInline} from './inline.mjs';
 import {authorizeFill, httpsOrigin, fillPage} from './fill.mjs';
 const $ = id => document.getElementById(id);
 const {endpoint} = await (await fetch('./config.json')).json();
@@ -131,6 +132,11 @@ $('unlock').onsubmit = run(async () => {
   unlockPassphrase = ''; unlocked = true; touch();
   await renderMatches(origins);
   $('unlock').hidden=true; $('vault').hidden=false;
+  const {inlineIntent} = await chrome.storage.session.get('inlineIntent');
+  if (inlineIntent?.tabId === target.tabId) {
+    await chrome.storage.session.remove('inlineIntent');
+    if (inlineIntent.documentId === target.documentId && inlineIntent.origin === target.origin && inlineIntent.collection === collection && inlineIntent.expiresAt > Date.now() && editable) await openGenerator();
+  }
 });
 async function renderMatches(origins) {
   const rows = await rpc('list');
@@ -146,7 +152,7 @@ async function renderMatches(origins) {
     }
     section.append(actions); $('matches').append(section); count++;
   }
-  $('generate').hidden = !editable || saveBlocked;
+  $('generate').hidden = !editable || saveBlocked; $('inline').hidden = !editable;
   message(count ? 'Choose what to fill. Petika will not submit the form.' : editable ? 'No matching logins. Generate and save one here, or add one in the web app.' : 'No matching logins in this read-only collection.');
 }
 // Capture before lock() clears the input; clear on both success and failure.
@@ -169,7 +175,11 @@ try {
   if (stored.grant?.endpoint === endpoint && stored.grant.expiresAt > Date.now()) { $('approval').hidden=false; $('code').textContent=stored.grant.user_code; }
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
   try { $('site').textContent=httpsOrigin(tab.url); } catch { $('site').textContent='Open the toolbar popup on an HTTPS website.'; }
-  if (token) await showAccount();
+  if (token) {
+    await showAccount();
+    const {inlineIntent} = await chrome.storage.session.get('inlineIntent');
+    if (inlineIntent?.expiresAt > Date.now() && inlineIntent.tabId === tab?.id && collections.some(c => c.id === inlineIntent.collection)) $('collection').value=inlineIntent.collection;
+  }
 } catch(e) { message(e.message); }
 
 function readRevision(value) {
@@ -190,12 +200,13 @@ async function generatePassword() {
   if (activeGeneration !== generation || !unlocked) throw new Error('Vault locked.');
   $('generated-password').value = password; touch();
 }
-$('generate').onclick = run(async () => {
+async function openGenerator() {
   clearGenerator();
   $('generated-name').value = `${new URL(target.origin).hostname.slice(0,180)} ${new Date().toISOString()}`;
   await generatePassword(); $('generator').hidden = false; $('matches').hidden = true; $('generate').hidden = true;
   message('Generate a password, then save the encrypted login before filling.');
-});
+}
+$('generate').onclick = run(openGenerator);
 $('regenerate').onclick = run(generatePassword);
 $('generated-length').onchange = run(generatePassword);
 $('cancel-generation').onclick = clearGenerator;
@@ -249,4 +260,22 @@ $('generator').onsubmit = run(async () => {
     }
     throw error;
   } finally { entry.password = ''; }
+});
+
+$('inline').onclick = run(async () => {
+  if (!unlocked || !editable) throw new Error('Unlock a writable collection first.');
+  const current=await capturedDocument();
+  if (current.tabId !== target.tabId || current.documentId !== target.documentId || current.origin !== target.origin) throw new Error('Website changed. Reopen Petika.');
+  const {origins}=await request('/v1/auth/websites'); authorizeFill(current.origin,current.origin,origins);
+  const css=await (await fetch('./app.css')).text();
+  const fragment=css.split("/* PETIKA_INLINE_START: extracted into the prompt's shadow root by the extension. */")[1]?.split('/* PETIKA_INLINE_END */')[0];
+  if (!fragment) throw new Error('Suggestion styles are unavailable.');
+  const grant={id:crypto.randomUUID(),documentId:current.documentId,origin:current.origin,collection,expiresAt:Date.now()+300000};
+  const key=`inline:${current.tabId}`;
+  await chrome.storage.session.set({[key]:grant});
+  try {
+    const results=await chrome.scripting.executeScript({target:{tabId:current.tabId,documentIds:[current.documentId]},world:'ISOLATED',func:installInline,args:[current.origin,grant.id,grant.expiresAt,fragment]});
+    if (!results[0]?.result?.installed) throw new Error('Suggestions could not be enabled. Reopen Petika.');
+  } catch(error) { await chrome.storage.session.remove(key); throw error; }
+  message('Suggestions enabled for this page for five minutes. Close Petika and focus a new-password field.');
 });

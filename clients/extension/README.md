@@ -17,7 +17,7 @@ Build the web WASM first (`scripts/build_web.sh`), then:
 python3 scripts/build_extension.py --endpoint https://petika.k2patel.in
 ```
 
-In Chromium/Chrome, open `chrome://extensions`, enable Developer mode, choose
+In Chromium/Chrome 127 or newer, open `chrome://extensions`, enable Developer mode, choose
 **Load unpacked**, and select `output/extension-chromium`. Pin Petika to the toolbar.
 This does not install anything automatically or publish to a browser store.
 
@@ -63,11 +63,35 @@ uncertain save acknowledgement block further saves until reopening: check the se
 copy before retrying. Read-only collections cannot save new logins. Version-2 group
 saves retain the existing key epoch and check membership and snapshot revisions.
 
+## Inline signup prompt
+
+Unlock on an allowed website and choose **Show signup suggestions on this page**.
+Close the toolbar popup and focus a visible `autocomplete="new-password"` field.
+Choose **Create password in Petika** to open the extension, unlock the collection,
+and continue directly to the generator. Save and fill remain explicit actions.
+**Dismiss** removes the prompt for this activation. Navigation or five minutes
+ends the activation; enable it again from the toolbar when needed.
+
+The prompt is a launcher, not a password dropdown: no password, login list, token,
+or passphrase entry is placed in the webpage. The isolated script sends only a
+popup request. The background checks its extension sender, top-level document,
+active tab, origin, and expiring grant. The popup repeats the usual permission and
+unlock checks. A revoked permission may leave the harmless launcher visible until
+expiry, but cannot authorize saving or filling. A site can imitate any in-page UI;
+enter passphrases only in the actual extension popup. If Chrome cannot open it,
+use the toolbar. Chrome 127+ is required for
+[`action.openPopup`](https://developer.chrome.com/docs/extensions/reference/api/action#method-openPopup).
+
+Styling is extracted from the marked section of the shared `clients/web/app.css`
+into a closed shadow root. There is no second authored stylesheet, remote asset,
+page-window message listener, or persistent website permission.
+
 ## Boundaries
 
 - Host permission is scoped to the configured Petika server. Website access uses
   `activeTab` only after invoking the toolbar action; there are no always-on content
-  scripts, page-message bridges, or `externally_connectable` handlers.
+  scripts or `externally_connectable` handlers. The opt-in inline script can request
+  only the trusted popup; it cannot read extension session storage or vault data.
 - Website origin, saved-item origin, account website permission, collection access,
   and active session are checked before each fill. Browser document IDs bind the
   operation to the inspected top-level document. Navigation requires reopening.
@@ -88,7 +112,7 @@ saves retain the existing key epoch and check membership and snapshot revisions.
 
 ## Not implemented
 
-Inline website suggestions, updating an existing login from the extension,
+Automatic suggestions on every visit, inline saved-login selection, updating an existing login from the extension,
 QR capture, Firefox/Safari packaging, split OTP fields, username-only login steps,
 iframe/shadow-DOM forms, device-key unlocking, native biometrics, narrowly scoped
 extension credentials, browser-store publishing, and independent security review.

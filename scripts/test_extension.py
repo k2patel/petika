@@ -96,6 +96,49 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             popup.evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Fill code').click()")
             expect(target.locator('[name=otp]')).to_have_value(__import__('re').compile(r'^\d{6}$'))
             assert target.url==ORIGIN+'/'
+            # Inline UI carries no vault data and is installed only on explicit request.
+            target.set_content('<form><input name="new" type="password" autocomplete="new-password"><input name="current" type="password" autocomplete="current-password"></form>')
+            popup.evaluate("document.querySelector('#inline').click()")
+            expect(popup.locator('#message')).to_contain_text('Suggestions enabled')
+            target.locator('[name=current]').focus()
+            expect(target.locator('[data-petika-prompt]')).to_have_count(0)
+            target.locator('[name=new]').focus()
+            expect(target.locator('[data-petika-prompt]')).to_have_count(1)
+            assert target.locator('[data-petika-prompt]').evaluate('(el)=>el.shadowRoot') is None
+            assert 'synthetic' not in target.content()
+            target.screenshot(path=str(ROOT/'output/extension-qa/inline.png'))
+            # A trusted-context caller cannot impersonate a page's document sender.
+            assert popup.evaluate("chrome.runtime.sendMessage({type:'petika.generate',grantId:'forged'})")=={'ok':False}
+            # A real pointer click enters the trusted extension popup flow.
+            target.locator('[data-petika-prompt]').click(position={'x':50,'y':20})
+            for _ in range(50):
+                inline_state=popup.evaluate('chrome.storage.session.get(null)')
+                if inline_state.get('inlineIntent') and not any(k.startswith('inline:') for k in inline_state): break
+                time.sleep(.1)
+            assert inline_state.get('inlineIntent',{}).get('origin')==ORIGIN
+            assert not any(k.startswith('inline:') for k in inline_state), 'Popup opening must complete and consume the grant'
+            popup.reload()
+            expect(popup.locator('#unlock')).to_be_visible()
+            popup.locator('#passphrase').fill('synthetic collection password')
+            target.bring_to_front()
+            popup.evaluate("document.querySelector('#unlock').requestSubmit()")
+            expect(popup.locator('#generator')).to_be_visible(timeout=30000)
+            expect(popup.locator('#regenerate')).to_be_enabled()
+            assert len(popup.locator('#generated-password').input_value())==24
+            popup.evaluate("document.querySelector('#cancel-generation').click()")
+            # Expired installation is refused; a short-lived prompt cleans itself up.
+            for duration in [-1, 500]:
+                result=popup.evaluate('''async duration => {
+                    const {installInline}=await import('./inline.mjs');
+                    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+                    try { const results=await chrome.scripting.executeScript({target:{tabId:tab.id},func:installInline,args:['https://example.test','expiry-test',Date.now()+duration,'']});return Boolean(results[0]?.result?.installed); }
+                    catch { return false; }
+                }''',duration)
+                assert result==(duration>0)
+                if duration>0:
+                    target.locator('[name=current]').focus(); target.locator('[name=new]').focus()
+                    expect(target.locator('[data-petika-prompt]')).to_have_count(1)
+                    expect(target.locator('[data-petika-prompt]')).to_have_count(0,timeout=3000)
             # Save before filling, preserve the old login, and reject stale writes.
             target.set_content('<form><input name="password" type="password" autocomplete="current-password"><input name="new" type="password" autocomplete="new-password"><input name="confirm" type="password" autocomplete="new-password"></form>')
             popup.evaluate("document.querySelector('#generate').click()")
@@ -247,6 +290,6 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             assert popup.evaluate('chrome.storage.session.get(null)')=={}
             assert not errors,errors
             context.close()
-        print('Extension pairing, encrypted generation/save, concurrent-write rejection, login/new-password/TOTP fill, permission revocation, document binding and storage checks passed.')
+        print('Extension pairing, inline prompts and popup handoff, encrypted generation/save, concurrent-write rejection, login/new-password/TOTP fill, permission revocation, document binding and storage checks passed.')
     finally:
         server.terminate();server.wait(timeout=10)

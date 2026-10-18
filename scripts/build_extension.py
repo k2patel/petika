@@ -26,15 +26,15 @@ source = root/'clients/web'
 if not (source/'wasm/petika_web_bg.wasm').is_file():
     parser.error('Build the WASM client first with scripts/build_web.sh')
 args.output.mkdir(parents=True, exist_ok=True)
-for name in ['popup.html', 'popup.mjs', 'fill.mjs', 'background.mjs']:
+for name in ['popup.html', 'popup.mjs', 'fill.mjs', 'inline.mjs', 'background.mjs']:
     shutil.copyfile(root/'clients/extension'/name, args.output/name)
 for name in ['app.css', 'worker.js', 'otp.js']:
     shutil.copyfile(source/name, args.output/name)
 shutil.copytree(source/'wasm', args.output/'wasm', dirs_exist_ok=True)
 (args.output/'config.json').write_text(json.dumps({'endpoint':endpoint}))
 (args.output/'manifest.json').write_text(json.dumps({
-    'manifest_version':3, 'name':'Petika — Chromium preview', 'version':'0.1.0',
-    'minimum_chrome_version':'106',
+    'manifest_version':3, 'name':'Petika — Chromium preview', 'version':'0.2.0',
+    'minimum_chrome_version':'127',
     'description':'Locally decrypt and explicitly fill logins and time-based verification codes.',
     'permissions':['activeTab','scripting','storage'],
     'background':{'service_worker':'background.mjs','type':'module'},

@@ -114,6 +114,10 @@ do not build Rust themselves. Supply the source revision and the user installati
 instructions. Keep the exact configured server origin with the package inventory.
 The server needs commit `9e9b6dd` or newer for client/website APIs.
 
+Requires Chrome/Chromium 127 or newer. Users can enable a five-minute inline
+signup prompt from the unlocked toolbar popup; no broad website host permission
+is added. Reload the extension after replacing its package.
+
 This is an experimental Chromium preview, not a store-signed release. Manual
 installation and real-site compatibility still need QA. The local integration test
 uses synthetic origins and a test-only permission instead of a toolbar gesture.

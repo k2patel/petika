@@ -96,7 +96,9 @@ parallel. Feature backlog items remain open but do not replace these security ga
   origin, permission, session and document checks ([preview](../clients/extension/README.md)).
 - [x] Chromium toolbar password generation, encrypted save before explicit new-password
   filling, existing-login preservation and concurrent-write protection.
-- [ ] Chromium/Firefox release extensions with inline password suggestions, broader login/TOTP filling,
+- [x] Opt-in, document-bound inline signup launcher with expiry and trusted-popup
+  generation; website scripts receive no suggestion or vault data.
+- [ ] Chromium/Firefox release extensions with automatic inline suggestions and saved-login selection, broader login/TOTP filling,
   QR capture, and enforced exact-origin website permissions (see [UX requirements](settings-experience.md#password-and-totp-browser-experience)).
 - [x] In-vault password suggestions, account-scoped active-client listing/revocation,
   and website-permission management, enforced by the Chromium preview before filling.
