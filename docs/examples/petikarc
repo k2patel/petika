@@ -1,0 +1,8 @@
+# Copy to ~/.petikarc and edit. This is data, not a shell script.
+# Keep passwords, passphrases, bearer tokens and TOTP keys out of this file.
+store = "~/.petika/store.petika"
+session_file = "~/.petika/session.json"
+# Optional server for `petika login`; replace with your own final HTTPS origin.
+# server = "https://petika.example.com"
+# Set only when using a recipient identity for group-vault unlock:
+# identity_file = "~/.petika/identity.json"

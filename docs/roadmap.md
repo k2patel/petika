@@ -92,6 +92,9 @@ parallel. Feature backlog items remain open but do not replace these security ga
 
 ## Remaining backlog
 
+- [x] Rust CLI `show` with local unlock, interactive TOTP expiry, encrypted TOTP setup,
+  password-store-style aliases, and non-secret `~/.petikarc` defaults.
+
 - [x] Experimental Chromium toolbar login/TOTP filling with local WASM and per-fill
   origin, permission, session and document checks ([preview](../clients/extension/README.md)).
 - [x] Chromium toolbar password generation, encrypted save before explicit new-password

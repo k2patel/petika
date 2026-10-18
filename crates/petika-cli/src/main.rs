@@ -1,11 +1,13 @@
 mod account;
+mod config;
 mod import;
 mod keys;
+mod otp;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use petika_core::{EncryptionMode, Entry, StoreFile, UnlockedStore, generate_password};
 use std::{
-    io::{self, BufRead, Read},
+    io::{self, BufRead, IsTerminal, Read, Write},
     path::PathBuf,
     process::ExitCode,
 };
@@ -21,6 +23,12 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     after_help = "Every storage command unlocks locally with a passphrase and locks on exit. Use login for managed API access; collection passphrases never leave this device. Biometrics are not implemented."
 )]
 struct Cli {
+    /// Configuration file (defaults to ~/.petikarc). Command-line options take precedence.
+    #[arg(long, global = true, conflicts_with = "no_config")]
+    config: Option<PathBuf>,
+    /// Ignore ~/.petikarc for an isolated invocation.
+    #[arg(long, global = true)]
+    no_config: bool,
     /// Saved managed session (sensitive bearer credential; defaults to user data directory).
     #[arg(long, global = true)]
     session_file: Option<PathBuf>,
@@ -61,7 +69,7 @@ enum Command {
     /// Sign in to a managed account by approving a code in your browser.
     Login {
         #[arg(long)]
-        server: String,
+        server: Option<String>,
     },
     /// Revoke the saved CLI session. --local only forgets it when offline.
     Logout {
@@ -111,6 +119,7 @@ enum Command {
         replace: bool,
     },
     /// List entry names, optionally filtered by a case-insensitive substring.
+    #[command(visible_alias = "ls")]
     List { query: Option<String> },
     /// Show metadata; use --reveal explicitly to print the password only.
     Get {
@@ -118,7 +127,20 @@ enum Command {
         #[arg(long)]
         reveal: bool,
     },
+    /// Unlock and print a password; Enter displays TOTP with a live expiry countdown.
+    Show {
+        name: String,
+        /// Print the current TOTP and remaining seconds once, without interactive prompts.
+        #[arg(long)]
+        totp: bool,
+    },
+    /// Configure or remove a login's encrypted TOTP setup key.
+    Otp {
+        #[command(subcommand)]
+        command: OtpCommand,
+    },
     /// Save an entry, reading its password from a hidden prompt or stdin.
+    #[command(visible_alias = "insert")]
     Put {
         name: String,
         #[arg(long, default_value = "")]
@@ -143,6 +165,7 @@ enum Command {
         replace: bool,
     },
     /// Delete an entry. Requires explicit --yes.
+    #[command(visible_alias = "rm")]
     Remove {
         name: String,
         #[arg(long, required = true)]
@@ -150,6 +173,85 @@ enum Command {
     },
     /// Change the local passphrase. Does not revoke copies encrypted with the old one.
     Passphrase,
+}
+
+#[derive(Subcommand)]
+enum OtpCommand {
+    /// Read a Base32 key or otpauth link from a hidden prompt and store it encrypted.
+    Set {
+        name: String,
+        #[arg(long)]
+        secret_stdin: bool,
+        /// Allow replacing an existing TOTP configuration.
+        #[arg(long)]
+        replace: bool,
+    },
+    /// Remove the stored setup key; this does not disable MFA on the website.
+    Remove {
+        name: String,
+        #[arg(long, required = true)]
+        yes: bool,
+    },
+}
+
+fn now_seconds() -> Result<u64> {
+    Ok(std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)?
+        .as_secs())
+}
+
+fn show_entry(entry: &Entry, include_totp: bool) -> Result<()> {
+    // Validate before printing either secret when TOTP was explicitly requested.
+    let config = entry.otp.as_deref().map(otp::Config::parse).transpose()?;
+    if include_totp && config.is_none() {
+        return Err("this entry has no TOTP setup".into());
+    }
+    println!("Password: {}", entry.password);
+    let Some(config) = config else {
+        return Ok(());
+    };
+    if include_totp {
+        let code = config.at(now_seconds()?);
+        println!(
+            "TOTP: {} (expires in {}s)",
+            code.value.as_str(),
+            code.remaining
+        );
+        return Ok(());
+    }
+    if !io::stdin().is_terminal() || !io::stdout().is_terminal() {
+        eprintln!(
+            "TOTP is configured. Use show --totp to print the code and remaining seconds once."
+        );
+        return Ok(());
+    }
+    loop {
+        eprint!("Press Enter for a verification code, or type q then Enter to finish: ");
+        io::stderr().flush()?;
+        let mut answer = Zeroizing::new(String::new());
+        if io::stdin().lock().take(4098).read_line(&mut answer)? == 0 || !answer.trim().is_empty() {
+            return Ok(());
+        }
+        let started = now_seconds()?;
+        let code = config.at(started);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(code.remaining);
+        loop {
+            let now = now_seconds()?;
+            if now / config.period != started / config.period
+                || std::time::Instant::now() >= deadline
+            {
+                break;
+            }
+            print!(
+                "\rTOTP: {} — expires in {:2}s (Ctrl+C to exit)",
+                code.value.as_str(),
+                config.period - now % config.period
+            );
+            io::stdout().flush()?;
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        println!("\rVerification code expired.                                  ");
+    }
 }
 
 fn secret(prompt: &str, from_stdin: bool) -> Result<Zeroizing<String>> {
@@ -196,7 +298,11 @@ fn default_store() -> Result<PathBuf> {
     Ok(root.join("petika/store.petika"))
 }
 
-fn run(cli: Cli) -> Result<()> {
+fn run(mut cli: Cli) -> Result<()> {
+    let defaults = config::Config::load(cli.config.as_deref(), cli.no_config)?;
+    cli.store = cli.store.or(defaults.store);
+    cli.session_file = cli.session_file.or(defaults.session_file);
+    cli.identity_file = cli.identity_file.or(defaults.identity_file);
     let session = || -> Result<PathBuf> {
         match &cli.session_file {
             Some(path) => Ok(path.clone()),
@@ -218,7 +324,13 @@ fn run(cli: Cli) -> Result<()> {
         );
     }
     match &cli.command {
-        Command::Login { server } => return account::login(&session()?, server),
+        Command::Login { server } => {
+            let server = server
+                .as_deref()
+                .or(defaults.server.as_deref())
+                .ok_or("provide login --server or set server in ~/.petikarc")?;
+            return account::login(&session()?, server);
+        }
         Command::Logout { local } => return account::logout(&session()?, *local),
         Command::Whoami => return account::whoami(&session()?),
         Command::Collections => return account::collections(&session()?),
@@ -324,6 +436,39 @@ fn run(cli: Cli) -> Result<()> {
                 );
                 println!("Password: hidden (use --reveal to print it)");
             }
+        }
+        Command::Show { name, totp } => show_entry(store.get(&name)?, totp)?,
+        Command::Otp { command } => {
+            let (name, value) = match command {
+                OtpCommand::Set {
+                    name,
+                    secret_stdin,
+                    replace,
+                } => {
+                    let entry = store.get(&name)?;
+                    if entry.otp.is_some() && !replace {
+                        return Err("TOTP already configured; use --replace explicitly".into());
+                    }
+                    let value = secret("TOTP setup key or link: ", secret_stdin)?;
+                    otp::Config::parse(&value)?;
+                    (name, Some(value))
+                }
+                OtpCommand::Remove { name, yes: _ } => {
+                    store.get(&name)?;
+                    (name, None)
+                }
+            };
+            let current = store.get(&name)?;
+            let entry = Entry {
+                username: current.username.clone(),
+                password: current.password.clone(),
+                url: current.url.clone(),
+                notes: current.notes.clone(),
+                otp: value.as_deref().map(|v| v.to_string()),
+            };
+            store.put(name, entry, true)?;
+            file.save(&mut store, false)?;
+            println!("Updated encrypted TOTP setup. Website MFA settings are unchanged.");
         }
         Command::Put {
             name,

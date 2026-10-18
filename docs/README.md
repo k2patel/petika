@@ -42,4 +42,4 @@ and encrypted recovery, plus verified contact pins and key-change suspension. CL
 fresh-key rotation are implemented.
 See the roadmap for completed work, next actions, and remaining integrations.
 
-- [Managed CLI accounts](cli-accounts.md): browser approval, sessions, and encrypted collection pull/push.
+- [Rust CLI and ~/.petikarc](cli-accounts.md): local unlock, password display, TOTP countdown, browser approval, and encrypted collection sync.

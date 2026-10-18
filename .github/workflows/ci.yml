@@ -103,6 +103,8 @@ jobs:
         run: |
           cargo build --workspace --locked
           sh scripts/build_web.sh
+      - name: CLI hidden unlock and TOTP terminal flow
+        run: python3 scripts/test_cli_terminal.py
       - name: OTP reference vectors
         run: node scripts/test_otp.mjs
       - name: Extension origin policy

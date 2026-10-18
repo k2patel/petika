@@ -85,6 +85,10 @@ for secret-file ownership, persistent volumes, and reverse-proxy considerations.
 
 ## Use the CLI
 
+The native Rust executable supports `~/.petikarc`, `show` with hidden local unlock,
+and Enter-to-TOTP with an expiry countdown. See the [CLI guide](docs/cli-accounts.md)
+for configuration, offline commands, compiled installation, and managed sync.
+
 In another terminal, sign in to the local instance:
 
 ```sh

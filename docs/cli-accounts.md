@@ -1,4 +1,100 @@
-# Managed accounts in the CLI
+# Rust CLI client
+
+Petika builds into a native `petika` executable. Rust is needed to build it, not
+to run the resulting binary. Build separately for each operating system/architecture;
+this repository does not yet publish signed CLI installers.
+
+```sh
+cargo build --release --locked -p petika
+./target/release/petika --help
+# Optional: build and install into Cargo's bin directory (~/.cargo/bin by default).
+cargo install --path crates/petika-cli --locked
+```
+
+## Local vault and password display
+
+```sh
+petika init
+petika insert Email/example --username alice --url https://example.com
+petika ls
+petika show Email/example
+```
+
+`show` asks for the collection passphrase using a hidden terminal prompt. After
+successful decryption it prints the password. A wrong passphrase prints no password
+or verification code. There is no background unlock cache: each command unlocks
+locally and drops the unlocked vault when it exits. This passphrase is separate
+from your server account password. Configured recipient identities use the existing
+identity-unlock flow for recipient-enabled local stores.
+
+If the entry has TOTP configured, press **Enter** after the password is shown to
+see its current code and a live **expires in Ns** countdown. The code is cleared
+from the current terminal line at expiry; press Enter for another code, or type
+`q` followed by Enter to finish. **Ctrl+C** exits during the countdown. Previous
+terminal scrollback or captured output may still contain revealed secrets.
+
+```sh
+# Hidden setup-key prompt; accept a Base32 key or otpauth://totp/ link.
+petika otp set Email/example
+# Explicit replacement of an existing setup:
+petika otp set Email/example --replace
+# Print password, current code and remaining seconds once, without waiting:
+petika show Email/example --totp
+# Remove the encrypted setup key (does not disable MFA on the website):
+petika otp remove Email/example --yes
+```
+
+TOTP supports SHA-1/SHA-256/SHA-512, six/eight digits, and 30/60-second periods,
+matching the web client. It uses the local system clock; keep that clock accurate.
+The setup key is encrypted in the existing entry, never saved in the rc file.
+Complete MFA enrollment/changes on the website separately. Existing web-created
+TOTP entries work without re-entering their setup keys.
+
+For pipes, `show` prints the password without an interactive TOTP prompt; request
+`--totp` explicitly for a one-time code and remaining lifetime. For password-only
+machine output, retain `get NAME --reveal`. The existing `get NAME` stays metadata
+only. Automation may use `--passphrase-stdin`, `put --password-stdin`, and
+`otp set --secret-stdin`; supply unlock material first and the entry secret on the
+next line. Never put secrets in arguments or shell history.
+
+The `ls`, `insert`, and `rm` aliases correspond to `list`, `put`, and `remove`.
+Removal still requires `--yes`. Slash-separated names such as `Email/example`
+provide familiar password-store naming. Petika retains its encrypted collection
+format; these command aliases do not imply GPG-file compatibility. Existing GPG
+password stores can be [imported locally](import.md). The workflow is inspired by
+[password-store](https://www.passwordstore.org/), not copied shell code.
+
+## Unix configuration: ~/.petikarc
+
+An optional `~/.petikarc` supplies non-secret defaults. A [sample rc file](examples/petikarc)
+is included for copying and editing. Create it as a regular text
+file; use `chmod 600 ~/.petikarc` on Unix. Group/world-writable configuration is
+rejected. Example:
+
+```text
+# One key = value per line. Quoted strings use JSON-style escaping.
+store = "~/.local/share/petika/store.petika"
+session_file = "~/.local/share/petika/session.json"
+server = "https://petika.example.com"
+# Optional, only when using recipient identity unlock for group stores:
+# identity_file = "~/.local/share/petika/identity.json"
+```
+
+Command-line options override rc values, which override built-in paths. `server`
+is the default for `login`; subsequent API commands use the server bound to the
+saved session, so editing the rc cannot redirect an existing bearer token.
+`--config PATH` selects a different rc file; `--no-config` ignores configuration.
+A missing default file is fine; an explicitly named missing file is an error.
+
+`~/` expands to the home directory. Other relative paths resolve beside the rc
+file. Blank lines and full-line `#` comments are allowed. Unknown/duplicate keys
+are errors. There is no shell evaluation, environment substitution, `source`, or
+command execution. Never store account passwords, vault passphrases, bearer
+credentials, or TOTP keys here. On Windows the optional rc is read from
+`%USERPROFILE%/.petikarc`; existing default data paths remain unchanged when no rc
+is present. Restrict its ACLs on Windows.
+
+## Managed accounts and sync
 
 The CLI signs in with your Petika-managed account. The browser confirms your identity;
 collection encryption and decryption still happen locally. No npm or external HTTP
