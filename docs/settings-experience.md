@@ -74,3 +74,40 @@ Settings now groups security actions with explanations, shows collection protect
 only when known, and moves technical/research information into a native disclosure.
 Existing profile, theme, automatic-lock and dialog actions are retained. This does not
 implement the planned setup wizards or new encryption/device/recovery capabilities.
+
+## Password and TOTP browser experience
+
+Reference reviewed 2026-10-18: [1Password password suggestions](https://support.1password.com/save-fill-passwords/),
+[TOTP setup and filling](https://support.1password.com/one-time-passwords/),
+and [autofill security](https://support.1password.com/browser-autofill-security/).
+1Password offers generated passwords in browser fields and supports filling stored
+TOTP codes. Its documentation describes website setup/confirmation separately from
+saving the authenticator secret, and requires user input for autofill.
+
+Petika now offers a locally generated password in the new-item form. The user must
+select “Use suggested password” before it replaces the field, and save the item to
+retain it. Existing passwords are never automatically replaced. TOTP setup accepts
+a setup key or otpauth URI, encrypted in the login item; the website still needs a
+confirmation code to finish enabling MFA. Code generation/copy exists today.
+
+The browser-extension work remains open:
+- Offer generated passwords at signup/change-password fields; explicitly save or update the login.
+- Capture a TOTP QR code or setup key with consent and confirm on the website.
+- Offer “Fill verification code” for the selected matching login, including a multi-step sign-in.
+- Generate a fresh code at fill time; avoid filling an almost-expired code.
+- Enforce the account’s exact HTTPS origin allowlist, item website match, browser-provided tab/frame origin, unlocked vault, and explicit user action for each fill. Deny by default.
+- Recheck navigation immediately before filling; reject hidden fields and cross-origin frames initially. Never auto-submit or send an OTP seed to a webpage.
+- Test spoofed origins, revoked clients/permissions, locked vaults, navigation races, split OTP fields, and code expiry before release.
+
+Settings → Connected clients lists active browser/CLI sessions, their issue time,
+remaining lifetime and current-session marker. Users can revoke only their own
+sessions. These are not hardware-attested devices: device identity and biometric
+key custody remain separate future work. Sessions expire after eight hours and are
+in-memory; server restart invalidates them. Backup API keys remain separately listed
+under Off-site backups. Revocation stops new server requests, not use of copied data.
+
+Browser autofill → Allowed websites stores an account-scoped list of exact HTTPS
+origins (including port); there is no wildcard or inherited subdomain permission.
+The list is server-readable configuration, not encrypted vault metadata. The API
+reports `enforced: false` and the UI explicitly says no extension currently enforces
+these permissions. Saving a permission does not enable autofill.

@@ -42,3 +42,6 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(
 .theme-picker button{display:grid;place-items:center;width:44px;height:44px;border:1px solid transparent;border-radius:7px;background:transparent;color:var(--muted)}
 .theme-picker button:hover{background:var(--bg)}
 .theme-picker button[aria-pressed=true]{background:var(--tint);color:var(--accent);border-color:var(--accent)}
+
+.password-suggestion{display:grid;gap:10px;margin-top:10px;padding:14px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.website-origin{overflow-wrap:anywhere;min-width:0}

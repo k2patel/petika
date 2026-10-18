@@ -450,6 +450,8 @@ mod tests {
                     admin: false,
                     disabled: false,
                     password_hash: "unused test fixture".into(),
+                    appearance: "system".into(),
+                    autofill_origins: Vec::new(),
                 });
                 db.groups[0].members.push(Membership {
                     user_id: id,

@@ -186,6 +186,22 @@ pub fn account_route(
                 )?;
                 Ok(serde_json::json!({"ok":true}))
             }
+            ("GET", "/v1/auth/clients") => {
+                Ok(serde_json::json!({"clients": accounts.clients(user, &token)}))
+            }
+            ("POST", "/v1/auth/clients/revoke") => {
+                accounts.revoke_client(user, text(&payload, "id"))?;
+                Ok(serde_json::json!({"ok": true}))
+            }
+            ("GET", "/v1/auth/websites") => Ok(
+                serde_json::json!({"origins": accounts.website_permissions(user)?, "enforced": false}),
+            ),
+            ("POST", "/v1/auth/websites") => {
+                let allow = payload["allow"].as_bool().ok_or("Choose allow or remove")?;
+                Ok(
+                    serde_json::json!({"origins": accounts.website_permission(user, text(&payload, "origin"), allow)?, "enforced": false}),
+                )
+            }
             ("POST", "/v1/appearance") => Ok(accounts
                 .appearance(user, text(&payload, "appearance"))?
                 .public()),

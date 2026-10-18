@@ -347,3 +347,90 @@ fn appearance_is_account_scoped_persistent_and_validated() {
         "system"
     );
 }
+
+#[test]
+fn clients_and_website_permissions_are_user_scoped() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("accounts.json");
+    let mut accounts = Accounts::new(path.clone());
+    accounts.migrate().unwrap();
+    let first = accounts
+        .create_user(
+            "first",
+            "First",
+            "synthetic password one".into(),
+            true,
+            true,
+        )
+        .unwrap();
+    let second = accounts
+        .create_user(
+            "second",
+            "Second",
+            "synthetic password two".into(),
+            false,
+            false,
+        )
+        .unwrap();
+    let (token, _) = accounts
+        .login("first", "synthetic password one".into())
+        .unwrap();
+    let (other_token, _) = accounts
+        .login("first", "synthetic password one".into())
+        .unwrap();
+    let (second_token, _) = accounts
+        .login("second", "synthetic password two".into())
+        .unwrap();
+    let clients = accounts.clients(&first, &token);
+    assert_eq!(clients.len(), 2);
+    assert_eq!(accounts.clients(&second, &second_token).len(), 1);
+    let encoded = serde_json::to_string(&clients).unwrap();
+    assert!(!encoded.contains(&token));
+    assert!(!encoded.contains(&other_token));
+    assert!(!encoded.contains(&second_token));
+    let other_id = clients.iter().find(|c| c["current"] == false).unwrap()["id"]
+        .as_str()
+        .unwrap();
+    assert!(accounts.revoke_client(&second, other_id).is_err());
+    accounts.revoke_client(&first, other_id).unwrap();
+    assert!(accounts.authenticate(&other_token).unwrap().is_none());
+    assert!(accounts.authenticate(&token).unwrap().is_some());
+    assert!(accounts.authenticate(&second_token).unwrap().is_some());
+    assert_eq!(
+        accounts
+            .website_permission(&first, "https://EXAMPLE.com:443/", true)
+            .unwrap(),
+        vec!["https://example.com"]
+    );
+    assert_eq!(
+        accounts
+            .website_permission(&first, "https://example.com", true)
+            .unwrap()
+            .len(),
+        1
+    );
+    assert!(accounts.website_permissions(&second).unwrap().is_empty());
+    for invalid in [
+        "http://example.com",
+        "https://*.example.com",
+        "https://example.com/login",
+        "https://user:pass@example.com",
+        "https://example.com?x=y",
+        "https://example.com/#secret",
+    ] {
+        assert!(
+            accounts.website_permission(&first, invalid, true).is_err(),
+            "{invalid}"
+        );
+    }
+    assert_eq!(
+        Accounts::new(path).website_permissions(&first).unwrap(),
+        vec!["https://example.com"]
+    );
+    assert!(
+        accounts
+            .website_permission(&first, "https://example.com", false)
+            .unwrap()
+            .is_empty()
+    );
+}

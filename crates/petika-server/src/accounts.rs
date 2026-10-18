@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, HashMap},
     path::PathBuf,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use zeroize::Zeroizing;
 
@@ -26,6 +26,8 @@ pub struct User {
     pub password_hash: String,
     #[serde(default = "default_appearance")]
     pub appearance: String,
+    #[serde(default)]
+    pub autofill_origins: Vec<String>,
 }
 fn default_appearance() -> String {
     "system".into()
@@ -122,6 +124,8 @@ fn next_generation(value: u64) -> Result<u64> {
         .ok_or("Membership generation exhausted".into())
 }
 struct Session {
+    id: String,
+    created_at: u64,
     user_id: String,
     expires: Instant,
 }
@@ -282,6 +286,7 @@ impl Accounts {
             disabled: false,
             password_hash: hash(&password)?,
             appearance: default_appearance(),
+            autofill_origins: Vec::new(),
         };
         if bootstrap && let Some(encrypted) = &self.initial_snapshot {
             let repository = crate::Repository::new(
@@ -338,6 +343,8 @@ impl Accounts {
         self.sessions.insert(
             token.clone(),
             Session {
+                id: random_id()?,
+                created_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
                 user_id: user.id.clone(),
                 expires: Instant::now() + Duration::from_secs(8 * 3600),
             },
@@ -357,6 +364,80 @@ impl Accounts {
             .users
             .into_iter()
             .find(|u| u.id == session.user_id && !u.disabled))
+    }
+    pub fn clients(&self, user: &User, current: &str) -> Vec<serde_json::Value> {
+        let now = Instant::now();
+        let mut clients: Vec<_> = self.sessions.iter()
+            .filter(|(_, session)| session.user_id == user.id && session.expires > now)
+            .map(|(token, session)| serde_json::json!({
+                "id": session.id, "kind": if token.starts_with("cli_") { "CLI" } else { "Browser" },
+                "created_at": session.created_at, "expires_in": session.expires.duration_since(now).as_secs(),
+                "current": token == current
+            })).collect();
+        clients.sort_by_key(|client| client["created_at"].as_u64());
+        clients
+    }
+    pub fn revoke_client(&mut self, user: &User, id: &str) -> Result<()> {
+        let token = self
+            .sessions
+            .iter()
+            .find(|(_, session)| session.user_id == user.id && session.id == id)
+            .map(|(token, _)| token.clone())
+            .ok_or("Client session not found")?;
+        self.logout(&token);
+        Ok(())
+    }
+    pub fn website_permissions(&self, user: &User) -> Result<Vec<String>> {
+        let db = Self::load(&StoreFile::lock(&self.path)?)?;
+        Ok(db
+            .users
+            .into_iter()
+            .find(|u| u.id == user.id)
+            .ok_or("User not found")?
+            .autofill_origins)
+    }
+    pub fn website_permission(
+        &self,
+        user: &User,
+        origin: &str,
+        allow: bool,
+    ) -> Result<Vec<String>> {
+        let parsed = url::Url::parse(origin)?;
+        if origin.len() > 2048
+            || parsed.scheme() != "https"
+            || parsed.host_str().is_none()
+            || parsed.host_str().is_some_and(|host| host.contains('*'))
+            || !parsed.username().is_empty()
+            || parsed.password().is_some()
+            || parsed.path() != "/"
+            || parsed.query().is_some()
+            || parsed.fragment().is_some()
+        {
+            return Err(
+                "Enter an exact HTTPS website origin without a path, credentials, or wildcard"
+                    .into(),
+            );
+        }
+        let origin = parsed.origin().ascii_serialization();
+        let file = StoreFile::lock(&self.path)?;
+        let mut db = Self::load(&file)?;
+        let saved = db
+            .users
+            .iter_mut()
+            .find(|u| u.id == user.id)
+            .ok_or("User not found")?;
+        if allow && !saved.autofill_origins.contains(&origin) {
+            if saved.autofill_origins.len() >= 100 {
+                return Err("At most 100 website permissions are supported".into());
+            }
+            saved.autofill_origins.push(origin);
+            saved.autofill_origins.sort();
+        } else if !allow {
+            saved.autofill_origins.retain(|value| value != &origin);
+        }
+        let origins = saved.autofill_origins.clone();
+        file.write(&serde_json::to_vec(&db)?, false)?;
+        Ok(origins)
     }
     pub fn logout(&mut self, token: &str) {
         self.sessions.remove(token);
@@ -449,6 +530,8 @@ impl Accounts {
         self.sessions.insert(
             token.clone(),
             Session {
+                id: random_id()?,
+                created_at: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
                 user_id: user.id.clone(),
                 expires: Instant::now() + Duration::from_secs(8 * 3600),
             },

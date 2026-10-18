@@ -92,7 +92,10 @@ parallel. Feature backlog items remain open but do not replace these security ga
 
 ## Remaining backlog
 
-- [ ] Chromium/Firefox extensions and explicit, destination-checked autofill.
+- [ ] Chromium/Firefox extensions with inline password suggestions, explicit login/TOTP filling,
+  QR capture, and enforced exact-origin website permissions (see [UX requirements](settings-experience.md#password-and-totp-browser-experience)).
+- [x] In-vault password suggestions, account-scoped active-client listing/revocation,
+  and preparatory website-permission management. Extension enforcement remains unavailable.
 - [ ] iOS/Android apps, desktop native messaging, and configurable biometric unlock.
 - [ ] Full GPG key creation/export/expiry/revocation UI.
 - [ ] OTP QR scanning.

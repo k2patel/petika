@@ -358,7 +358,7 @@ function securitySettings() {
     <div class="settings-row"><div><h3>Vault protection</h3><p>Your saved passwords are encrypted on your device before they sync.</p></div><span class="pill neutral">${protection}</span></div>
     <div class="settings-row"><div><h3>Recovery & sharing</h3><p>Manage your encrypted recipient identity${state.collection.group?' and this group’s access':''}. Keep recovery material somewhere safe.</p></div><div class="actions">${button('Recipient identity','identity','key')}${state.collection.group?button('Group access','sharing','users'):''}</div></div>
     <div class="settings-row"><div><h3>Off-site backups</h3><p>Send encrypted copies to S3 or SSH storage, or create a download key for your backup software.</p></div>${button('Off-site backups','backups','download')}</div>
-    <div class="settings-row"><div><h3>Account access</h3><p>Changing your sign-in password does not change your vault passphrase.</p></div>${button('Change account password','account-password','key')}</div>
+    <div class="settings-row"><div><h3>Account access</h3><p>Changing your sign-in password does not change your vault passphrase.</p></div><div class="actions">${button('Connected clients','clients','browser')}${button('Change account password','account-password','key')}</div></div>
     <details class="settings-details"><summary>Encryption details & upcoming options</summary><div class="settings-details-body">
       <p>${!state.unlocked?'Unlock this collection to see which protection it uses.':state.mode==='standard'?'This collection uses XChaCha20-Poly1305 with Argon2id passphrase protection.':'This collection uses experimental X-Wing key protection and XChaCha20-Poly1305 encryption.'}</p>
       <p>GPG is an import tool, not a vault protection setting. ${button('Open import tools','transfer','upload','ghost')}</p>
@@ -394,7 +394,7 @@ async function renderPage() {
     main.innerHTML = title('GPG keys', 'Keep private-key operations on your device.') + `<section class="panel readable"><span class="pill neutral">Native integration required</span><h2>Use your existing GPG keys for import</h2><p>GPG imports work today through the native CLI and your local GPG agent. The browser does not upload or manage your private keys.</p><code class="inline-code">petika import-gpg /path/to/password-store --gpg-home /path/to/gnupg</code><div class="notice">Key creation, public-key export, expiry changes, and revocation are planned for the native key-management integration. They are not available in this web release.</div>${button('Open import tools','transfer','upload')}</section>`;
   }
   if (state.view === 'autofill') {
-    main.innerHTML = title('Less typing. More control.', 'Website-aware filling, with your permission.') + `<section class="panel readable"><div class="panel-header"><h2>Browser autofill</h2><span class="pill neutral">Extension not connected</span></div><p>The web app can copy credentials and generate website verification codes. Filling forms on another website requires the Petika Chromium or Firefox extension, which is not implemented yet.</p><div class="settings-row"><div><h3>Match the website</h3><p>Save the complete HTTPS address on each login. The planned extension will check the destination before suggesting credentials.</p></div>${icon('browser')}</div><div class="settings-row"><div><h3>Fill only when you choose</h3><p>Explicit selection will fill the username, password, or current one-time code without automatically submitting the form.</p></div>${icon('check')}</div><div class="settings-row"><div><h3>Website OTP</h3><p>Add a setup key or otpauth link to a login to get time-based codes now.</p></div>${button('Go to items','items','key')}</div></section>`;
+    main.innerHTML = title('Less typing. More control.', 'Website-aware filling, with your permission.') + `<section class="panel readable"><div class="panel-header"><h2>Browser autofill</h2><span class="pill neutral">Extension not connected</span></div><p>The web app can copy credentials and generate website verification codes. Filling forms on another website requires the Petika Chromium or Firefox extension, which is not implemented yet.</p><div class="settings-row"><div><h3>Match the website</h3><p>Save the complete HTTPS address on each login. The planned extension will check the destination before suggesting credentials.</p></div>${icon('browser')}</div><div class="settings-row"><div><h3>Fill only when you choose</h3><p>Explicit selection will fill the username, password, or current one-time code without automatically submitting the form.</p></div>${icon('check')}</div><div class="settings-row"><div><h3>Website OTP</h3><p>Add a setup key or otpauth link to a login to get time-based codes now.</p></div>${button('Go to items','items','key')}</div><div class="settings-row"><div><h3>Allowed websites</h3><p>Prepare exact website permissions for the future extension. These permissions are not enforced yet because autofill is unavailable.</p></div>${button('Manage websites','websites','shield')}</div></section>`;
   }
   if (state.view === 'settings') {
     main.innerHTML = title('Settings', 'Manage protection, backups, and your preferences.') + securitySettings() + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Saved to your account. Select Light or Dark; select it again to follow your system.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Sign out','logout','logout')}`;
@@ -594,7 +594,8 @@ async function editItem(prefill = null) {
     notes: '',
     otp: ''
   });
-  dialog(original ? 'Edit item' : 'New item', `<form id="item-form">${field('Name','name','text',original||'','required maxlength="256" '+(original?'readonly':''))}${field('Username','username','text',entry.username,'autocomplete="off" maxlength="1024"')}<div class="field"><label for="f-password">Password</label><div class="input-action"><input id="f-password" name="password" type="password" autocomplete="new-password" value="${esc(entry.password)}" maxlength="4096">${button('Generate','generate-item','refresh')}</div></div>${field('Website','url','url',entry.url,'placeholder="https://example.com" maxlength="2048"')}<div class="field"><label for="f-otp">Verification-code setup key</label><input id="f-otp" name="otp" type="password" autocomplete="off" value="${esc(entry.otp||'')}" placeholder="Base32 secret or otpauth://totp/…" maxlength="4096"><small>Get the setup key from the website’s two-factor authentication settings. It is encrypted with this item.</small></div><div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes" maxlength="20000">${esc(entry.notes)}</textarea></div><div class="form-error" role="alert"></div><div class="dialog-footer">${button('Cancel','close')}<button class="btn primary" type="submit">Save item</button></div></form>`);
+  dialog(original ? 'Edit item' : 'New item', `<form id="item-form">${field('Name','name','text',original||'','required maxlength="256" '+(original?'readonly':''))}${field('Username','username','text',entry.username,'autocomplete="off" maxlength="1024"')}<div class="field"><label for="f-password">Password</label><div class="input-action"><input id="f-password" name="password" type="password" autocomplete="new-password" value="${esc(entry.password)}" maxlength="4096">${button('Suggest password','generate-item','refresh')}</div><div id="password-suggestion" class="password-suggestion" hidden><label for="suggested-password">Suggested password</label><input id="suggested-password" class="mono" type="text" readonly spellcheck="false" autocomplete="off"><div class="actions">${button('Use suggested password','use-suggested','check')}${button('Generate another','generate-item','refresh','ghost')}</div><small>Generated on your device. Only saved when you save this item.</small></div></div>${field('Website','url','url',entry.url,'placeholder="https://example.com" maxlength="2048"')}<div class="field"><label for="f-otp">Verification-code setup key</label><input id="f-otp" name="otp" type="password" autocomplete="off" value="${esc(entry.otp||'')}" placeholder="Base32 secret or otpauth://totp/…" maxlength="4096"><small>On the website, enable two-factor authentication and choose an authenticator app. Paste its setup key or otpauth link here, then save this item. Enter Petika’s generated code on the website to finish enabling MFA. Saving here alone does not enable MFA. The key is encrypted with this item.</small></div><div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes" maxlength="20000">${esc(entry.notes)}</textarea></div><div class="form-error" role="alert"></div><div class="dialog-footer">${button('Cancel','close')}<button class="btn primary" type="submit">Save item</button></div></form>`);
+  if (!original && !entry.password) await suggestItemPassword();
   form('#item-form', async data => {
     const name = data.get('name');
     await rpc('put', name, {
@@ -930,8 +931,19 @@ async function action(name, el) {
       $('#generated').value = await rpc('generate', Number($('#length').value));
       break;
     case 'generate-item':
-      $('#f-password').value = await rpc('generate', 24);
-      toast('New password generated');
+      await suggestItemPassword();
+      break;
+    case 'use-suggested':
+      $('#f-password').value = $('#suggested-password').value;
+      $('#suggested-password').value = '';
+      $('#password-suggestion').hidden = true;
+      toast('Suggested password selected. Save the item to keep it.');
+      break;
+    case 'clients':
+      await clientsDialog();
+      break;
+    case 'websites':
+      await websitesDialog();
       break;
     case 'copy-generated':
       await copyText($('#generated').value);
@@ -1301,5 +1313,45 @@ async function sharingDialog() {
       toast(`${pendingMembers.length} members pending enrollment or verification.`);
     }
     el.reset(); closeDialog(); shell();
+  });
+}
+
+async function suggestItemPassword() {
+  const target = $('#suggested-password');
+  const value = await rpc('generate', 24);
+  if (target?.isConnected) {
+    target.value = value;
+    $('#password-suggestion').hidden = false;
+  }
+}
+async function clientsDialog() {
+  if (state.demo) { toast('Connected clients are unavailable in the demo.'); return; }
+  const result = await api('/v1/auth/clients');
+  dialog('Connected clients', `<p>Active browser and CLI sessions for your account. Sessions expire after eight hours and end when the server restarts. These are sessions, not verified device identities.</p><div class="client-list">${result.clients.map(c=>`<div class="settings-row"><div><h3>${esc(c.kind)}${c.current?' · This session':''}</h3><p>Signed in ${esc(new Date(c.created_at*1000).toLocaleString())}<br>Expires in ${Math.ceil(c.expires_in/60)} minutes</p><small class="mono">Session ${esc(c.id.slice(0,8))}</small></div><button type="button" class="btn" data-revoke-client="${esc(c.id)}" data-current="${c.current}">${c.current?'Sign out':'Revoke'}</button></div>`).join('')}</div><p class="small muted">Revoking stops future server access. It cannot erase data already downloaded. Backup API keys are managed under Off-site backups.</p><div class="form-error" role="alert"></div>`);
+  $('#dialog').querySelectorAll('[data-revoke-client]').forEach(el => el.onclick = async () => {
+    el.disabled = true;
+    try {
+      await api('/v1/auth/clients/revoke', {method:'POST', body:{id:el.dataset.revokeClient}});
+      if (el.dataset.current === 'true') { await action('logout'); return; }
+      closeDialog();
+      await clientsDialog();
+      toast('Client session revoked');
+    } catch (e) { $('#dialog .form-error').textContent = errorText(e); el.disabled = false; }
+  });
+}
+async function websitesDialog() {
+  if (state.demo) { toast('Website permissions are unavailable in the demo.'); return; }
+  const result = await api('/v1/auth/websites');
+  dialog('Allowed websites', `<div class="notice">Autofill is not available yet. This list prepares permissions for the planned browser extension; it currently grants no filling access.</div><p>Permissions apply to an exact HTTPS origin, including its port. Subdomains need separate entries. Website addresses are stored in your account settings on the server.</p><div class="website-list">${result.origins.length?result.origins.map(origin=>`<div class="settings-row"><span class="website-origin">${esc(origin)}</span><button type="button" class="btn" data-remove-origin="${esc(origin)}" aria-label="Remove ${esc(origin)}">Remove</button></div>`).join(''):'<p class="notice">No websites allowed.</p>'}</div><form id="website-form">${field('Website origin','origin','url','','required placeholder="https://example.com" maxlength="2048"')}<div class="form-error" role="alert"></div><button class="btn primary" type="submit">Add website</button></form>`);
+  form('#website-form', async data => {
+    await api('/v1/auth/websites', {method:'POST', body:{origin:data.get('origin').trim(), allow:true}});
+    closeDialog(); await websitesDialog(); toast('Website permission saved for future autofill');
+  });
+  $('#dialog').querySelectorAll('[data-remove-origin]').forEach(el => el.onclick = async () => {
+    el.disabled = true;
+    try {
+      await api('/v1/auth/websites', {method:'POST', body:{origin:el.dataset.removeOrigin, allow:false}});
+      closeDialog(); await websitesDialog(); toast('Website permission removed');
+    } catch (e) { $('#website-form .form-error').textContent = errorText(e); el.disabled = false; }
   });
 }
