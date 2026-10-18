@@ -1,0 +1,25 @@
+{
+  "record_version": 1,
+  "environment": "Homelab Kubernetes; distinct compute nodes; shared NFS CSI storage",
+  "distinct_nodes_verified": true,
+  "started_utc": "2026-10-18T04:57:43.342280+00:00",
+  "status": "passed",
+  "synthetic_only": true,
+  "image": "git.k2patel.in/k2patel/petika@sha256:77cfcebdb7f989236022695b72a4c4bee101c0e2e65032bf004eae61a0e9a4e8",
+  "helper_image_id": "docker.io/library/python@sha256:34386ef0cb081344d7ec1c103ba398e6e9f64e9ab3a1509accc92a4e24a07258",
+  "storage_class": "nfs-csi",
+  "original_removed_before_restore": true,
+  "restore_and_validation_seconds": 56.73,
+  "checks": [
+    "offline backup inventory and hashes",
+    "original PVC/client removed",
+    "cross-node fresh PVC restore",
+    "setup disabled on restored server",
+    "account ID preserved",
+    "fingerprint-verified identity bundle restore",
+    "Standard and Hybrid rotated recipient access and secret decryption",
+    "snapshot revision 3 preserved"
+  ],
+  "cleanup": "namespace and synthetic PVs deleted",
+  "elapsed_seconds": 229.3
+}

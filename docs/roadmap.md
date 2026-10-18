@@ -84,8 +84,11 @@ replacement API already exists; it is intentionally separate from enrollment ret
 - [ ] Individual selected-item sharing semantics beyond existing collection sharing.
 - [x] Offline full-backup integrity/restore tooling, authenticated historical Git recovery,
   retention runbook, and synthetic clean-directory recovery drill in both modes.
-- [ ] Configure independent off-site retained storage and run a physical-host/Kubernetes
-  recovery drill; measure deployment recovery objectives.
+- [x] Isolated cross-node Kubernetes recovery drill: original synthetic PVC/client removed,
+  full backup restored to a fresh PVC, both rotated encryption modes verified, test resources
+  cleaned up ([2026-10-18 result](testing/kubernetes-recovery-2026-10-18.json)).
+- [ ] Configure independent off-site retained storage and validate recovery after loss of the
+  primary storage system; measure production recovery objectives.
 - [ ] Independent security review, accessibility review, native-platform validation,
   and real-cluster deployment hardening.
 - [ ] Simplified favicon.

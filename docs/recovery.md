@@ -95,7 +95,13 @@ never start from an incomplete staging directory. Install the matching release s
 
 1. Mount restored `data` and `mirror` directories into an isolated instance. Configure it
    from the retained `config` files; adjust file ownership to the container runtime UID
-   (65532 for the current image), keeping owner-only access. Do not expose it publicly yet.
+   (65532 for the current image), keeping owner-only access. Use
+   `fsGroupChangePolicy: OnRootMismatch`, as in the production manifest; recursive
+   fsGroup changes on remount can add group access and make Petika reject restored files.
+   Initialize each empty PVC using the same maintenance-pod security context **before**
+   restoring private files. Keep the initialized PVC root ownership/permissions; restore
+   into private subdirectories beneath it. Replacing the PVC root with a mode-0700
+   directory can trigger recursive permission changes even with `OnRootMismatch`. Do not expose it publicly yet.
 2. Use `PETIKA_SETUP_MODE=disabled`; restored accounts must load without creating a new
    deployment identity. Temporarily set an isolated `PETIKA_ENDPOINT` and listener. Leave
    remote mirror replication off until history has been compared with the remote backup.
@@ -195,6 +201,53 @@ server process and fresh client. It checks account identity, identity-bundle res
 recipient grants, local v1/v2 historical recovery, wrong keys, incomplete mirrors, damaged
 ciphertext, refusal to overwrite files, and historical publication with stale-write rejection.
 Unit checks cover missing/changed/extra backup files, release mismatch, links, and overlap.
-These tests are wired into CI. They establish clean-directory recovery, not a physical-host,
-off-site-storage, Kubernetes, or exhaustive power-loss drill. Repeat those deployment-specific
-drills after configuring independent retained storage; independent crypto review remains open.
+These tests are wired into CI. They establish clean-directory recovery, not an off-site-storage
+or exhaustive power-loss drill. Use the separate cluster drill below to validate Kubernetes
+PVC restoration across nodes. Independent crypto review remains open.
+
+
+## Isolated Kubernetes drill
+
+[`scripts/drill_kubernetes_recovery.py`](../scripts/drill_kubernetes_recovery.py) creates a
+unique temporary namespace, three synthetic PVCs, and digest-pinned Petika pods. It provisions
+accounts and rotated collections in both encryption modes, stops the original server, makes
+and verifies a full offline backup, deletes the original PVC and client files, and restores
+to a fresh PVC on a different node. A fresh client restores its identity using a retained
+fingerprint and decrypts both collections. Setup is disabled on the restored server.
+
+Prerequisites: `kubectl` with namespace/PVC/PV/pod permissions, a matching local native CLI,
+two schedulable nodes with distinct `kubernetes.io/hostname` labels, a dynamically provisioned
+storage class with Immediate binding, and an existing registry pull Secret. The script copies that pull Secret into
+the temporary namespace in memory; it never copies production data or other credentials.
+The helper image must provide Python 3; its resolved image ID is recorded in the report.
+
+```sh
+python3 scripts/drill_kubernetes_recovery.py \
+  --context kubernetes-admin@homelab \
+  --image git.k2patel.in/k2patel/petika@sha256:EXACT_IMAGE_DIGEST \
+  --source-node desk --restore-node vashu --storage-class nfs-csi \
+  --registry-secret-namespace petika --registry-secret gitea-registry \
+  --report output/kubernetes-recovery.json
+```
+
+The script creates no Service or Ingress; client traffic uses loopback-only port forwarding.
+It mounts only newly created synthetic PVCs. For each new PVC it verifies the bound PV's
+generated PV name plus claim namespace, name, and UID before changing that **test PV only** to a `Delete` reclaim
+policy. It removes the temporary namespace and waits for its PVs to disappear, including
+on test failure, except when unexpected volume ownership requires manual inspection.
+In that case it retains the namespace to avoid deleting a pre-existing volume. If interrupted
+forcibly or cleanup fails, use the recorded namespace/PV
+names to inspect and finish cleanup; never apply cleanup to the production namespace.
+
+The JSON report records the pinned application image, helper image ID, nodes, synthetic
+volumes, checks, elapsed times, and cleanup result. This is a same-storage-system drill;
+it does not establish survival of NFS loss or an off-site recovery objective. Run a separate
+off-site restore after independent retained storage has been configured. Cluster drills
+are explicitly operator-run and are not part of GitHub CI.
+
+The [2026-10-18 result](testing/kubernetes-recovery-2026-10-18.json) passed on the homelab:
+Standard and Hybrid rotated collections were decrypted by a fresh client after the original
+PVC and client files were removed. Restore plus validation took 56.73 seconds; the entire
+synthetic drill including provisioning and cleanup took 229.3 seconds. All temporary
+namespaces and PVs were removed. These measurements describe this small synthetic fixture,
+not a production recovery-time commitment.
