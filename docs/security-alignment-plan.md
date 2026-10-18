@@ -37,6 +37,11 @@ expose private metadata; recovery availability introduces additional key holders
 Resolve conflicts through a recorded threat/privacy analysis and independently
 reviewed safeguards. Preserve the agreed vault confidentiality boundary.
 
+The [accepted cryptographic profile direction](decisions/0004-cryptographic-profile-direction.md)
+retains existing XChaCha20 encryption and starts separate validated AES-GCM and reviewed
+ML-KEM delivery tracks. The [initial assessment](research/cryptographic-profiles.md)
+records provider feasibility, wrapper findings and outstanding implementation gates.
+
 ## Architecture constraints
 
 - Encrypt and decrypt vault contents on authorized clients. Account login, vault

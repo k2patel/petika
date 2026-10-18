@@ -5,6 +5,8 @@ and limitations.
 
 - [Security and compliance alignment plan](security-alignment-plan.md)
 - [Multi-device biometric-key research](research/multi-device-biometric-keys.md)
+- [Cryptographic profile direction](decisions/0004-cryptographic-profile-direction.md)
+- [Cryptographic profile assessment and wrapper review](research/cryptographic-profiles.md)
 - [Client encryption and explicit recovery decision](decisions/0003-security-and-recovery-baseline.md)
 - [Per-user group access and rotation](group-access.md)
 - [Package and envelope wire formats](key-package-format.md)
