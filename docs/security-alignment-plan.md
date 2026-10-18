@@ -42,6 +42,10 @@ retains existing XChaCha20 encryption and starts separate validated AES-GCM and 
 ML-KEM delivery tracks. The [initial assessment](research/cryptographic-profiles.md)
 records provider feasibility, wrapper findings and outstanding implementation gates.
 
+All new controls must follow the [simple configuration UI contract](settings-experience.md):
+one shared stylesheet, task-based settings, progressive disclosure and no controls
+for unimplemented capabilities. Usability verification is part of each release gate.
+
 ## Architecture constraints
 
 - Encrypt and decrypt vault contents on authorized clients. Account login, vault

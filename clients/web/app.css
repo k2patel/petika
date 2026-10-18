@@ -27,3 +27,13 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(
 .field input,.field textarea,.field select,.search input,select.control,.group-member select{border-color:var(--control-line)}
 
 .fingerprint { overflow-wrap: anywhere; }
+
+/* Settings share the same tokens and controls as the rest of the application. */
+.settings-security .settings-row>div:first-child{flex:1;min-width:0;max-width:58ch}
+.settings-security .settings-row>.actions{flex-shrink:0}
+.settings-security .pill{white-space:normal}
+.settings-details{margin-top:18px;border-top:1px solid var(--line);padding-top:16px}
+.settings-details summary{cursor:pointer;font-weight:600;color:var(--ink);padding:8px 0;min-height:44px}
+.settings-details summary:focus-visible{outline:3px solid var(--accent);outline-offset:3px;border-radius:4px}
+.settings-details-body{display:grid;gap:12px;padding:12px 0 0;max-width:70ch}
+@media(max-width:800px){.settings-security .settings-row>.actions{width:100%}.settings-security .settings-row .btn{white-space:normal;text-align:left}.settings-details-body .btn{white-space:normal}}

@@ -3,6 +3,7 @@
 Use the [implementation roadmap](roadmap.md) for completed milestones and remaining work. Feature guides document implemented behavior
 and limitations.
 
+- [Simple security configuration and UI contract](settings-experience.md)
 - [Security and compliance alignment plan](security-alignment-plan.md)
 - [Multi-device biometric-key research](research/multi-device-biometric-keys.md)
 - [Cryptographic profile direction](decisions/0004-cryptographic-profile-direction.md)
