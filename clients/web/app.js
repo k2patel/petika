@@ -355,7 +355,7 @@ async function renderPage() {
     main.innerHTML = title('Less typing. More control.', 'Website-aware filling, with your permission.') + `<section class="panel readable"><div class="panel-header"><h2>Browser autofill</h2><span class="pill neutral">Extension not connected</span></div><p>The web app can copy credentials and generate website verification codes. Filling forms on another website requires the Petika Chromium or Firefox extension, which is not implemented yet.</p><div class="settings-row"><div><h3>Match the website</h3><p>Save the complete HTTPS address on each login. The planned extension will check the destination before suggesting credentials.</p></div>${icon('browser')}</div><div class="settings-row"><div><h3>Fill only when you choose</h3><p>Explicit selection will fill the username, password, or current one-time code without automatically submitting the form.</p></div>${icon('check')}</div><div class="settings-row"><div><h3>Website OTP</h3><p>Add a setup key or otpauth link to a login to get time-based codes now.</p></div>${button('Go to items','items','key')}</div></section>`;
   }
   if (state.view === 'settings') {
-    main.innerHTML = title('A workspace that feels like yours', 'Profile, appearance, and local session preferences.') + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div><div class="settings-row"><div><h3>Biometric unlock</h3><p>Requires the native device integration. This web release uses a passphrase and cannot verify biometrics.</p></div><span class="pill neutral">Not available yet</span></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Recipient identity','identity','key')} ${state.collection.group?button('Group access','sharing','users'):''} ${button('Change account password','account-password','key')} ${button('Sign out','logout','logout')}`;
+    main.innerHTML = title('A workspace that feels like yours', 'Profile, appearance, and local session preferences.') + `<div class="panel readable"><div class="panel-header"><h2>Your profile</h2><span class="avatar">${esc(state.user.name.slice(0,2).toUpperCase())}</span></div><form id="profile-form">${field('Display name','name','text',state.user.name,'required maxlength="100"')}<p class="small muted">Username: ${esc(state.user.username)}</p><div class="form-error" role="alert"></div><button class="btn" type="submit">Save profile</button></form></div><section class="panel readable"><h2>Preferences</h2><div class="settings-row"><div><h3>Appearance</h3><p>Follow your device, or choose a look for Petika.</p></div>${themeSelect()}</div><div class="settings-row"><div><h3>Automatic lock</h3><p>Lock this collection after inactivity. Signing out also ends the account session.</p></div><select class="control" id="auto-lock" aria-label="Automatic lock">${[1,5,15].map(n=>`<option value="${n}" ${lockMinutes()===n?'selected':''}>${n} minute${n===1?'':'s'}</option>`).join('')}</select></div><div class="settings-row"><div><h3>Biometric unlock</h3><p>Requires the native device integration. This web release uses a passphrase and cannot verify biometrics.</p></div><span class="pill neutral">Not available yet</span></div></section>${!state.demo?'<p><a href="/?cli=1">Connect a CLI session</a></p>':''}${button('Off-site backups','backups','download')} ${button('Recipient identity','identity','key')} ${state.collection.group?button('Group access','sharing','users'):''} ${button('Change account password','account-password','key')} ${button('Sign out','logout','logout')}`;
     form('#profile-form', async data => {
       state.user = state.demo ? {
         ...state.user,
@@ -665,7 +665,55 @@ async function groupDialog(group = null) {
     toast('Group saved')
   })
 }
+function downloadBackupProfile(value) {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(value, null, 2) + '\n'], {type:'application/json'}));
+  const link = document.createElement('a'); link.href = url; link.download = 'petika-backup-destination.json'; link.click(); URL.revokeObjectURL(url);
+}
+
+async function backupDialog(operator = false) {
+  if (state.demo) { toast('Sign in to configure off-site backups.'); return; }
+  const base = '/v1/backup-settings/' + (operator ? 'operator/' : '');
+  const destinations = (await api(base + 'destinations')).destinations;
+  const keys = operator ? [] : (await api('/v1/backup-settings/keys')).keys;
+  dialog(operator ? 'Full-server backup destinations' : 'Your off-site backups', `
+    <p>${operator ? 'Operator jobs create complete server archives while writers are stopped.' : 'A backup runner downloads your authorized encrypted collections and recipient identity.'} Configure the runner separately to schedule transfers. Saving a destination does not start a backup.</p>
+    <p class="small">S3 and SSH credentials and the repository encryption password stay on your backup machine. Keep recovery passphrases separately.</p>
+    <h3>Destinations</h3>
+    ${destinations.map((d,i)=>`<div class="settings-row"><div><strong>${esc(d.name)}</strong><p>${esc(d.kind.toUpperCase())}</p></div><div class="actions"><button class="btn" data-profile="${i}">Download profile</button><button class="btn" data-edit-destination="${i}">Edit</button><button class="btn" data-remove-destination="${i}">Remove</button></div></div>`).join('') || '<p class="muted">No destinations configured.</p>'}
+    <button class="btn" id="new-destination">Add S3 or SSH destination</button>
+    ${operator ? '' : `<h3>Read-only backup API keys</h3><p class="small">Keys expire and can be revoked. Password changes and account disabling invalidate them. Group access is checked on every download.</p>${keys.map((k,i)=>`<div class="settings-row"><div><strong>${esc(k.name)}</strong><p>Expires ${esc(new Date(k.expires_at*1000).toLocaleDateString())}</p></div><button class="btn" data-revoke-backup="${i}">Revoke</button></div>`).join('') || '<p class="muted">No backup keys.</p>'}<button class="btn" id="new-backup-key">Generate backup key</button>`}
+    ${state.user.admin ? `<p><button class="btn" id="backup-scope">${operator ? 'Your backups' : 'Operator full-server destinations'}</button></p>` : ''}`);
+  const safe = fn => () => Promise.resolve().then(fn).catch(e=>toast(errorText(e)));
+  $('#new-destination').onclick = () => destinationDialog(operator);
+  $('#backup-scope')?.addEventListener('click', safe(()=>backupDialog(!operator)));
+  document.querySelectorAll('[data-profile]').forEach(el=>el.onclick=()=>downloadBackupProfile(destinations[Number(el.dataset.profile)]));
+  document.querySelectorAll('[data-edit-destination]').forEach(el=>el.onclick=()=>destinationDialog(operator,destinations[Number(el.dataset.editDestination)]));
+  document.querySelectorAll('[data-remove-destination]').forEach(el=>el.onclick=safe(async()=>{
+    await api(base+'destinations/'+destinations[Number(el.dataset.removeDestination)].id,{method:'DELETE'}); await backupDialog(operator);
+  }));
+  document.querySelectorAll('[data-revoke-backup]').forEach(el=>el.onclick=safe(async()=>{
+    await api('/v1/backup-settings/keys/'+keys[Number(el.dataset.revokeBackup)].id,{method:'DELETE'}); await backupDialog();
+  }));
+  $('#new-backup-key')?.addEventListener('click', ()=>{
+    dialog('Generate a backup API key', `<form id="backup-key-form">${field('Key name','backup_key_name','text','','required maxlength="100"')}${field('Expires in days','expires_in_days','number','90','required min="1" max="365"')}${field('Current account password','current_password','password','','required autocomplete="current-password"')}<div class="form-error" role="alert"></div><button class="btn primary" type="submit">Generate key</button></form>`);
+    form('#backup-key-form',async data=>{
+      const value = await api('/v1/backup-settings/keys',{method:'POST',body:{name:data.get('backup_key_name'),expires_in_days:Number(data.get('expires_in_days')),current_password:data.get('current_password')}});
+      dialog('Save your backup API key', `<p>This key is shown only once. Save it in an owner-only file on your backup machine. It can download your encrypted backups until it expires or is revoked.</p><div class="field"><label for="backup-token">Backup API key</label><textarea id="backup-token" readonly spellcheck="false" autocomplete="off">${esc(value.token)}</textarea></div><p class="small">Petika stores only a hash of this key.</p>${button('Done','close')}`);
+    });
+  });
+}
+
+function destinationDialog(operator, existing = null) {
+  dialog(existing ? 'Edit backup destination' : 'Add backup destination', `<form id="destination-form">${field('Name','destination_name','text',existing?.name||'','required maxlength="100"')}<div class="field"><label for="destination-kind">Storage type</label><select id="destination-kind" name="kind" class="control"><option value="s3">S3-compatible storage</option><option value="sftp" ${existing?.kind==='sftp'?'selected':''}>SSH / SFTP</option></select></div>${field('Repository URL','repository','text',existing?.repository||'','required maxlength="2048"')}<p class="small">S3: s3:https://endpoint/bucket/petika<br>SSH: sftp://user@host//absolute/path<br>Do not include passwords, access keys, or signed URLs.</p><div class="form-error" role="alert"></div><button class="btn primary" type="submit">Save destination</button></form>`);
+  form('#destination-form',async data=>{
+    const body = {name:data.get('destination_name'),kind:data.get('kind'),repository:data.get('repository')}; if(existing) body.id=existing.id;
+    await api('/v1/backup-settings/'+(operator?'operator/':'')+'destinations',{method:'POST',body});
+    await backupDialog(operator);
+  });
+}
+
 async function action(name, el) {
+  if (name === 'backups') return backupDialog();
   if (name === 'identity-backup') {
     const blob = new Blob([localStorage.getItem(identityStorageKey())], {type:'application/json'});
     const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'petika-identity-backup.json'; link.click(); URL.revokeObjectURL(url); return;

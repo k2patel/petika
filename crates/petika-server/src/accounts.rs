@@ -1,4 +1,5 @@
 //! Local identities and collection authorization. Plaintext private and collection keys never enter this module.
+mod backups;
 mod delivery;
 mod keys;
 use crate::Result;
@@ -542,6 +543,7 @@ impl Accounts {
         user.disabled = disabled;
         if changed {
             db.identity_changed(id, disabled)?;
+            self.revoke_backup_keys(id)?;
         }
         file.write(&serde_json::to_vec(&db)?, false)?;
         self.sessions.retain(|_, s| s.user_id != id);

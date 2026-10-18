@@ -719,3 +719,58 @@ mod endpoint_tests {
         }
     }
 }
+
+/// Backup credentials never enter the regular session/administrator authentication path.
+pub fn backup_route(mut request: Request, accounts: &mut Accounts) {
+    use petika_server::accounts::KeyError;
+    let path = request.url().to_owned();
+    let method = request.method().as_str().to_owned();
+    let result = if let Some(tail) = path.strip_prefix("/v1/backup/") {
+        if method != "GET" {
+            Err(KeyError::MethodNotAllowed)
+        } else {
+            let token = zeroize::Zeroizing::new(
+                super::header(&request, "Authorization")
+                    .and_then(|h| h.strip_prefix("Bearer "))
+                    .unwrap_or("")
+                    .to_owned(),
+            );
+            if tail == "index" {
+                accounts.backup_export(&token, None)
+            } else if let Some(id) = tail.strip_prefix("collections/") {
+                accounts.backup_export(&token, Some(id))
+            } else {
+                Err(KeyError::NotFound)
+            }
+        }
+    } else {
+        let tail = path.strip_prefix("/v1/backup-settings/").unwrap_or("");
+        let (operator, tail) = match tail.strip_prefix("operator/") {
+            Some(tail) => (true, tail),
+            None => (false, tail),
+        };
+        if method != "GET" && !csrf(&request) {
+            Err(KeyError::Forbidden)
+        } else {
+            let token = session(&request);
+            let payload = if method == "POST" {
+                body(&mut request).map_err(|_| KeyError::Invalid)
+            } else {
+                Ok(serde_json::Value::Null)
+            };
+            payload.and_then(|payload| {
+                accounts.backup_manage(&token, operator, &method, tail, payload)
+            })
+        }
+    };
+    match result {
+        Ok(value) => json(request, 200, value, None),
+        Err(error) => json(
+            request,
+            error.status(),
+            serde_json::json!({"code":error.code(),
+            "message":format!("Backup request failed: {}", error.code())}),
+            None,
+        ),
+    }
+}

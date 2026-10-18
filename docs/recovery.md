@@ -251,3 +251,6 @@ PVC and client files were removed. Restore plus validation took 56.73 seconds; t
 synthetic drill including provisioning and cleanup took 229.3 seconds. All temporary
 namespaces and PVs were removed. These measurements describe this small synthetic fixture,
 not a production recovery-time commitment.
+
+See [off-site backups](offsite-backups.md) for separate user/operator S3 and SSH
+profiles, read-only user backup keys, encrypted transfer and download verification.

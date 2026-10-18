@@ -103,7 +103,15 @@ jobs:
         run: |
           python3 scripts/test_backup_recovery.py
           python3 scripts/test_kubernetes_recovery.py
+          PETIKA_TEST_API=1 python3 scripts/test_offsite_backup.py
           python3 scripts/test_backup_recovery.py --drill
+      - name: Encrypted off-site repository round trip
+        run: |
+          curl --fail --location https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2 -o /tmp/restic.bz2
+          echo "f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c  /tmp/restic.bz2" | sha256sum --check
+          bunzip2 /tmp/restic.bz2
+          chmod 700 /tmp/restic
+          PETIKA_TEST_RESTIC=/tmp/restic python3 scripts/test_offsite_backup.py
       - name: Provisioning
         run: python3 scripts/test_setup.py
       - name: Install browser test tools
@@ -113,6 +121,8 @@ jobs:
           /tmp/petika-browser-tests/bin/playwright install --with-deps chromium
       - name: Browser workflows and permissions
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
+      - name: Backup Settings workflows
+        run: /tmp/petika-browser-tests/bin/python scripts/test_backup_settings.py
       - name: HTTP demo without secure-context-only APIs
         run: /tmp/petika-browser-tests/bin/python scripts/test_http_demo.py
       - name: Configured public endpoint and login cookies

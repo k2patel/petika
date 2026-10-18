@@ -263,6 +263,8 @@ fn run() -> Result<()> {
         let path = request.url().to_owned();
         if !path.starts_with("/v1/") && path != "/healthz" && path != "/readyz" {
             web::static_file(request, &web_root, &endpoint);
+        } else if path.starts_with("/v1/backup/") || path.starts_with("/v1/backup-settings/") {
+            web::backup_route(request, &mut accounts);
         } else if path.starts_with("/v1/keys/") {
             web::key_route(request, &mut accounts);
         } else if path.starts_with("/v1/auth/")
