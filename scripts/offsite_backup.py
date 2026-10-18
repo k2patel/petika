@@ -36,7 +36,8 @@ def transport(repository, allow_local=False):
         return 's3'
     if repository.startswith('sftp://'):
         url = urlsplit(repository)
-        if (not url.hostname or not url.username or url.password or url.query or url.fragment
+        if (not url.hostname or url.hostname.startswith('-') or not re.fullmatch(r'[A-Za-z0-9._:-]+', url.hostname)
+                or not url.username or url.password or url.query or url.fragment
                 or not url.path.startswith('//') or len(url.path) < 3
                 or not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_.-]*', url.username)):
             raise ValueError('Use sftp://user@host//absolute/repository/path with SSH key authentication')

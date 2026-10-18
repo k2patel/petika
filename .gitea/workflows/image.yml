@@ -9,6 +9,10 @@ on:
       - rust-toolchain.toml
       - crates/**
       - clients/web/**
+      - scripts/server_backup.py
+      - scripts/offsite_backup.py
+      - scripts/user_backup.py
+      - scripts/backup_recovery.py
       - scripts/build_web.sh
       - scripts/check_licenses.py
       - scripts/third_party_notices.py
@@ -33,6 +37,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          target: push-runtime
+          build-args: PETIKA_RELEASE=${{ gitea.sha }}
           platforms: linux/amd64
           push: true
           cache-from: type=registry,ref=git.k2patel.in/k2patel/petika:buildcache

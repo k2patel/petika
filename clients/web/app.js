@@ -673,18 +673,24 @@ function downloadBackupProfile(value) {
 async function backupDialog(operator = false) {
   if (state.demo) { toast('Sign in to configure off-site backups.'); return; }
   const base = '/v1/backup-settings/' + (operator ? 'operator/' : '');
-  const destinations = (await api(base + 'destinations')).destinations;
+  const configuration = await api(base + 'destinations');
+  const destinations = configuration.destinations;
   const keys = operator ? [] : (await api('/v1/backup-settings/keys')).keys;
   dialog(operator ? 'Full-server backup destinations' : 'Your off-site backups', `
-    <p>${operator ? 'Operator jobs create complete server archives while writers are stopped.' : 'A backup runner downloads your authorized encrypted collections and recipient identity.'} Configure the runner separately to schedule transfers. Saving a destination does not start a backup.</p>
-    <p class="small">S3 and SSH credentials and the repository encryption password stay on your backup machine. Keep recovery passphrases separately.</p>
+    <p>${operator ? 'Petika captures a consistent full-server archive, then pushes it to your destination.' : 'Petika pushes your authorized encrypted collections and recipient identity to your destinations.'} S3 and SSH transfers run on this server.</p>
+    <p class="small">Destination credentials are encrypted on the server. Keep repository passwords and collection recovery passphrases separately.</p>
+    ${configuration.push_available ? '' : '<p class="notice warning">The deployment operator must enable the server backup worker before transfers can run. You can save settings now.</p>'}
     <h3>Destinations</h3>
-    ${destinations.map((d,i)=>`<div class="settings-row"><div><strong>${esc(d.name)}</strong><p>${esc(d.kind.toUpperCase())}</p></div><div class="actions"><button class="btn" data-profile="${i}">Download profile</button><button class="btn" data-edit-destination="${i}">Edit</button><button class="btn" data-remove-destination="${i}">Remove</button></div></div>`).join('') || '<p class="muted">No destinations configured.</p>'}
-    <button class="btn" id="new-destination">Add S3 or SSH destination</button>
-    ${operator ? '' : `<h3>Read-only backup API keys</h3><p class="small">Keys expire and can be revoked. Password changes and account disabling invalidate them. Group access is checked on every download.</p>${keys.map((k,i)=>`<div class="settings-row"><div><strong>${esc(k.name)}</strong><p>Expires ${esc(new Date(k.expires_at*1000).toLocaleDateString())}</p></div><button class="btn" data-revoke-backup="${i}">Revoke</button></div>`).join('') || '<p class="muted">No backup keys.</p>'}<button class="btn" id="new-backup-key">Generate backup key</button>`}
+    ${destinations.map((d,i)=>`<div class="settings-row"><div><strong>${esc(d.name)}</strong><p>${esc(d.kind.toUpperCase())} · ${esc(d.status)}${d.enabled ? ` · Every ${d.interval_hours} hours` : ''}</p><p class="small">${d.last_success ? 'Last verified: '+esc(new Date(d.last_success*1000).toLocaleString()) : 'No verified backup yet'}</p></div><div class="actions"><button class="btn" data-run-backup="${i}" ${!configuration.push_available || !d.credentials_configured || d.status==='running' ? 'disabled' : ''}>Back up now</button><button class="btn" data-profile="${i}">Download profile</button><button class="btn" data-edit-destination="${i}">Edit</button><button class="btn" data-remove-destination="${i}">Remove</button></div></div>`).join('') || '<p class="muted">No destinations configured.</p>'}
+    <button class="btn" id="new-destination">Add S3 or SSH destination</button> <button class="btn" id="refresh-backups">Refresh status</button>
+    ${operator ? '' : `<h3>Pull backups via API</h3><p class="small">External software can download your backups with a read-only API key. Keys expire and can be revoked. Password changes and account disabling invalidate them. Group access is checked on every download.</p>${keys.map((k,i)=>`<div class="settings-row"><div><strong>${esc(k.name)}</strong><p>Expires ${esc(new Date(k.expires_at*1000).toLocaleDateString())}</p></div><button class="btn" data-revoke-backup="${i}">Revoke</button></div>`).join('') || '<p class="muted">No backup keys.</p>'}<button class="btn" id="new-backup-key">Generate backup key</button>`}
     ${state.user.admin ? `<p><button class="btn" id="backup-scope">${operator ? 'Your backups' : 'Operator full-server destinations'}</button></p>` : ''}`);
   const safe = fn => () => Promise.resolve().then(fn).catch(e=>toast(errorText(e)));
   $('#new-destination').onclick = () => destinationDialog(operator);
+  $('#refresh-backups').onclick = safe(()=>backupDialog(operator));
+  document.querySelectorAll('[data-run-backup]').forEach(el=>el.onclick=safe(async()=>{
+    await api(base+'destinations/'+destinations[Number(el.dataset.runBackup)].id+'/run',{method:'POST',body:{}}); await backupDialog(operator);
+  }));
   $('#backup-scope')?.addEventListener('click', safe(()=>backupDialog(!operator)));
   document.querySelectorAll('[data-profile]').forEach(el=>el.onclick=()=>downloadBackupProfile(destinations[Number(el.dataset.profile)]));
   document.querySelectorAll('[data-edit-destination]').forEach(el=>el.onclick=()=>destinationDialog(operator,destinations[Number(el.dataset.editDestination)]));
@@ -704,9 +710,39 @@ async function backupDialog(operator = false) {
 }
 
 function destinationDialog(operator, existing = null) {
-  dialog(existing ? 'Edit backup destination' : 'Add backup destination', `<form id="destination-form">${field('Name','destination_name','text',existing?.name||'','required maxlength="100"')}<div class="field"><label for="destination-kind">Storage type</label><select id="destination-kind" name="kind" class="control"><option value="s3">S3-compatible storage</option><option value="sftp" ${existing?.kind==='sftp'?'selected':''}>SSH / SFTP</option></select></div>${field('Repository URL','repository','text',existing?.repository||'','required maxlength="2048"')}<p class="small">S3: s3:https://endpoint/bucket/petika<br>SSH: sftp://user@host//absolute/path<br>Do not include passwords, access keys, or signed URLs.</p><div class="form-error" role="alert"></div><button class="btn primary" type="submit">Save destination</button></form>`);
+  dialog(existing ? 'Edit backup destination' : 'Add backup destination', `<form id="destination-form">
+    ${field('Name','destination_name','text',existing?.name||'','required maxlength="100"')}
+    <div class="field"><label for="destination-kind">Storage type</label><select id="destination-kind" name="kind" class="control"><option value="s3">S3-compatible storage</option><option value="sftp" ${existing?.kind==='sftp'?'selected':''}>SSH / SFTP</option></select></div>
+    ${field('Repository URL','repository','text',existing?.repository||'','required maxlength="2048"')}
+    <p class="small">S3: s3:https://endpoint/bucket/petika<br>SSH: sftp://user@host//absolute/path</p>
+    <label><input name="enabled" type="checkbox" ${existing?.enabled?'checked':''}> Enable scheduled server push</label>
+    ${field('Back up every (hours)','interval_hours','number',existing?.interval_hours||24,'required min="1" max="720"')}
+    ${field('Existing repository ID','repository_id','text',existing?.repository_id||'','pattern="[0-9a-f]{64}" maxlength="64"')}
+    <label><input name="initialize_repository" type="checkbox" ${existing?.initialize_repository?'checked':''}> Initialize a new encrypted repository on first run</label>
+    <p class="small">For an existing repository, supply its full ID and password. Initialization never replaces an existing repository.</p>
+    <h3>Server-stored credentials</h3><p class="small">${existing?.credentials_configured?'Credentials are saved. Leave all credential fields blank to keep them; fill the complete set to replace them.':'Enter credentials to enable push backups.'} Saved secrets are never displayed again.</p>
+    ${field('Repository encryption password','repository_password','password','','minlength="16" maxlength="1024" autocomplete="new-password"')}
+    <p class="small">Keep this password independently so you can restore after losing the server.</p>
+    <div id="s3-credentials">
+      ${field('S3 access key','access_key','password','','autocomplete="off" maxlength="4096"')}
+      ${field('S3 secret key','secret_key','password','','autocomplete="new-password" maxlength="4096"')}
+      ${field('S3 session token (optional)','session_token','password','','autocomplete="off" maxlength="4096"')}
+      ${field('S3 region (optional)','region','text','','maxlength="100"')}
+    </div>
+    <div id="ssh-credentials"><div class="field"><label for="ssh-private-key">SSH private key</label><textarea id="ssh-private-key" name="ssh_private_key" spellcheck="false" autocomplete="off" maxlength="16384"></textarea></div><p class="small">Use a dedicated OpenSSH backup key without an interactive passphrase. Petika encrypts it at rest.</p><div class="field"><label for="ssh-known-hosts">Verified SSH known_hosts entry</label><textarea id="ssh-known-hosts" name="ssh_known_hosts" spellcheck="false" maxlength="16384"></textarea></div></div>
+    <div class="form-error" role="alert"></div><button class="btn primary" type="submit">Save destination</button></form>`);
+  const updateKind=()=>{
+    const ssh=$('#destination-kind').value==='sftp';
+    $('#s3-credentials').hidden=ssh; $('#ssh-credentials').hidden=!ssh;
+    $('#s3-credentials').querySelectorAll('input').forEach(el=>el.disabled=ssh);
+    $('#ssh-credentials').querySelectorAll('textarea').forEach(el=>el.disabled=!ssh);
+  };
+  $('#destination-kind').onchange=updateKind; updateKind();
   form('#destination-form',async data=>{
-    const body = {name:data.get('destination_name'),kind:data.get('kind'),repository:data.get('repository')}; if(existing) body.id=existing.id;
+    const body = {name:data.get('destination_name'),kind:data.get('kind'),repository:data.get('repository'),enabled:data.has('enabled'),interval_hours:Number(data.get('interval_hours')),repository_id:data.get('repository_id'),initialize_repository:data.has('initialize_repository')};
+    if(existing) body.id=existing.id;
+    const fields=['repository_password','access_key','secret_key','session_token','region','ssh_private_key','ssh_known_hosts'];
+    if(fields.some(key=>data.get(key))) body.credentials=Object.fromEntries(fields.map(key=>[key,data.get(key)||'']));
     await api('/v1/backup-settings/'+(operator?'operator/':'')+'destinations',{method:'POST',body});
     await backupDialog(operator);
   });

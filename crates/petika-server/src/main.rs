@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicU64, Ordering},
     },
     thread,
@@ -169,17 +169,23 @@ fn run() -> Result<()> {
     let listen = env::var("PETIKA_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let data =
         PathBuf::from(env::var_os("PETIKA_DATA_DIR").unwrap_or_else(|| "./petika-data".into()));
+    let _instance = petika_core::StoreFile::lock(data.join("server-instance"))?;
     let repository = Arc::new(Repository::new(data.join("snapshot.json")));
     repository.ready()?;
     let mirror_revision = Arc::new(AtomicU64::new(0));
     let mirror = env::var_os("PETIKA_GIT_MIRROR").map(PathBuf::from);
     let enabled = mirror.is_some();
+    let backup_gate = Arc::new(Mutex::new(()));
     if let Some(directory) = mirror.clone() {
         let repository = Arc::clone(&repository);
         let mirrored = Arc::clone(&mirror_revision);
         let collection_root = data.join("collections");
+        let gate = Arc::clone(&backup_gate);
         thread::spawn(move || {
             loop {
+                let Ok(guard) = gate.lock() else {
+                    return;
+                };
                 match mirror_once(&repository, &directory) {
                     Ok(Some(revision)) => {
                         mirrored.store(revision, Ordering::Release);
@@ -196,6 +202,7 @@ fn run() -> Result<()> {
                         }
                     }
                 }
+                drop(guard);
                 thread::sleep(Duration::from_secs(5));
             }
         });
@@ -259,8 +266,30 @@ fn run() -> Result<()> {
     eprintln!(
         "Petika experimental snapshot API listening on {listen}; use TLS termination for remote access."
     );
+    petika_server::accounts::Accounts::start_backup_worker(
+        data.clone(),
+        mirror.clone(),
+        Arc::clone(&backup_gate),
+    );
     for request in server.incoming_requests() {
         let path = request.url().to_owned();
+        if path == "/healthz" && request.method() == &Method::Get {
+            respond(request, 200, "{\"status\":\"ok\"}", None);
+            continue;
+        }
+        let _backup_guard = match backup_gate.try_lock() {
+            Ok(guard) => guard,
+            Err(std::sync::TryLockError::WouldBlock) => {
+                respond(
+                    request,
+                    503,
+                    "{\"error\":\"Backup capture in progress; retry shortly\"}",
+                    None,
+                );
+                continue;
+            }
+            Err(_) => return Err("Backup gate unavailable".into()),
+        };
         if !path.starts_with("/v1/") && path != "/healthz" && path != "/readyz" {
             web::static_file(request, &web_root, &endpoint);
         } else if path.starts_with("/v1/backup/") || path.starts_with("/v1/backup-settings/") {

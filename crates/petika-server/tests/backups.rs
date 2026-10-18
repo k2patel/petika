@@ -297,3 +297,59 @@ fn expiry_password_changes_and_disabled_accounts_invalidate_backup_keys() {
             .is_err()
     );
 }
+
+#[test]
+fn push_credentials_are_sealed_and_never_returned_and_blank_updates_preserve_them() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut accounts = Accounts::new(dir.path().join("accounts.json"));
+    accounts.migrate().unwrap();
+    accounts
+        .create_user("alice", "Alice", PASSWORD.into(), true, true)
+        .unwrap();
+    let (session, _) = accounts.login("alice", PASSWORD.into()).unwrap();
+    let payload = json!({"name":"S3","kind":"s3","repository":"s3:https://offsite.example/bucket",
+        "enabled":true,"interval_hours":24,"initialize_repository":true,
+        "credentials":{"repository_password":"synthetic repository password","access_key":"synthetic-access-key","secret_key":"synthetic-secret-key"}});
+    let result = accounts
+        .backup_manage(&session, false, "POST", "destinations", payload)
+        .unwrap();
+    assert_eq!(result["credentials_configured"], true);
+    assert!(result.get("credentials").is_none());
+    assert!(result.get("push").is_none());
+    let disk = std::fs::read_to_string(dir.path().join("backups.json")).unwrap();
+    for secret in [
+        "synthetic repository password",
+        "synthetic-access-key",
+        "synthetic-secret-key",
+    ] {
+        assert!(!disk.contains(secret));
+    }
+    assert_eq!(
+        std::fs::read(dir.path().join("backup-master.key"))
+            .unwrap()
+            .len(),
+        32
+    );
+    let updated=accounts.backup_manage(&session,false,"POST","destinations",json!({"id":result["id"],"name":"Renamed","kind":"s3","repository":"s3:https://offsite.example/bucket"})).unwrap();
+    assert_eq!(updated["credentials_configured"], true);
+    let api_key = key(&mut accounts, &session);
+    let index = accounts
+        .backup_export(api_key["token"].as_str().unwrap(), None)
+        .unwrap();
+    assert!(index["destinations"][0].get("push").is_none());
+    assert!(!index.to_string().contains("synthetic-secret-key"));
+    let changed=accounts.backup_manage(&session,false,"POST","destinations",json!({"id":result["id"],"name":"Other bucket","kind":"s3","repository":"s3:https://different.example/bucket"})).unwrap();
+    assert_eq!(changed["credentials_configured"], false);
+    assert_eq!(changed["enabled"], false);
+    assert!(
+        accounts
+            .backup_manage(
+                &session,
+                false,
+                "POST",
+                &format!("destinations/{}/run", result["id"].as_str().unwrap()),
+                json!({})
+            )
+            .is_err()
+    );
+}

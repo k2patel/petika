@@ -15,7 +15,7 @@ RUN cargo build --release --locked -p petika -p petika-server \
 
 RUN mkdir -p /runtime/data /runtime/mirror /runtime/run/secrets
 
-FROM gcr.io/distroless/cc-debian13:nonroot AS runtime
+FROM gcr.io/distroless/cc-debian13:nonroot AS core-runtime
 COPY --from=build --chown=65532:65532 /runtime/ /
 COPY --from=build /build/target/release/petika /usr/local/bin/petika
 COPY --from=build /build/target/release/petika-server /usr/local/bin/petika-server
@@ -35,3 +35,38 @@ WORKDIR /data
 USER 65532:65532
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/petika-server"]
+
+# Server-side push edition: isolated backup subprocesses need Python, restic and SSH.
+FROM debian:trixie-slim AS backup-tools
+ARG TARGETARCH
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl bzip2 && rm -rf /var/lib/apt/lists/*
+RUN case "$TARGETARCH" in \
+      amd64) checksum=f415415624dcc452f2a02b8c33641791a8c6d6d3b65bbb3543fcf9a25151585c ;; \
+      arm64) checksum=a5f64aaab53d51e311fa3829124c5b703f2d14cf187d8640b6be3b2b49376465 ;; \
+      *) exit 1 ;; esac && \
+    curl -fsSL "https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_${TARGETARCH}.bz2" -o /tmp/restic.bz2 && \
+    echo "$checksum  /tmp/restic.bz2" | sha256sum -c - && \
+    bunzip2 /tmp/restic.bz2 && chmod 755 /tmp/restic && \
+    curl -fsSL https://raw.githubusercontent.com/restic/restic/v0.19.1/LICENSE -o /tmp/restic-LICENSE
+
+FROM debian:trixie-slim AS push-runtime
+RUN apt-get update && apt-get install -y --no-install-recommends python3 openssh-client ca-certificates && rm -rf /var/lib/apt/lists/*
+COPY --from=core-runtime /usr/local/bin/ /usr/local/bin/
+COPY --from=core-runtime /usr/share/petika/ /usr/share/petika/
+COPY --from=core-runtime /usr/share/doc/petika/ /usr/share/doc/petika/
+COPY --from=build --chown=65532:65532 /runtime/ /
+COPY --from=backup-tools /tmp/restic /usr/local/bin/restic
+COPY --from=backup-tools /tmp/restic-LICENSE /usr/share/doc/restic/LICENSE
+COPY scripts/backup_recovery.py scripts/user_backup.py scripts/offsite_backup.py scripts/server_backup.py /usr/share/petika/scripts/
+ARG PETIKA_RELEASE=development
+ENV PETIKA_LISTEN=0.0.0.0:8080 PETIKA_DATA_DIR=/data PETIKA_GIT_MIRROR=/mirror \
+    PETIKA_TOKEN_FILE=/run/secrets/token PETIKA_WEB_DIR=/usr/share/petika/web \
+    PETIKA_BACKUP_SCRIPT=/usr/share/petika/scripts/server_backup.py PETIKA_BACKUP_RELEASE=$PETIKA_RELEASE \
+    PYTHONDONTWRITEBYTECODE=1
+WORKDIR /data
+USER 65532:65532
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/petika-server"]
+
+# Preserve the minimal default image; deployments select push-runtime explicitly.
+FROM core-runtime AS runtime

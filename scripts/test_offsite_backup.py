@@ -15,7 +15,7 @@ import user_backup as user
 class OffsiteTests(unittest.TestCase):
     def test_transport_and_origin_guards(self):
         for value in ('s3:http://host/bucket', 's3:https://key:secret@host/bucket',
-                      'sftp://user:secret@host//backup', 'sftp://-option@host//backup', '/local'):
+                      'sftp://user:secret@host//backup', 'sftp://user@-oProxyCommand=evil//backup', 'sftp://-option@host//backup', '/local'):
             with self.assertRaises(ValueError):
                 offsite.transport(value)
         self.assertEqual(offsite.transport('s3:https://host/bucket/path'), 's3')

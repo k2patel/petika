@@ -132,7 +132,7 @@ class BackupSafety(unittest.TestCase):
 
 
 class Server:
-    def __init__(self, home, provision=False):
+    def __init__(self, home, provision=False, overrides=None):
         self.home = home
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
@@ -146,6 +146,7 @@ class Server:
                    PETIKA_WEB_DIR=str(ROOT / 'clients/web'))
         if provision:
             env.update(PETIKA_ADMIN_USERNAME='alice', PETIKA_ADMIN_PASSWORD_FILE=str(home / 'config/password'))
+        env.update(overrides or {})
         self.process = subprocess.Popen([str(SERVER)], env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         try:
             for _ in range(100):

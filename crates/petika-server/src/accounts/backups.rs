@@ -1,5 +1,7 @@
-//! Read-only user backup credentials and credential-free destination profiles.
-//! Full-server archives are operator jobs, never available through user backup keys.
+mod push;
+use push::{PushSettings, Secrets};
+// Read-only user backup credentials and encrypted server push destinations.
+// Full-server archives are operator jobs, never available through user backup keys.
 use super::{
     Accounts, Argon2, Database, KeyError, PasswordHash, PasswordVerifier, User, keys, label,
     random_id,
@@ -43,6 +45,18 @@ struct Destination {
     name: String,
     kind: String,
     repository: String,
+    #[serde(default)]
+    push: PushSettings,
+}
+impl Destination {
+    fn public(&self) -> Value {
+        json!({"id":self.id,"name":self.name,"kind":self.kind,"repository":self.repository,
+            "enabled":self.push.enabled,"interval_hours":self.push.interval_hours,
+            "credentials_configured":self.push.sealed.is_some(),"repository_id":self.push.repository_id,
+            "initialize_repository":self.push.initialize_repository,"status":self.push.status,
+            "last_attempt":self.push.last_attempt,"last_success":self.push.last_success,
+            "snapshot_id":self.push.snapshot_id,"next_run":self.push.next_run})
+    }
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -114,6 +128,11 @@ struct SaveDestination {
     name: String,
     kind: String,
     repository: String,
+    enabled: Option<bool>,
+    interval_hours: Option<u64>,
+    repository_id: Option<String>,
+    initialize_repository: Option<bool>,
+    credentials: Option<Secrets>,
 }
 fn now() -> Result<u64> {
     SystemTime::now()
@@ -140,8 +159,13 @@ fn valid_destination(name: &str, kind: &str, repository: &str) -> bool {
     let Ok(url) = url::Url::parse(source) else {
         return false;
     };
-    if url.host_str().is_none()
-        || url.password().is_some()
+    if url.host_str().is_none_or(|host| {
+        host.starts_with('-')
+            || host.len() > 253
+            || !host
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"._-:[]".contains(&b))
+    }) || url.password().is_some()
         || url.query().is_some()
         || url.fragment().is_some()
     {
@@ -246,7 +270,7 @@ impl Accounts {
                 Ok(result)
             }
             ("GET", "destinations") => Ok(
-                json!({"scope":if operator {"operator"} else {"user"},"destinations":db.destinations.get(owner).cloned().unwrap_or_default()}),
+                json!({"scope":if operator {"operator"} else {"user"},"push_available":std::env::var_os("PETIKA_BACKUP_SCRIPT").is_some(),"destinations":db.destinations.get(owner).map(|items| items.iter().map(Destination::public).collect::<Vec<_>>()).unwrap_or_default()}),
             ),
             ("POST", "destinations") => {
                 let request: SaveDestination =
@@ -269,7 +293,57 @@ impl Accounts {
                     }
                     random_id().map_err(|_| KeyError::Unavailable)?
                 };
+                let mut settings = entries
+                    .iter()
+                    .find(|d| d.id == id)
+                    .map(|d| d.push.clone())
+                    .unwrap_or_default();
+                if settings.status == "running" {
+                    return Err(KeyError::Conflict);
+                }
+                if let Some(old) = entries.iter().find(|d| d.id == id)
+                    && (old.repository != request.repository || old.kind != request.kind)
+                {
+                    settings = PushSettings::default();
+                }
+                if let Some(hours) = request.interval_hours {
+                    if !(1..=720).contains(&hours) {
+                        return Err(KeyError::Invalid);
+                    }
+                    settings.interval_hours = hours;
+                }
+                if let Some(repository_id) = request.repository_id {
+                    if !repository_id.is_empty() && !keys::valid_id(&repository_id) {
+                        return Err(KeyError::Invalid);
+                    }
+                    settings.repository_id = repository_id;
+                }
+                if let Some(initialize) = request.initialize_repository {
+                    settings.initialize_repository = initialize;
+                }
+                if let Some(credentials) = request.credentials {
+                    credentials.validate(&request.kind)?;
+                    settings.sealed =
+                        Some(self.seal_backup_credentials(owner, &id, &credentials)?);
+                }
+                if let Some(enabled) = request.enabled {
+                    settings.enabled = enabled;
+                }
+                if settings.enabled
+                    && (settings.sealed.is_none()
+                        || (settings.repository_id.is_empty() && !settings.initialize_repository))
+                {
+                    return Err(KeyError::Invalid);
+                }
+                settings.next_run = now()? + settings.interval_hours * 3600;
+                settings.status = if settings.enabled {
+                    "scheduled"
+                } else {
+                    "disabled"
+                }
+                .into();
                 let saved = Destination {
+                    push: settings,
                     id,
                     name: request.name.trim().into(),
                     kind: request.kind,
@@ -278,7 +352,30 @@ impl Accounts {
                 entries.retain(|d| d.id != saved.id);
                 entries.push(saved.clone());
                 db.save(&file)?;
-                Ok(json!(saved))
+                Ok(saved.public())
+            }
+            ("POST", tail) if tail.starts_with("destinations/") && tail.ends_with("/run") => {
+                let id = tail
+                    .trim_start_matches("destinations/")
+                    .trim_end_matches("/run");
+                let destination = db
+                    .destinations
+                    .get_mut(owner)
+                    .and_then(|items| items.iter_mut().find(|d| d.id == id))
+                    .ok_or(KeyError::NotFound)?;
+                if destination.push.status == "running" {
+                    return Err(KeyError::Conflict);
+                }
+                if destination.push.sealed.is_none()
+                    || (destination.push.repository_id.is_empty()
+                        && !destination.push.initialize_repository)
+                {
+                    return Err(KeyError::Invalid);
+                }
+                destination.push.next_run = now()?;
+                destination.push.status = "queued".into();
+                db.save(&file)?;
+                Ok(json!({"ok":true}))
             }
             ("DELETE", _) => {
                 let (kind, id) = path.split_once('/').ok_or(KeyError::NotFound)?;
@@ -293,6 +390,12 @@ impl Accounts {
                     }
                     "destinations" => {
                         let entries = db.destinations.entry(owner.into()).or_default();
+                        if entries
+                            .iter()
+                            .any(|d| d.id == id && d.push.status == "running")
+                        {
+                            return Err(KeyError::Conflict);
+                        }
                         let before = entries.len();
                         entries.retain(|d| d.id != id);
                         before != entries.len()
@@ -345,6 +448,30 @@ impl Accounts {
         let file = StoreFile::lock(&self.path).map_err(|_| KeyError::Unavailable)?;
         let accounts = Self::load(&file).map_err(|_| KeyError::Unavailable)?;
         let user = self.backup_user(token, &accounts)?;
+        self.backup_export_user(&accounts, user, collection)
+    }
+
+    pub(crate) fn backup_owner_export(
+        &self,
+        owner: &str,
+        collection: Option<&str>,
+    ) -> Result<Value> {
+        let file = StoreFile::lock(&self.path).map_err(|_| KeyError::Unavailable)?;
+        let accounts = Self::load(&file).map_err(|_| KeyError::Unavailable)?;
+        let user = accounts
+            .users
+            .iter()
+            .find(|u| u.id == owner && !u.disabled)
+            .ok_or(KeyError::Forbidden)?;
+        self.backup_export_user(&accounts, user, collection)
+    }
+
+    fn backup_export_user(
+        &self,
+        accounts: &Database,
+        user: &User,
+        collection: Option<&str>,
+    ) -> Result<Value> {
         let identity = accounts.identities.get(&user.id);
         if let Some(id) = collection {
             if !keys::valid_id(id) {
@@ -412,7 +539,7 @@ impl Accounts {
                 .unwrap_or_default();
             Ok(
                 json!({"backup_version":1,"kind":"user","deployment_id":accounts.deployment_id,"user":user.public(),
-                "identity":identity,"collections":collections,"destinations":destinations,"exported_at":now()?}),
+                "identity":identity,"collections":collections,"destinations":destinations.iter().map(Destination::public).collect::<Vec<_>>(),"exported_at":now()?}),
             )
         }
     }

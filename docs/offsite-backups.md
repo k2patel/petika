@@ -1,93 +1,125 @@
 # Off-site backups
 
-Petika supports S3-compatible and SSH/SFTP destination profiles in **Settings →
-Off-site backups**. Each user manages their own profiles. Administrators can also
-manage separate **Operator full-server destinations**. A profile contains only a
-name, storage type and repository URL; saving one does not schedule a transfer.
-Download the profile to the backup machine.
+**S3 and SSH/SFTP are server-push destinations. The backup API is pull-only.**
+Configure both kinds of push destinations in **Settings → Off-site backups**.
+Each user owns their destinations and encrypted credentials. Administrators have
+separate **Operator full-server destinations**. No external runner is required
+for push jobs. Only API pull clients run externally.
 
-User backup API keys are generated in the same dialog after account-password
-confirmation. The raw key is shown once; Petika stores its SHA-256 hash. Keys are
-read-only, expire within 365 days, and can be revoked. Disabling the account or
-changing its password invalidates its keys. A key can download only that user's
-personal collection, current group collections, encrypted recipient identity,
-and recipient grants. Administrator keys have no membership bypass. Revocation
-cannot retract copies already downloaded.
+## Enable server push
 
-Full-server archives include account data, all collections, configuration, and Git
-history. Only the operator can create these, using the offline procedure in
-[recovery.md](recovery.md). User API backups are current collection snapshots, not
-full-server disaster recovery or Git-history archives. Multiple collections are
-captured sequentially, not as a transactional point-in-time snapshot.
-
-## Configure a backup machine outside the homelab
-
-Install Python 3.9+ and restic (tested with 0.19.1). Copy this repository's `scripts`
-directory to the machine. Use a separate repository and password for each user
-and for full-server backups. Keep the repository password, recovery passphrases,
-and repository ID independently of the homelab and the repository itself.
-
-Supported profile repository URLs:
-
-- S3: `s3:https://s3.example.net/bucket/petika`
-- SSH: `sftp://backup@backup.example.net//srv/backups/petika`
-
-Use a provider outside the homelab. Put S3 credentials in the runner's protected
-environment (`AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`), or configure an SSH
-identity and independently verified host key in the runner's SSH configuration.
-SSH runs with batch mode and strict host-key checking. Never embed credentials in
-profiles. See [restic's repository configuration](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html).
-
-Create owner-only files for the repository password and the user API key
-(`chmod 600`), using a password manager or private editor rather than shell
-arguments/history. For each downloaded destination profile, initialize once:
+Use the `push-runtime` Docker target. It includes Python, restic 0.19.1 and OpenSSH;
+the default `runtime` target remains distroless and does not run push jobs. The
+Gitea image workflow builds `push-runtime` with the source commit as its release ID.
 
 ```sh
-python3 scripts/offsite_backup.py --profile-file destination.json \
-  --password-file /private/path/repository-password init --receipt repository.json
+docker build --target push-runtime --build-arg PETIKA_RELEASE=YOUR_COMMIT -t petika:push .
 ```
 
-Retain the full `repository_id` from this receipt independently. Subsequent
-commands require `--repository-id FULL_ID`; this detects accidental repository
-substitution. Repeat setup for both S3 and SSH if both copies are desired.
+For native deployments, install Python 3.9+, restic 0.19.1 and an OpenSSH client,
+then set these server environment variables:
 
-## Capture and publish
+- `PETIKA_BACKUP_SCRIPT`: absolute path to `scripts/server_backup.py`.
+- `PETIKA_BACKUP_RELEASE`: exact compatible binary/image release for full restores.
+- `PETIKA_BACKUP_PYTHON` and `PETIKA_BACKUP_RESTIC`: optional executable paths.
+- `PETIKA_BACKUP_WORK_DIR`: optional private staging filesystem outside the data
+  and mirror directories. Allow room for the captured bundle and downloaded
+  verification copy; the default is the operating system temporary directory.
+- `PETIKA_BACKUP_MASTER_KEY_FILE`: optional protected file containing exactly
+  32 random bytes. If omitted, Petika generates `data/backup-master.key` with
+  owner-only permissions when credentials are first saved. Mounting the key from
+  a separately managed server secret protects against theft of only the data volume.
 
-A user runner downloads encrypted data with its user-scoped API key:
+Keep one server writer per data directory. Petika holds an instance lock and
+serializes its API and local mirror writers during capture. External programs
+must not mutate these directories. The homelab Git push sidecar mounts the mirror
+read-only. During capture, API requests return a retryable HTTP 503 while health checks
+remain available. Network transfer runs after the writers resume. Allow enough
+staging capacity for your data volume; capture has a five-minute timeout.
+
+The server polls due jobs every five seconds and runs one at a time. Schedules
+are intervals of 1–720 hours. **Back up now** queues a job, including for a disabled
+schedule. Last attempt, last verified success, repository ID and snapshot ID are
+persisted. A restart retries an interrupted job after its two-hour lease expires.
+A failed job has a generic status, never provider diagnostics that may expose secrets.
+The worker does not automatically prune repository history.
+
+## Configure push destinations in Settings
+
+For each destination, enter its name, repository URL, schedule, repository password,
+and provider credentials. Use independent storage outside the homelab:
+
+- S3: `s3:https://s3.example.net/bucket/petika`, access key, secret key, optional
+  session token and region. Renew expiring session tokens before they expire.
+- SSH: `sftp://backup@backup.example.net//srv/backups/petika`, a dedicated OpenSSH
+  private key without an interactive passphrase, and an independently verified
+  `known_hosts` entry. Host-key checking is mandatory. Jobs use only the saved
+  identity and host keys, with no ambient SSH agent or SSH configuration.
+
+For a new repository, select **Initialize a new encrypted repository on first
+run**. For an existing repository, supply its full ID and current password.
+Initialization never replaces an existing repository. The first completed attempt
+retains the initialized repository ID even if the subsequent upload fails. If the
+server crashes between initialization and recording the ID, obtain that ID using
+restic with the retained password and enter it in Settings before retrying.
+
+Save a copy of each repository password independently of the homelab. The server
+needs these passwords to encrypt backups; collection recovery passphrases remain
+separate and are never required by the push worker.
+
+Credentials are encrypted with XChaCha20-Poly1305 and bound to their owner and
+destination. APIs return only `credentials_configured`, never saved credentials
+or ciphertext. Leave all credential fields blank when editing to preserve them;
+provide the complete set to replace them. Changing the repository URL or storage
+type clears existing credentials and verification state. Running jobs cannot be
+edited or removed until they finish. Deleting a destination removes its local
+credentials, not the remote backups. Server administrators who control the master
+key and process can decrypt provider credentials; this is server-managed encryption,
+not protection from the server operator.
+
+A push job captures and verifies a bundle, encrypts/uploads it with restic, then
+downloads it without using a cache and verifies its files. Only that final check
+marks the job **verified**. A failed verification may leave a remote snapshot.
+
+User jobs include only currently authorized personal/group snapshots, encrypted
+recipient identity and that user's recipient grants. Disabled users cannot start
+new jobs. Permission changes after capture cannot retract a copy already captured
+or uploaded. User bundles contain no account database or full Git history.
+
+Operator jobs include all server data, the local Git mirror, the API token,
+credential-encryption master key, and supported server settings. Keep infrastructure
+manifests, TLS/proxy secrets and other deployment configuration in your independent
+infrastructure backup. The complete bundle is encrypted by restic before upload.
+
+## API pull backups
+
+Petika generates user-scoped, read-only API keys after password confirmation. The
+key is shown once; only its SHA-256 hash is stored. Keys expire within 365 days,
+can be revoked, and are invalidated by password changes or account disabling.
+Group membership is rechecked on every request; administrator keys do not bypass
+membership. These keys cannot access server push credentials or full-server archives.
+
+External software can use `GET /v1/backup/index` and
+`GET /v1/backup/collections/ID` with `Authorization: Bearer KEY`. The bundled client:
 
 ```sh
 python3 scripts/user_backup.py --server https://petika.example.net \
-  --api-key-file /private/path/backup-key --output /private/staging/user-2026-10-18
+  --api-key-file /private/path/backup-key --output /private/staging/user-backup
 ```
 
-The API uses `/v1/backup/index` and `/v1/backup/collections/ID` with a Bearer key.
-Keys cannot authenticate ordinary account, administrator, or write endpoints.
-HTTPS is required except for loopback; redirects are rejected. The current
-homelab HTTP address requires HTTPS configuration or a protected loopback tunnel
-before a remote runner can use it.
+The key file must be owner-only (`chmod 600`). HTTPS is required except on loopback;
+redirects are rejected. API pulls capture collections sequentially rather than as
+one transactional snapshot. The current homelab HTTP endpoint needs HTTPS or a
+protected loopback tunnel for remote API pull clients.
 
-For full-server backups, first create and verify an offline bundle using
-`backup_recovery.py create` as described in the recovery runbook. It includes
-`data/backups.json`, which stores key hashes and destination profiles.
+## Recover independently of the server
 
-Publish either kind of bundle to each destination:
-
-```sh
-python3 scripts/offsite_backup.py --profile-file destination.json \
-  --password-file /private/path/repository-password --repository-id FULL_ID \
-  publish /private/staging/user-2026-10-18 --host alice-backups \
-  --receipt /private/receipts/s3-2026-10-18.json
-```
-
-A receipt is issued only after downloading the uploaded snapshot without a cache
-and verifying its files against the source manifest. Keep receipts outside the
-homelab. Use unique staging directories and receipt filenames. Schedule these
-commands in your external runner and alert on nonzero exits; Petika does not run
-an internal transfer scheduler. A failed verification may leave an uploaded
-snapshot, but produces no success receipt. Local repository mode is only for
-tests and does not provide off-site protection.
-
-## Recover and check retention
+Retain the repository URL, full repository ID, repository password, provider
+credentials and latest verified snapshot ID outside the homelab. Download the
+credential-free profile from Settings and put the password in an owner-only file.
+Supply S3 credentials through the recovery machine's protected environment, or
+configure its SSH identity and verified host keys. See
+[restic repository configuration](https://restic.readthedocs.io/en/stable/030_preparing_a_new_repo.html).
 
 ```sh
 python3 scripts/offsite_backup.py --profile-file destination.json \
@@ -95,23 +127,23 @@ python3 scripts/offsite_backup.py --profile-file destination.json \
   fetch --snapshot FULL_SNAPSHOT_ID --output /private/recovered-bundle
 ```
 
-For server bundles, follow the full restore procedure in `recovery.md`. For user
-bundles, inspect `index.json` for collection IDs and authenticate a selected
-snapshot with its collection recovery passphrase:
+For server bundles, follow [recovery.md](recovery.md). Restore `config/token`,
+`config/backup-master.key`, and the recorded server settings to their configured
+locations. Start isolated and disable the push worker until account/key state and
+schedules have been reviewed; restored historical state can re-enable old keys/jobs.
+
+For user bundles, inspect `index.json` for collection IDs and authenticate a
+selected snapshot using its collection recovery passphrase:
 
 ```sh
 python3 scripts/user_backup.py --recover-from /private/recovered-bundle \
   --collection COLLECTION_ID --cli /path/to/petika --output /private/recovered.petika
 ```
 
-This authenticates the encrypted collection using the native CLI before publishing
-it into a new file. It never writes to the server. Keep the encrypted identity
-and grants in the bundle as well; the recovery command uses the collection's
-recovery passphrase. Recovery fails safely if that passphrase is incorrect.
-
-Use the same repository arguments with `check` to download and authenticate all
-repository data. Use `retention-plan --host alice-backups` to preview 7 daily,
-4 weekly, 12 monthly and at least 2 recent snapshots. This is a dry run and never
-prunes. Approve deletion separately after verifying independent copies and a
-recovery drill. Restoring an old full-server archive also restores historical
-account/key state: revoke obsolete backup keys before exposing a restored server.
+This authenticates before publishing into a new local file, without server writes.
+Use the same repository arguments with `check` to read/authenticate all repository
+data, or `retention-plan --host petika-OWNER_ID` (`petika-operator` for full-server
+jobs) to preview 7 daily, 4 weekly, 12 monthly and at least 2 recent snapshots.
+The retention plan is a dry run. Approve deletion separately after validating
+independent copies and recovery. Provider transport tests require real endpoints;
+local adapter tests verify scheduling, credential isolation and encrypted recovery.

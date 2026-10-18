@@ -88,7 +88,8 @@ replacement API already exists; it is intentionally separate from enrollment ret
   full backup restored to a fresh PVC, both rotated encryption modes verified, test resources
   cleaned up ([2026-10-18 result](testing/kubernetes-recovery-2026-10-18.json)).
 - [x] User/operator S3 and SSH profiles, user-scoped read-only backup API keys,
-  and encrypted off-site runner with verified download receipts (see [guide](offsite-backups.md)).
+  server-stored encrypted credentials, scheduled S3/SSH push jobs,
+  and independent recovery tools with verified downloads (see [guide](offsite-backups.md)).
 - [ ] Configure independent off-site retained storage and validate recovery after loss of the
   primary storage system; measure production recovery objectives.
 - [ ] Independent security review, accessibility review, native-platform validation,

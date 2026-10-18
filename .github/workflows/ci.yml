@@ -84,6 +84,12 @@ jobs:
             exit 1
           fi
 
+      - name: Build and validate server push runtime
+        run: |
+          docker build --target push-runtime --build-arg PETIKA_RELEASE=${{ github.sha }} -t petika:push .
+          docker run --rm --entrypoint restic petika:push version
+          docker run --rm --entrypoint python3 petika:push -c "import sys; sys.path.insert(0, '/usr/share/petika/scripts'); import server_backup"
+
   web:
     name: Web UI and provisioning
     runs-on: ubuntu-latest
@@ -112,6 +118,7 @@ jobs:
           bunzip2 /tmp/restic.bz2
           chmod 700 /tmp/restic
           PETIKA_TEST_RESTIC=/tmp/restic python3 scripts/test_offsite_backup.py
+          PETIKA_TEST_RESTIC=/tmp/restic python3 scripts/test_server_push.py
       - name: Provisioning
         run: python3 scripts/test_setup.py
       - name: Install browser test tools
