@@ -1,0 +1,34 @@
+{
+  "record_version": 1,
+  "purpose": "QA deployment of simplified security settings and guided backup destinations",
+  "date": "2026-10-18",
+  "commit": "4508f99cd79a166c2dd6f232e7d592e6d7553b79",
+  "image": "git.k2patel.in/k2patel/petika@sha256:bd81c137a7e7e38463fa76b8b42e6baff04cc27609ad204cfe29a0924e9958cb",
+  "url": "https://10.10.12.115",
+  "namespace": "petika",
+  "containers_ready": "3/3",
+  "gitea_image_run": 341,
+  "image_build": "success",
+  "preupgrade_backup": "Private offline data/mirror archive and deployment configuration captured; archive readability and SHA-256 recorded outside version control",
+  "transport": "Existing local IP certificate enabled; HTTPS=both, PETIKA_COOKIE_SECURE=true, PETIKA_ENDPOINT=https://10.10.12.115 persisted in deployment variables",
+  "certificate_verification": "curl readiness and asset fetch passed with the existing certificate explicitly trusted; browser smoke test accepted the local certificate in its isolated context",
+  "checks_passed": [
+    "guided URL construction and unsafe-input rejection",
+    "mock-API desktop/mobile Settings interactions",
+    "live readiness",
+    "served app.js SHA-256 equals source",
+    "live account login and sign-out",
+    "live single shared stylesheet",
+    "live S3/SSH guided fields and advanced URL visibility",
+    "live mobile dark layout without horizontal overflow",
+    "live keyboard disclosure"
+  ],
+  "live_data_mutations": "Login/session creation and sign-out only; no vault edits or saved backup destinations",
+  "github_ci_run": 39153696776,
+  "github_ci_at_recording": "API contracts, distroless runtime, macOS Rust and Ubuntu Rust passed; Windows Rust and Web UI/provisioning still running",
+  "limitations": [
+    "Real off-site destinations and provider credentials remain unconfigured",
+    "New cryptographic profiles and per-device biometric keys remain experimental research, not deployed features",
+    "A trusted local certificate is required on QA devices to avoid browser certificate warnings"
+  ]
+}
