@@ -4,6 +4,7 @@ Synthetic HTTPS origins are routed to a disposable local API. Test-only host
 permission lets automation exercise filling without clicking browser chrome.
 """
 import json
+import argparse
 import os
 from pathlib import Path
 import socket
@@ -13,6 +14,10 @@ import time
 import urllib.request
 import urllib.error
 from playwright.sync_api import sync_playwright, expect
+
+parser=argparse.ArgumentParser()
+parser.add_argument('--generic',action='store_true')
+args=parser.parse_args()
 
 ROOT = Path(__file__).resolve().parents[1]
 ORIGIN = 'https://example.test'
@@ -40,8 +45,13 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
         user=json.load(response); cookie=response.headers['Set-Cookie'].split(';')[0]
         api('/v1/auth/websites',{'origin':ORIGIN,'allow':True},cookie).close()
         package=work/'extension'
-        subprocess.run(['python3',str(ROOT/'scripts/build_extension.py'),'--endpoint',API,'--output',str(package)],check=True)
+        subprocess.run(['python3',str(ROOT/'scripts/build_extension.py'),*(['--generic'] if args.generic else ['--endpoint',API]),'--output',str(package)],check=True)
         manifest=json.loads((package/'manifest.json').read_text())
+        if args.generic:
+            assert manifest['host_permissions']==[]
+            assert manifest['optional_host_permissions']==['https://*/*']
+            # Pregrant only fixture hosts: headless tests cannot approve Chrome's native prompt.
+            manifest['host_permissions'].extend([API+'/*','https://second.fixture.test/*'])
         manifest['host_permissions'].append(ORIGIN+'/*')
         (package/'manifest.json').write_text(json.dumps(manifest))
         with sync_playwright() as p:
@@ -65,6 +75,15 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             popup=context.new_page();popup.on('pageerror',lambda e:errors.append(str(e)))
             popup.set_viewport_size({'width':400,'height':740})
             popup.goto(f'chrome-extension://{extension_id}/popup.html')
+            if args.generic:
+                expect(popup.locator('#server-setup')).to_be_visible()
+                expect(popup.locator('#connect')).to_be_hidden()
+                popup.locator('#server-url').fill(API)
+                (ROOT/'output/extension-qa').mkdir(parents=True,exist_ok=True)
+                popup.screenshot(path=str(ROOT/'output/extension-qa/server-setup.png'))
+                popup.get_by_role('button',name='Use this server',exact=True).click()
+                expect(popup.locator('#server-setup')).to_be_hidden()
+                expect(popup.locator('#server-address')).to_have_text(API)
             popup.get_by_role('button',name='Connect to Petika',exact=True).click()
             expect(popup.locator('#code')).not_to_have_text('')
             code=popup.locator('#code').inner_text()
@@ -315,12 +334,32 @@ with tempfile.TemporaryDirectory(prefix='petika-extension-') as temp:
             assert set(stored)=={'token','endpoint'}
             assert stored['endpoint']==API
             assert 'synthetic' not in json.dumps(stored)
-            assert popup.evaluate('chrome.storage.local.get(null)')=={}
+            assert popup.evaluate('chrome.storage.local.get(null)')==({'serverEndpoint':API} if args.generic else {})
             # A rebuilt package pointed at a different server must not reuse its token.
             popup.evaluate("chrome.storage.session.set({endpoint:'https://different.test'})")
             popup.reload()
             expect(popup.locator('#connect')).to_be_visible()
             assert popup.evaluate('chrome.storage.session.get(null)')=={}
+            if args.generic:
+                # Denial must retain configuration. Mock only the native permission decision.
+                popup.get_by_role('button',name='Change server',exact=True).click()
+                popup.evaluate('window.savedPermissionRequest=chrome.permissions.request; chrome.permissions.request=async()=>false')
+                popup.locator('#server-url').fill('https://second.fixture.test')
+                popup.get_by_role('button',name='Use this server',exact=True).click()
+                expect(popup.locator('#message')).to_contain_text('not granted')
+                assert popup.evaluate('chrome.storage.local.get("serverEndpoint")')=={'serverEndpoint':API}
+                popup.evaluate('() => {chrome.permissions.request=window.savedPermissionRequest;}')
+                # Switching origins discards credentials, pending approvals and inline grants.
+                popup.evaluate("chrome.storage.session.set({token:'cli_'+'a'.repeat(64),endpoint:'https://petika.fixture.test',grant:{device_code:'synthetic'},'inline:1':{id:'synthetic'}})")
+                popup.get_by_role('button',name='Use this server',exact=True).click()
+                # Fixture hosts are required permissions, so Chrome refuses their removal.
+                # The app must clearly report that while retaining the new server safely.
+                expect(popup.locator('#message')).to_contain_text('Chrome kept access')
+                popup.reload()
+                expect(popup.locator('#server-address')).to_have_text('https://second.fixture.test')
+                assert popup.evaluate('chrome.storage.session.get(null)')=={}
+                assert popup.evaluate('chrome.storage.local.get(null)')=={'serverEndpoint':'https://second.fixture.test'}
+                expect(popup.locator('#connect')).to_be_visible()
             assert not errors,errors
             context.close()
         print('Extension pairing, inline prompts and popup handoff, encrypted generation/save, concurrent-write rejection, login/new-password/single and split TOTP fill, permission revocation, document binding and storage checks passed.')

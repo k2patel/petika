@@ -10,7 +10,7 @@ extension. There is no Chrome Web Store or Firefox Add-ons release at present.
 | --- | --- | --- |
 | Web app | Rust/WASM interface served by your Petika server | Open your server's URL; no extension or store account required |
 | Server and CLI | Source builds | Follow the [root README](../README.md#run-from-source) or [administrator guide](administrator-guide.md) |
-| Chrome/Chromium extension | Experimental unpacked preview, Chrome 127+ | Build for your server, then use Developer mode → Load unpacked |
+| Chrome/Chromium extension | Experimental unpacked preview, Chrome 127+ | Build a generic or server-pinned package, then use Developer mode → Load unpacked |
 | Firefox extension | Not yet ported or tested | Use the web app; the Chromium package is not a supported Firefox add-on |
 | Safari extension, native mobile/desktop apps | Not available | Use the web app; there are no signed native installers to download |
 
@@ -46,11 +46,12 @@ cd petika
 rustup target add wasm32-unknown-unknown
 cargo install wasm-bindgen-cli --version 0.2.114 --locked
 sh scripts/build_web.sh
-python3 scripts/build_extension.py --endpoint https://petika.example.com
+python3 scripts/build_extension.py --generic
 ```
 
-Replace the endpoint with your server's final HTTPS origin, without a path.
-The build produces `output/extension-chromium/`, including `manifest.json`,
+The generic package asks for your server on first use. To pin a package to one
+server instead, use `--endpoint https://petika.example.com` instead of `--generic`,
+replacing the placeholder with your final HTTPS origin. The build produces `output/extension-chromium/`, including `manifest.json`,
 packaged JavaScript/WASM and the shared stylesheet. It does not contain your vault,
 server secrets, or credentials. Do not distribute your checkout's `.secrets` folder.
 An administrator can provide this prepared folder to testers who do not build code.
@@ -59,7 +60,9 @@ An administrator can provide this prepared folder to testers who do not build co
 2. In Chrome/Chromium 127+, open `chrome://extensions`.
 3. Turn on **Developer mode**, choose **Load unpacked**, and select the folder
    containing `manifest.json`. Do not choose the repository root or **Pack extension**.
-4. Pin Petika to the toolbar. On managed computers, an administrator may prohibit
+4. Pin Petika to the toolbar. In a generic package, enter your own HTTPS server
+   address and select **Use this server**, then allow access when Chrome asks.
+   A server-pinned package skips this step. On managed computers, an administrator may prohibit
    developer extensions; use the web app if installation is blocked.
 5. Choose **Connect to Petika**, open its approval page, and approve your code after
    signing in. The current approval screen calls this a **CLI** session. It has
@@ -79,9 +82,11 @@ preview a store-reviewed extension. See Google's
 Unpacked installations have no Petika automatic-update service. Obtain a new build
 from trusted source, replace the prepared folder, and click **Reload** on Petika's
 card in `chrome://extensions`. Close and reopen its popup; reconnect if required.
-Changing the configured server clears the old server-bound session. Build a separate
-package when you need a different endpoint; editing `config.json` alone does not
-update the manifest's host permission and content-security policy.
+In the generic package, **Change server** clears local session state and requests
+access to the new host. Revoke the old session on the old server under Connected
+clients if needed; changing servers is only a local disconnect. A pinned package
+must be rebuilt for a different endpoint. Editing `config.json` alone does not
+update its manifest permissions or content-security policy.
 
 To remove it, revoke its CLI session under **Connected clients**, then choose
 **Remove** in `chrome://extensions`. Removal does not delete server-side vaults.
@@ -138,9 +143,12 @@ See [Mozilla temporary installation](https://extensionworkshop.com/documentation
 
 - [ ] Port and test Firefox separately, including popup launch, storage isolation,
   document binding, permissions, WASM, and all fill rejection cases.
-- [ ] Design a user-configurable HTTPS server setting with narrowly requested host
-  access and appropriate CSP. Today's package embeds one server at build time;
-  a single general-purpose store package needs a different onboarding design.
+- [x] Generic preview with a user-selected HTTPS origin and optional host permission;
+  retain deployment-pinned packages. Generic CSP allows HTTPS connections while
+  executable code stays packaged. API requests stay bound to the selected origin.
+- [ ] Manually verify permission grant/denial and revocation in supported Chrome
+  versions; review the generic package's broader CSP and browser host-permission
+  scope before store submission. Host permissions cover all ports on that host.
 - [ ] Review extension session scope and security before promoting use with real secrets.
 - [ ] Prepare privacy disclosures, permission explanations, support contacts,
   screenshots, source/build instructions, and synthetic reviewer credentials.

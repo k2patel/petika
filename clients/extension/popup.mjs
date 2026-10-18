@@ -1,12 +1,16 @@
+import {serverOrigin, serverPermission} from './server.mjs';
 import {installInline} from './inline.mjs';
 import {authorizeFill, httpsOrigin, fillPage} from './fill.mjs';
 const $ = id => document.getElementById(id);
-const {endpoint} = await (await fetch('./config.json')).json();
+const config = await (await fetch('./config.json')).json();
+let endpoint = config.endpoint ? serverOrigin(config.endpoint) : null;
 let token, worker, sequence = 0, collection, target, unlocked = false, timer;
 let collections = [], snapshotRevision = 0, accessState = null, editable = false, saveBlocked = false, generation = 0;
 const pending = new Map();
 const message = text => { $('message').textContent = text; };
 async function request(path, body, raw = false, method, headers = {}) {
+  if (!endpoint || (!config.endpoint && !(await chrome.permissions.contains({origins:[serverPermission(endpoint)]})))) throw new Error('Choose your server and allow access before connecting.');
+  if (!config.endpoint && (await chrome.storage.local.get('serverEndpoint')).serverEndpoint !== endpoint) { lock(); throw new Error('Server setting changed. Reopen Petika.'); }
   const response = await fetch(endpoint + path, {
     method:method || (body === undefined ? 'GET' : 'POST'), credentials:'omit', cache:'no-store', redirect:'error',
     headers:{'Content-Type':'application/json','X-Petika-Request':'1',...(token ? {Authorization:`Bearer ${token}`} : {}),...headers},
@@ -169,13 +173,26 @@ $('disconnect').onclick=run(async () => {
 });
 addEventListener('pagehide',lock);
 try {
+  await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
+  if (!config.endpoint) {
+    const {serverEndpoint}=await chrome.storage.local.get('serverEndpoint');
+    if (serverEndpoint) endpoint=serverOrigin(serverEndpoint);
+    $('change-server').hidden=!endpoint;
+  }
+  $('server-address').textContent=endpoint || 'No server selected';
+  $('server-setup').hidden=Boolean(endpoint);
+  $('connect').hidden=!endpoint; $('open').hidden=!endpoint;
+  if (endpoint && !config.endpoint && !(await chrome.permissions.contains({origins:[serverPermission(endpoint)]}))) {
+    $('server-setup').hidden=false; $('server-url').value=endpoint; $('connect').hidden=true;
+    message('Allow access to your chosen server to reconnect.');
+  }
   await chrome.storage.session.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
   const stored = await chrome.storage.session.get(['token','grant','endpoint']); token=stored.endpoint === endpoint ? stored.token : null;
   if (stored.token && !token) await chrome.storage.session.clear();
   if (stored.grant?.endpoint === endpoint && stored.grant.expiresAt > Date.now()) { $('approval').hidden=false; $('code').textContent=stored.grant.user_code; }
   const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
   try { $('site').textContent=httpsOrigin(tab.url); } catch { $('site').textContent='Open the toolbar popup on an HTTPS website.'; }
-  if (token) {
+  if (token && $('server-setup').hidden) {
     await showAccount();
     const {inlineIntent} = await chrome.storage.session.get('inlineIntent');
     if (inlineIntent?.expiresAt > Date.now() && inlineIntent.tabId === tab?.id && collections.some(c => c.id === inlineIntent.collection)) $('collection').value=inlineIntent.collection;
@@ -278,4 +295,30 @@ $('inline').onclick = run(async () => {
     if (!results[0]?.result?.installed) throw new Error('Suggestions could not be enabled. Reopen Petika.');
   } catch(error) { await chrome.storage.session.remove(key); throw error; }
   message('Suggestions enabled for this page for five minutes. Close Petika and focus a new-password field.');
+});
+
+$('change-server').onclick=() => {
+  lock(); $('unlock').hidden=true; $('connect').hidden=true;
+  $('server-url').value=endpoint || ''; $('server-setup').hidden=false; $('cancel-server').hidden=!endpoint;
+};
+$('cancel-server').onclick=() => location.reload();
+$('server-setup').onsubmit=run(async () => {
+  if (config.endpoint) throw new Error('This package is pinned to its configured server.');
+  const next=serverOrigin($('server-url').value);
+  // Keep permission request in the submit gesture, before any asynchronous work.
+  const granted=await chrome.permissions.request({origins:[serverPermission(next)]});
+  if (!granted) throw new Error('Server access was not granted. Your previous setting is unchanged.');
+  const previous=endpoint;
+  lock(); token=null;
+  await chrome.storage.session.clear();
+  await chrome.storage.local.set({serverEndpoint:next});
+  if (previous && serverPermission(previous) !== serverPermission(next)) {
+    try {
+      if (!(await chrome.permissions.remove({origins:[serverPermission(previous)]}))) throw new Error('Permission retained');
+    } catch {
+      endpoint=next; $('server-address').textContent=next;
+      throw new Error('New server saved and local session cleared. Chrome kept access to the previous host; review extension site access, then reopen Petika.');
+    }
+  }
+  location.reload();
 });

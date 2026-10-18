@@ -100,6 +100,15 @@ does not turn missing user recovery material into a recoverable vault.
 
 ## Provide the Chromium package to users
 
+To distribute one preview package for multiple independent deployments, build with
+`python3 scripts/build_extension.py --generic --output output/extension-generic`.
+Users select their own HTTPS server and approve its host permission. The server
+address is local configuration; it is not a vault credential. Generic builds have
+an HTTPS-wide connection CSP and optional host requests, while deployment-pinned
+builds below retain a server-specific connection CSP. Both package all executable
+code locally. See the [public preview guide](preview-installation.md).
+
+
 On a build machine, build the web WASM and package the extension for your HTTPS
 origin using the [extension build guide](../clients/extension/README.md):
 

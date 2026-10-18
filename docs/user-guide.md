@@ -88,7 +88,9 @@ build instructions are in the [extension guide](../clients/extension/README.md).
    folder containing `manifest.json`.
 4. Pin Petika using the browser's Extensions menu. This preview is installed locally;
    it is not a Chrome Web Store release. Firefox and Safari are not supported yet.
-5. Open Petika from the toolbar and select **Connect to Petika**. Note its approval
+5. Open Petika from the toolbar. If it asks for a server, enter your own Petika
+   HTTPS address, choose **Use this server**, and approve Chrome's host-access
+   request. Then select **Connect to Petika**. Note its approval
    code, then select **Open approval page**.
 6. Sign in on your Petika website, enter that exact code, confirm your account
    password, select **Approve this CLI**, then choose **Confirm decision**. Only
@@ -148,6 +150,18 @@ you enable suggestions again. It never displays a password or asks for your
 passphrase on the website. If it cannot open Petika, use the toolbar. Fields must
 be visible, marked as new-password, and belong to a same-origin form. Automatic
 prompts on every website visit and inline saved-login selection are not included.
+
+### Change servers in a generic package
+
+Choose **Change server**, enter the new HTTPS origin, and select **Use this server**.
+Denying Chrome's permission request keeps your previous setting. Accepting it locks
+the vault and clears the extension's local login and pending approvals; connect
+to the new server with a fresh approval. Revoke the old session under Connected
+clients on the old server if you no longer need it. Your old vault stays there.
+If Chrome keeps the previous host permission, Petika reports it; review the
+extension's site access and reopen the popup.
+A deployment-pinned package has no Change server button; ask your administrator
+for another build. Revoked Chrome host access must be granted again before connecting.
 
 ### Update or remove the extension
 

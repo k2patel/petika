@@ -14,7 +14,33 @@ Administrators preparing packages can follow the build steps below.
 
 ## Build and connect
 
-Build the web WASM first (`scripts/build_web.sh`), then:
+Build the web WASM first (`scripts/build_web.sh`). For one package that asks each
+user for their own server:
+
+```sh
+python3 scripts/build_extension.py --generic --output output/extension-generic
+```
+
+Load `output/extension-generic`, enter the HTTPS server address in the popup, and
+choose **Use this server**. Chrome asks for access to that hostname. Denial leaves
+the previous setting intact. The address must be an origin without credentials,
+path, query or fragment. The selected address is stored locally; no vault key or
+passphrase is persisted. **Change server** locks the vault, clears session state,
+and requests removal of the previous host permission when the hostname changes.
+If Chrome retains it, the popup reports this and asks you to review extension site
+access and reopen; the new server is saved and the old local session is cleared. It does not
+revoke the old server's session: use Connected clients on that server to revoke it.
+
+The generic manifest declares optional HTTPS hosts but grants none at installation.
+Its CSP permits HTTPS connections; remote scripts remain forbidden. The client
+requests one exact hostname and sends API requests only to the selected origin,
+including its port. Chrome's host permission covers the hostname across ports;
+this is not an origin/port-level browser permission. Website autofill permission
+remains separate and requires the account's exact-origin allowlist plus activeTab.
+See [Chrome runtime permissions](https://developer.chrome.com/docs/extensions/reference/api/permissions).
+
+For a deployment-pinned package with the existing narrower CSP:
+
 
 ```sh
 python3 scripts/build_extension.py --endpoint https://petika.k2patel.in
@@ -136,6 +162,10 @@ The web app already offers generated passwords when creating/editing items.
 node scripts/test_extension_policy.mjs
 python3 scripts/test_extension.py
 ```
+
+Run `python3 scripts/test_extension.py --generic` for server setup and switching.
+Headless tests pregrant fixture hosts and mock the denial decision; manually verify
+Chrome's native permission dialog before release.
 
 The integration test requires Python Playwright, its Chromium download, built WASM,
 and `target/debug/petika-server`. It uses a disposable server/profile and synthetic

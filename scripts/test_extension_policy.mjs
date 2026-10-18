@@ -12,3 +12,10 @@ for (const [target,item,allowed] of [
   ['https://example.test.evil.test','https://example.test',['https://example.test']],
 ]) assert.throws(() => authorizeFill(target,item,allowed));
 console.log('Extension origin policy passed.');
+
+const {serverOrigin,serverPermission}=await import('../clients/extension/server.mjs');
+assert.equal(serverOrigin(' https://EXAMPLE.test:443/ '),'https://example.test');
+assert.equal(serverOrigin('https://example.test:8443'),'https://example.test:8443');
+assert.equal(serverPermission('https://example.test:8443'),'https://example.test/*');
+for (const value of ['http://example.test','https://user:secret@example.test','https://example.test/login','https://example.test/.','https://example.test/?','https://example.test/#','https://*.example.test','https://example.test:invalid','https://example.test/path/..','https://exa%6dple.test','https://example.test\\evil']) assert.throws(()=>serverOrigin(value),value);
+console.log('Extension server-origin policy passed.');

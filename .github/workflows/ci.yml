@@ -131,7 +131,9 @@ jobs:
       - name: Browser workflows and permissions
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
       - name: Chromium extension approval and autofill
-        run: /tmp/petika-browser-tests/bin/python scripts/test_extension.py
+        run: |
+          /tmp/petika-browser-tests/bin/python scripts/test_extension.py
+          /tmp/petika-browser-tests/bin/python scripts/test_extension.py --generic
       - name: Backup Settings workflows
         run: /tmp/petika-browser-tests/bin/python scripts/test_backup_settings.py
       - name: HTTP demo without secure-context-only APIs
