@@ -33,6 +33,7 @@ and limitations.
 - [GPG store import](import.md)
 - [Authentication and sharing](authentication.md)
 - [Sync, backup, and recovery](recovery.md)
+- [Git-backed vault synchronization proposal](research/git-vault-sync.md)
 
 Implemented: encrypted CLI and Rust/WASM web client, standard/hybrid setup modes,
 local GPG import, managed accounts, user/group permissions, website OTP, encrypted
