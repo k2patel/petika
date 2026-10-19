@@ -86,29 +86,22 @@ u32be(memory_kib) || u32be(iterations) || u32be(lanes) || field(payload_tag)
 
 The strict wrapper JSON has exactly `wrapper_version`, `profile`, `suite`, `context`,
 `wrapper_id`, `salt`, `memory_kib`, `iterations`, `lanes`, `nonce`, `ciphertext`.
-There is no server wrapper, recipient fallback or algorithm negotiation. Unwrap
+There is no server wrapper, implicit recipient fallback or algorithm negotiation. Unwrap
 requires an expected context rather than trusting the wrapper's claimed location.
 A future client must additionally verify the authenticated active-wrapper set after
 unlock; that collection-level policy is not implemented here.
 
-## Epoch decision: reject unverified transitions
+## Epoch checkpoints and recipient extension
 
-A root is fixed to its exact context, including epoch salt. Old, new or mismatched
-epochs cannot be opened/sealed with that root. Recovery unwrap likewise requires an
-exact context match. A larger counter is not permission to update a trusted checkpoint.
+Roots remain fixed to exact contexts; there is no implicit epoch switch. The
+[checkpoint and recipient extension](entry-checkpoints.md) now supplies explicit
+identity-signed epoch transitions, independently pinned authority/checkpoint
+bootstrap, active-wrapper verification and a new recipient package family.
 
-The remaining cross-epoch protocol is deliberately **not** implemented: a newly
-unwrapped root cannot by itself establish a legitimate transition from an old root.
-Do not encrypt the new root under the old root as a continuity shortcut; revoked
-holders of the old root would gain the new key. Do not silently trust a public Git
-hash, server assertion or freshly supplied signing key as a new checkpoint.
-
-Next work must define independently authenticated checkpoint/transition evidence,
-its trust anchor and retention limits, including a client that lacks old epoch keys.
-Until reviewed, rotation/migration into this format stays disabled. This is rejection
-of unsupported transitions, not a complete anti-rollback or fork-detection protocol.
-Recipient/device wrapper changes also remain blocked: existing Hybrid seed packages
-must not be reinterpreted as root keys or silently converted to Standard.
+These are opt-in core APIs only. They do not implement checkpoint persistence,
+ordinary-head continuity, client UX or migration. A checkpoint authority must verify
+candidate data before signing it. The extension documents authority-loss recovery,
+profile restrictions and the remaining fork/freshness limitations.
 
 ## Independent fixtures and validation scope
 

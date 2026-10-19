@@ -2,7 +2,10 @@
 
 Status: **full scenarios specified, not yet implemented/executed**, 2026-10-18.
 Six [prototype primitive tests](../research/entry-format-prototype.md) now cover
-parts of E01/E04/E07/E08/E09 and K01/K02; they do not complete those scenario rows. These are release
+parts of E01/E04/E07/E08/E09 and K01/K02; they do not complete those scenario rows.
+The [checkpoint/recipient extension](../research/entry-checkpoints.md) adds native
+trust/rotation tests and independent signature/HPKE fixtures. Durable client pins,
+server transactions, migration and complete K-series scenarios remain pending. These are release
 criteria for the [candidate format](../research/encrypted-entry-format.md), not
 claims about today's snapshot implementation. Existing CLI tests do not satisfy
 these criteria merely because they exercise snapshot CAS or encrypted drafts.

@@ -98,6 +98,9 @@ parallel. Feature backlog items remain open but do not replace these security ga
 - [x] Off-by-default entry/index cryptographic primitive prototype, explicit
   recovery wrapper, strict context/limits, and independent libsodium/Python vectors
   ([scope and remaining gates](research/entry-format-prototype.md)).
+- [x] Opt-in identity-authorized epoch checkpoints, explicit authority handover,
+  active-wrapper binding and entry-root recipient packages in both existing profiles
+  ([trust model and pending integration](research/entry-checkpoints.md)).
 - [ ] Implement API-authoritative Git-backed encrypted-entry sync: all managed
   clients use revision-checked API writes; Petika is the sole Git writer, with
   on-change/scheduled/manual replication, encrypted folder index and per-entry

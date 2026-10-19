@@ -7,6 +7,9 @@ Acceptance criteria are in [the validation plan](../testing/encrypted-entry-form
 An [opt-in core primitive prototype](entry-format-prototype.md) now implements
 strict object headers, entry/index AEAD and an explicit recovery wrapper. The full
 format and migration remain unimplemented; the prototype encoding is experimental.
+An [identity-authorized checkpoint/recipient extension](entry-checkpoints.md) now
+implements explicit epoch proofs; persisted pins and full index/history continuity
+remain integration gates.
 
 ## Scope and invariants
 

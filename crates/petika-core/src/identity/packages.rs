@@ -187,7 +187,7 @@ fn open<K: Kem>(secret: &[u8], package: &KeyPackage, header: &[u8]) -> Result<Ze
     .map_err(|_| Error::Authentication)
 }
 impl UnlockedIdentity {
-    fn trust_package_peer(&mut self, peer: &PublicIdentity) -> Result<()> {
+    pub(super) fn trust_package_peer(&mut self, peer: &PublicIdentity) -> Result<()> {
         if peer == &self.public {
             return Ok(());
         }

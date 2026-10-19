@@ -3,9 +3,13 @@
 //! This module supplies the local foundation, not enrollment, group-key delivery, or
 //! a trust directory. An enrollment self-signature does not verify a person's identity.
 mod contacts;
+#[cfg(feature = "experimental-entry-format")]
+mod entry_packages;
 mod hybrid_hpke;
 mod packages;
 pub use contacts::{ContactPin, ContactStatus, MAX_VERIFIED_CONTACTS};
+#[cfg(feature = "experimental-entry-format")]
+pub use entry_packages::{CheckpointTarget, EntryKeyPackage};
 pub use packages::KeyPackage;
 
 use base64::{Engine, engine::general_purpose::STANDARD};

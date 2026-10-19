@@ -1,5 +1,6 @@
 //! Opt-in entry/index cryptographic prototype, not a vault storage format yet.
 //! No automatic epoch transition, legacy package conversion, or format migration.
+pub mod checkpoint;
 use crate::{Error, Result, crypto};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use hkdf::Hkdf;
@@ -24,16 +25,16 @@ pub struct Context {
     /// Canonical padded base64, exactly 32 bytes.
     pub epoch_salt: String,
 }
-fn id(value: &str) -> bool {
+pub(crate) fn id(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
-fn counter(value: u64) -> bool {
+pub(crate) fn counter(value: u64) -> bool {
     (1..=MAX_COUNTER).contains(&value)
 }
-fn decode(value: &str, max: usize) -> Result<Vec<u8>> {
+pub(crate) fn decode(value: &str, max: usize) -> Result<Vec<u8>> {
     if value.len() > max.div_ceil(3) * 4 {
         return Err(Error::Format);
     }
@@ -43,10 +44,10 @@ fn decode(value: &str, max: usize) -> Result<Vec<u8>> {
     }
     Ok(decoded)
 }
-fn fixed<const N: usize>(value: &str) -> Result<[u8; N]> {
+pub(crate) fn fixed<const N: usize>(value: &str) -> Result<[u8; N]> {
     decode(value, N)?.try_into().map_err(|_| Error::Format)
 }
-fn field(output: &mut Vec<u8>, bytes: &[u8]) {
+pub(crate) fn field(output: &mut Vec<u8>, bytes: &[u8]) {
     output.extend_from_slice(&(bytes.len() as u32).to_be_bytes());
     output.extend_from_slice(bytes);
 }
@@ -58,7 +59,7 @@ impl Context {
         fixed::<32>(&self.epoch_salt)?;
         Ok(())
     }
-    fn append(&self, out: &mut Vec<u8>) {
+    pub(crate) fn append(&self, out: &mut Vec<u8>) {
         field(out, self.deployment_id.as_bytes());
         field(out, self.collection_id.as_bytes());
         out.extend_from_slice(&self.key_epoch.to_be_bytes());
@@ -158,6 +159,21 @@ impl RootKey {
             context,
             key: Zeroizing::new(crypto::random()?),
         })
+    }
+    pub(crate) fn material(&self) -> &[u8; 32] {
+        &self.key
+    }
+    pub(crate) fn from_material(context: Context, key: Zeroizing<[u8; 32]>) -> Result<Self> {
+        context.validate()?;
+        Ok(Self { context, key })
+    }
+    pub fn commitment(&self) -> String {
+        let mut bytes = Zeroizing::new(Vec::new());
+        field(&mut bytes, b"petika:entry-root:commitment:v1");
+        self.context.append(&mut bytes);
+        field(&mut bytes, self.context.epoch_salt.as_bytes());
+        bytes.extend_from_slice(self.key.as_ref());
+        hex(&digest(&bytes))
     }
     pub fn context(&self) -> &Context {
         &self.context
@@ -335,7 +351,7 @@ impl RecoveryWrapper {
 pub fn digest(bytes: &[u8]) -> [u8; 32] {
     Sha256::digest(bytes).into()
 }
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 

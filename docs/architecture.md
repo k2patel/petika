@@ -125,6 +125,9 @@ The [Git sync design](research/git-vault-sync.md) makes the API the single write
 authority for all managed clients. Entry-granular encrypted storage and selectable remote replication triggers
 remain implementation gaps. The [candidate entry format](research/encrypted-entry-format.md)
 and [acceptance plan](testing/encrypted-entry-format.md) define the next review gates.
+An off-by-default [checkpoint/recipient prototype](research/entry-checkpoints.md) now
+verifies explicit epoch transitions; durable client pins, index validation and API
+transactions are still pending integration.
 
 A revoked user/device may retain downloaded ciphertext, keys, and plaintext. Git history
 retains old ciphertext. Rotation cannot erase passwords already disclosed. The server's
