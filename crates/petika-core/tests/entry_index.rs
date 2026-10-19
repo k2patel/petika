@@ -48,6 +48,10 @@ fn initial(root: &RootKey) -> (Index, Vec<u8>) {
     )
 }
 fn seal(root: &RootKey, index: &Index) -> petika_core::Result<VerifiedIndex> {
+    let (head, bytes) = wire(root, index)?;
+    VerifiedIndex::open(root, head, &bytes)
+}
+fn wire(root: &RootKey, index: &Index) -> petika_core::Result<(Head, Vec<u8>)> {
     let bytes = root.seal(
         &Header {
             entry_format_version: 1,
@@ -59,8 +63,7 @@ fn seal(root: &RootKey, index: &Index) -> petika_core::Result<VerifiedIndex> {
         },
         &serde_json::to_vec(index).unwrap(),
     )?;
-    VerifiedIndex::open(
-        root,
+    Ok((
         Head {
             version: 1,
             context: root.context().clone(),
@@ -71,8 +74,8 @@ fn seal(root: &RootKey, index: &Index) -> petika_core::Result<VerifiedIndex> {
             wrapper_set_digest: wrapper_set_digest(&index.wrappers)?,
             index_digest: hex(&digest(&bytes)),
         },
-        &bytes,
-    )
+        bytes,
+    ))
 }
 fn pin(root: &RootKey, index: &VerifiedIndex) -> TrustedCheckpoint {
     let authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
@@ -228,4 +231,150 @@ fn persisted_epoch_transition_uses_local_revision_floor() {
     assert!(store.head(root.context()).is_err());
     assert_eq!(store.head(new_root.context()).unwrap(), *next.head());
     assert!(store.advance(new_root.context(), &proof, &next).is_err());
+}
+
+#[test]
+fn independent_head_vectors() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/entry-head-v1.json")).unwrap();
+    for case in cases.as_array().unwrap() {
+        let head: Head = serde_json::from_value(case["head"].clone()).unwrap();
+        assert_eq!(head.digest().unwrap(), case["digest"].as_str().unwrap());
+        let mut altered = head.clone();
+        altered.membership_generation += 1;
+        assert_ne!(altered.digest().unwrap(), head.digest().unwrap());
+    }
+}
+
+#[test]
+fn bounded_history_is_all_or_nothing_and_resumes_after_restart() {
+    use petika_core::entry_format::history::*;
+    let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+    let (mut index, _) = initial(&root);
+    let first = seal(&root, &index).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("pin");
+    let store = CheckpointStore::lock(&path).unwrap();
+    store.initialize(&pin(&root, &first), &first).unwrap();
+    index.revision = 2;
+    index.parent_digest = first.head().digest().unwrap();
+    let (second, second_bytes) = wire(&root, &index).unwrap();
+    index.revision = 3;
+    index.parent_digest = second.digest().unwrap();
+    let (third, third_bytes) = wire(&root, &index).unwrap();
+    let page = [
+        HistoryItem {
+            head: &second,
+            envelope: &second_bytes,
+        },
+        HistoryItem {
+            head: &third,
+            envelope: &third_bytes,
+        },
+    ];
+    let before = std::fs::read(&path).unwrap();
+    let mut fork_index = index.clone();
+    fork_index.parent_digest = first.head().digest().unwrap();
+    let (fork, fork_bytes) = wire(&root, &fork_index).unwrap();
+    assert!(
+        store
+            .catch_up(
+                &root,
+                &first,
+                &[
+                    HistoryItem {
+                        head: &second,
+                        envelope: &second_bytes
+                    },
+                    HistoryItem {
+                        head: &fork,
+                        envelope: &fork_bytes
+                    },
+                ]
+            )
+            .is_err()
+    );
+    let mut invalid_index = index.clone();
+    invalid_index.entries[0].revision = 2; // unchanged ciphertext cannot increment
+    let (invalid, invalid_bytes) = wire(&root, &invalid_index).unwrap();
+    assert!(
+        store
+            .catch_up(
+                &root,
+                &first,
+                &[
+                    HistoryItem {
+                        head: &second,
+                        envelope: &second_bytes
+                    },
+                    HistoryItem {
+                        head: &invalid,
+                        envelope: &invalid_bytes
+                    },
+                ]
+            )
+            .is_err()
+    );
+    assert!(store.catch_up(&root, &first, &[]).is_err());
+    assert!(store.catch_up(&root, &first, &page[1..]).is_err());
+    let oversized: Vec<_> = (0..=MAX_HISTORY_HEADS)
+        .map(|_| HistoryItem {
+            head: &second,
+            envelope: &second_bytes,
+        })
+        .collect();
+    assert!(store.catch_up(&root, &first, &oversized).is_err());
+    let large = vec![0; MAX_HISTORY_BYTES];
+    assert!(
+        store
+            .catch_up(
+                &root,
+                &first,
+                &[HistoryItem {
+                    head: &second,
+                    envelope: &large
+                }]
+            )
+            .is_err()
+    );
+    let mut bad = third_bytes.clone();
+    bad.push(0);
+    assert!(
+        store
+            .catch_up(
+                &root,
+                &first,
+                &[
+                    HistoryItem {
+                        head: &second,
+                        envelope: &second_bytes
+                    },
+                    HistoryItem {
+                        head: &third,
+                        envelope: &bad
+                    }
+                ]
+            )
+            .is_err()
+    );
+    assert_eq!(std::fs::read(&path).unwrap(), before);
+    let accepted = store.catch_up(&root, &first, &page).unwrap();
+    assert_eq!(accepted.head(), &third);
+    assert!(store.catch_up(&root, &first, &page).is_err());
+    drop(store);
+    let store = CheckpointStore::lock(&path).unwrap();
+    index.revision = 4;
+    index.parent_digest = third.digest().unwrap();
+    let (fourth, bytes) = wire(&root, &index).unwrap();
+    store
+        .catch_up(
+            &root,
+            &accepted,
+            &[HistoryItem {
+                head: &fourth,
+                envelope: &bytes,
+            }],
+        )
+        .unwrap();
+    assert_eq!(store.head(root.context()).unwrap(), fourth);
 }

@@ -191,14 +191,14 @@ Run with `--check`; dependencies are the existing test-only requirements file.
 
 Remaining: independent security review; actual WASM runtime vectors; integration of
 index validation and persisted pins; authority bootstrap/handover/recovery UX;
-bounded chain catch-up; server authorization/CAS and
+network catch-up integration; server authorization/CAS and
 receipt handling; migration and restore. The full acceptance matrix remains open.
 
 ## Native persistence and index validation update
 
 The [index/checkpoint storage extension](entry-index.md) now provides decrypted
-index semantics, one-step same-epoch continuity and locked atomic native pin
+index semantics, bounded same-epoch page verification and locked atomic native pin
 persistence. Earlier references to these as pending refer to client integration:
-no production client calls these APIs yet. Bounded network catch-up, independent
-vectors for the head encoding, epoch content continuity and real power-loss
-fault injection remain pending.
+no production client calls these APIs yet. Independent head vectors and injected
+write-boundary tests now run in CI. Network catch-up integration, epoch content
+continuity and real power-loss tests remain pending.

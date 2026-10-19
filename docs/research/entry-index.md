@@ -47,7 +47,8 @@ SHA-256 of these bytes becomes lowercase hex. Revision one has an empty parent;
 all later revisions require a digest. The index repeats head context, suite,
 revision, parent and membership, with explicit wrapper references whose set digest
 must match. It does not embed its own ciphertext digest, avoiding a hash cycle.
-Independent vectors for this new encoding remain pending.
+Independent stdlib Python vectors now cover genesis, a successor and the maximum
+counter. CI regenerates them; Rust checks the resulting head digests.
 
 ## Native checkpoint store
 
@@ -74,6 +75,30 @@ cycles, sibling collisions, missing/tampered objects, entry revision consistency
 rename, deletion, tombstone retention, exclusive locking, no-overwrite bootstrap,
 stale update rejection, restart persistence, an abandoned temporary file and
 corrupt-file refusal. The abandoned-file test simulates pre-rename interruption;
-it is not power-loss or syscall fault injection. Production integration, bounded
-catch-up, independent encoding vectors, epoch content continuity and broader
-failure-injection tests remain required.
+it is not power-loss testing. The shared storage unit tests additionally inject
+errors after temporary write, file sync, rename and directory sync for creation
+and replacement, verifying complete old/new records when reopened. Production integration, bounded
+network catch-up integration, epoch content continuity and real process/power-loss
+tests remain required.
+
+## Bounded same-epoch catch-up
+
+`history::verify_page` accepts 1–32 borrowed heads/envelopes, with a 16 MiB total
+budget (compact serialized head plus exact envelope bytes). It validates budgets
+before decryption, then verifies every adjacent index and semantic delta. Only
+the previous and current decrypted indexes are retained internally. Empty pages,
+skips, reordered heads, forks, altered ciphertext and epoch changes are rejected.
+
+`CheckpointStore::catch_up` first checks the starting index against the local pin
+and the root against the signed checkpoint. It writes only the final head after
+all page checks succeed. A bad tail leaves the file unchanged. The returned index
+can anchor the next page, including after reloading its encrypted envelope on
+restart. A write error still requires reconciliation because rename may have
+completed. No API response is itself a freshness anchor.
+
+This is a core verification API, not an HTTP endpoint or client sync command.
+Transport must enforce request/body size limits before allocation; the core budget
+cannot undo an oversized response already buffered by its caller. Epoch catch-up
+remains explicit via authority transitions and requires further content-continuity
+work. Tests exercise page limits, skipped heads, invalid tails, atomic acceptance,
+stale retries and restart continuation.

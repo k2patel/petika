@@ -154,4 +154,9 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
 - [x] Experimental decrypted-index validation, adjacent-head continuity, exact live
   object coverage and atomic native checkpoint storage ([details](research/entry-index.md)).
 - [ ] Integrate bounded history catch-up and checkpoint persistence into clients;
-  independently validate head encoding and test real crash boundaries before API migration.
+  test real crash boundaries before API migration.
+
+- [x] Independent head-digest vectors, bounded same-epoch history verification and
+  atomic catch-up pin updates; injected atomic-write boundary failures.
+- [ ] Wire history transport/client sync; verify epoch content continuity and test
+  real process termination before enabling per-entry transactions.

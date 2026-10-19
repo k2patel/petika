@@ -3,6 +3,7 @@
 pub mod checkpoint;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod checkpoint_store;
+pub mod history;
 pub mod index;
 use crate::{Error, Result, crypto};
 use base64::{Engine, engine::general_purpose::STANDARD};

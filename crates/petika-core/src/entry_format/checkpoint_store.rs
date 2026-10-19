@@ -68,6 +68,24 @@ impl CheckpointStore {
         let trusted = self.trusted(&previous.head().context)?;
         self.save(&trusted, next, false)
     }
+    /// Validate a bounded same-epoch page and persist only its final head. A bad
+    /// tail leaves the durable pin unchanged; later pages resume from this result.
+    pub fn catch_up(
+        &self,
+        root: &RootKey,
+        previous: &VerifiedIndex,
+        items: &[super::history::HistoryItem<'_>],
+    ) -> Result<VerifiedIndex> {
+        let record = self.read(&previous.head().context)?;
+        if record.head != *previous.head() {
+            return Err(Error::Authentication);
+        }
+        let trusted = self.trusted(&previous.head().context)?;
+        trusted.validate_root(root)?;
+        let next = super::history::verify_page(root, previous, items)?;
+        self.save(&trusted, &next, false)?;
+        Ok(next)
+    }
     /// Epoch changes require an authorized proof and a decrypted new checkpoint
     /// head, while the revision floor comes exclusively from the locked local file.
     pub fn advance(

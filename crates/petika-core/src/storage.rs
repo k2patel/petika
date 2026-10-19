@@ -78,6 +78,16 @@ impl StoreFile {
         self.write(&store.seal()?, create)
     }
     pub fn write(&self, bytes: &[u8], create: bool) -> Result<()> {
+        self.write_checked(bytes, create, |_| Ok(()))
+    }
+    // The callback permits deterministic boundary failures in tests without
+    // global failpoints or changing the on-disk protocol.
+    fn write_checked(
+        &self,
+        bytes: &[u8],
+        create: bool,
+        mut boundary: impl FnMut(u8) -> Result<()>,
+    ) -> Result<()> {
         if bytes.len() > MAX_FILE_BYTES {
             return Err(Error::Format);
         }
@@ -89,7 +99,9 @@ impl StoreFile {
             .unwrap_or(Path::new("."));
         let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
         temporary.write_all(bytes)?;
+        boundary(1)?;
         temporary.as_file().sync_all()?;
+        boundary(2)?;
         let persisted = if create {
             temporary.persist_noclobber(&self.path)
         } else {
@@ -102,8 +114,10 @@ impl StoreFile {
                 Error::Io(err.error)
             }
         })?;
+        boundary(3)?;
         #[cfg(unix)]
         File::open(parent)?.sync_all()?;
+        boundary(4)?;
         Ok(())
     }
 }
@@ -125,5 +139,45 @@ fn check_file(path: &Path) -> Result<()> {
         }
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(()),
         Err(err) => Err(err.into()),
+    }
+}
+
+#[cfg(test)]
+mod failure_tests {
+    use super::*;
+    #[test]
+    fn atomic_write_failure_boundaries_preserve_whole_records() {
+        for create in [false, true] {
+            for stop in 1..=4 {
+                let dir = tempfile::tempdir().unwrap();
+                let path = dir.path().join("pin");
+                let file = StoreFile::lock(&path).unwrap();
+                if !create {
+                    file.write(b"old complete record", true).unwrap();
+                }
+                let result = file.write_checked(b"new complete record", create, |stage| {
+                    if stage == stop {
+                        Err(Error::Io(std::io::Error::other(
+                            "injected boundary failure",
+                        )))
+                    } else {
+                        Ok(())
+                    }
+                });
+                assert!(result.is_err());
+                drop(file);
+                let reopened = StoreFile::lock(&path).unwrap();
+                if stop < 3 && create {
+                    assert!(!reopened.exists());
+                } else {
+                    let expected: &[u8] = if stop < 3 {
+                        b"old complete record"
+                    } else {
+                        b"new complete record"
+                    };
+                    assert_eq!(reopened.read().unwrap(), expected);
+                }
+            }
+        }
     }
 }
