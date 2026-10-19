@@ -19,10 +19,10 @@ opaque object ID and positive revision. `seal` always generates a fresh nonce;
 The caller must obtain that digest from an authenticated index. A public hash by
 itself does not authenticate an object or establish freshness.
 
-The primitive treats entry/index plaintext as bounded opaque bytes. It does **not**
-yet parse or validate folder graphs, tombstones, complete indexes, commit heads,
-operation receipts, or transaction atomicity. Passing an index payload through AEAD
-is not proof that the index is semantically valid.
+The low-level primitive still treats plaintext as opaque bytes. The opt-in
+[index validation layer](entry-index.md) now validates decrypted folder graphs,
+entry references, tombstones and head continuity. It does not implement API
+transactions or migration. Entry payload schemas remain the caller's responsibility.
 
 | Prototype limit | Value |
 | --- | --- |
@@ -98,8 +98,9 @@ Roots remain fixed to exact contexts; there is no implicit epoch switch. The
 identity-signed epoch transitions, independently pinned authority/checkpoint
 bootstrap, active-wrapper verification and a new recipient package family.
 
-These are opt-in core APIs only. They do not implement checkpoint persistence,
-ordinary-head continuity, client UX or migration. A checkpoint authority must verify
+These are opt-in core APIs only. Native pin persistence and adjacent-head
+continuity are available in the [index extension](entry-index.md); client UX and
+migration remain pending. A checkpoint authority must verify
 candidate data before signing it. The extension documents authority-loss recovery,
 profile restrictions and the remaining fork/freshness limitations.
 

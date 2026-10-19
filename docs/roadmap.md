@@ -150,3 +150,8 @@ parallel. Feature backlog items remain open but do not replace these security ga
 Platform stacks, supported OS versions, recovery objectives, and later feature ordering
 remain open. See [requirements](requirements.md), [architecture](architecture.md), and
 [recovery](recovery.md) for constraints.
+
+- [x] Experimental decrypted-index validation, adjacent-head continuity, exact live
+  object coverage and atomic native checkpoint storage ([details](research/entry-index.md)).
+- [ ] Integrate bounded history catch-up and checkpoint persistence into clients;
+  independently validate head encoding and test real crash boundaries before API migration.

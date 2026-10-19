@@ -8,8 +8,9 @@ An [opt-in core primitive prototype](entry-format-prototype.md) now implements
 strict object headers, entry/index AEAD and an explicit recovery wrapper. The full
 format and migration remain unimplemented; the prototype encoding is experimental.
 An [identity-authorized checkpoint/recipient extension](entry-checkpoints.md) now
-implements explicit epoch proofs; persisted pins and full index/history continuity
-remain integration gates.
+implements explicit epoch proofs. The [index extension](entry-index.md) adds
+index semantics, adjacent-head continuity and native persisted pins. Client/API
+integration and full history catch-up remain gates.
 
 ## Scope and invariants
 

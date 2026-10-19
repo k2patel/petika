@@ -126,7 +126,8 @@ authority for all managed clients. Entry-granular encrypted storage and selectab
 remain implementation gaps. The [candidate entry format](research/encrypted-entry-format.md)
 and [acceptance plan](testing/encrypted-entry-format.md) define the next review gates.
 An off-by-default [checkpoint/recipient prototype](research/entry-checkpoints.md) now
-verifies explicit epoch transitions; durable client pins, index validation and API
+verifies explicit epoch transitions. [Index validation and native pins](research/entry-index.md)
+are available as opt-in core APIs; client wiring and API
 transactions are still pending integration.
 
 A revoked user/device may retain downloaded ciphertext, keys, and plaintext. Git history
