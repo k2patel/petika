@@ -123,6 +123,76 @@ pub fn open_local(
     )?;
     Ok(store)
 }
+/// Uses the same origin, account, contact and epoch checks as managed key commands.
+pub(crate) fn open_live(
+    client: &account::Client,
+    identity_path: &Path,
+    prefix: &str,
+    encrypted: &[u8],
+    context: &petika_core::CollectionContext,
+    stdin: bool,
+) -> Result<(UnlockedStore, Value)> {
+    let origin = StoreFile::lock(identity_path.with_extension("origin.json"))?;
+    if !origin.exists() || serde_json::from_slice::<String>(&origin.read()?)? != client.server {
+        return Err("Identity origin pin missing or belongs to another server".into());
+    }
+    let user = client.json("GET", "/v1/auth/status", Value::Null)?["user"]["id"]
+        .as_str()
+        .ok_or("Not signed in")?
+        .to_owned();
+    let deployment = client.json("GET", "/v1/keys/deployment", Value::Null)?["deployment_id"]
+        .as_str()
+        .ok_or("Invalid deployment")?
+        .to_owned();
+    if context.deployment_id != deployment {
+        return Err("Snapshot belongs to another deployment".into());
+    }
+    let (mut identity, passphrase) = open_identity(identity_path, stdin)?;
+    if identity.public_identity().user_id != user
+        || identity.public_identity().deployment_id != deployment
+    {
+        return Err("Identity does not match this account/deployment".into());
+    }
+    let own = client.json("GET", "/v1/keys/identity", Value::Null)?;
+    if own["public_identity"] != serde_json::to_value(identity.public_identity())? {
+        return Err("Server identity changed; restore or replace explicitly".into());
+    }
+    require_bundle_revision(identity_path, &own["bundle_revision"])?;
+    let page = client.json("GET", &format!("{prefix}/key-packages"), Value::Null)?;
+    let package: KeyPackage = serde_json::from_value(
+        page["packages"]
+            .as_array()
+            .and_then(|p| p.first())
+            .ok_or("Pending delivery: verify an editor and request access")?
+            .clone(),
+    )?;
+    // Validate the identifier before using it as an API path component.
+    if package.issuer_user_id.len() != 64
+        || !package
+            .issuer_user_id
+            .bytes()
+            .all(|b| b.is_ascii_hexdigit())
+    {
+        return Err("Invalid package issuer".into());
+    }
+    let issuer: PublicIdentity = serde_json::from_value(client.json(
+        "GET",
+        &format!("/v1/keys/users/{}", package.issuer_user_id),
+        Value::Null,
+    )?)?;
+    let (mode, _) = petika_core::envelope_metadata(encrypted)?;
+    let opened = identity.open_key_package(&package, &issuer, encrypted, context, mode);
+    // Persist trust suspensions even when the package is rejected.
+    petika_core::identity::IdentityFile::lock(identity_path)?.save(
+        &identity,
+        &passphrase,
+        false,
+    )?;
+    let store = opened?;
+    observe_epoch(identity_path, context)?;
+    Ok((store, json!({"package":package,"issuer":issuer})))
+}
+
 fn open_local_with_identity(
     identity: &mut UnlockedIdentity,
     encrypted: &[u8],

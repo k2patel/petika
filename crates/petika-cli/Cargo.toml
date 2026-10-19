@@ -18,6 +18,4 @@ serde_json.workspace = true
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"] }
 url = "2"
 ring = "=0.17.14"
-
-[dev-dependencies]
 tempfile.workspace = true

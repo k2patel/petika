@@ -64,25 +64,69 @@ format; these command aliases do not imply GPG-file compatibility. Existing GPG
 password stores can be [imported locally](import.md). The workflow is inspired by
 [password-store](https://www.passwordstore.org/), not copied shell code.
 
-## Live API password retrieval
+## Live API operations
+
+Use `--collection personal` or a collection ID on `list`/`ls`, `get`, `show`,
+`put`/`insert`, `generate`, `remove`/`rm`, and `otp set/remove`:
 
 ```sh
 petika login --server https://petika.example.com
-petika show Email/example --collection personal
-petika show Email/example --collection COLLECTION_ID --totp
+petika ls --collection personal
+petika show Email/example --collection personal --totp
+petika put Email/example --collection personal --username alice
+petika generate Email/new --collection personal
+petika otp set Email/example --collection personal
+petika otp remove Email/example --collection personal --yes
+petika rm Email/new --collection personal --yes
+# Recipient-enabled group, using an enrolled/restored and verified identity:
+petika --identity-file ~/.local/share/petika/identity.json show Team/example --collection COLLECTION_ID
 ```
 
-With `--collection`, `show` authenticates with the saved API session and fetches the
-current encrypted snapshot before prompting for a local collection passphrase.
-It does not read or write `--store`, create an encrypted vault cache, or fall back
-to stale local data on an API failure. A read-only collection grant is sufficient.
-Password/TOTP display works as above; the unlock passphrase is never sent to the API.
+Each operation authenticates with the saved API session and fetches the current
+whole encrypted snapshot. Unlocking and editing happen locally. Reads do not cache
+vault contents, read/write `--store`, or fall back to stale local data on API failure.
+Read-only collection grants permit reads; edits require write access. The collection
+must already exist and have a snapshot; initial creation remains the existing web
+or explicit initialization/push workflow.
 
-This first live operation supports collection-passphrase unlocking. Configured
-recipient identities are rejected explicitly; use `keys pull` and local `show`
-for that workflow until live recipient-key delivery is integrated. Without
-`--collection`, `show` remains a local command. Mutations still require explicit
-pull/edit/push with revision checks; automatic managed mutations are pending.
+Legacy collections prompt for a collection passphrase. Recipient collections require
+`--identity-file` (or its rc default) and prompt for the identity passphrase. Origin,
+account, deployment, identity, trust-bundle revision, issuer trust/signature and
+observed key epoch are checked before revealing data. There is no recovery-passphrase
+fallback for recipient collections. Use the existing `keys enroll`, `keys restore`,
+`keys verify`, and delivery workflow to establish access first.
+
+Writes submit ciphertext with the fetched revision. Recipient writes also include
+expected key epoch and membership generation; collections needing rotation reject
+edits. Successful API acceptance does not mean remote Git replication has finished.
+Without `--collection`, these commands retain their local/offline behavior.
+
+### Conflicts and interrupted writes
+
+Before sending an edit, the CLI saves a private `petika-draft-*` directory beside
+its session file. It contains `snapshot.petika`, non-secret origin/collection/revision
+metadata in `context.json`, and (for recipient collections) `snapshot.access.json`
+with the encrypted key package and public issuer identity. No plaintext password,
+TOTP setup key, API token or unlock passphrase is stored in the draft.
+
+A valid success acknowledgement removes that draft. A conflict, failed request or
+missing/unexpected acknowledgement retains it and prints its location. No automatic
+retry, ciphertext merge or force overwrite follows. An interrupted request may have
+been accepted; inspect the live API state before making another edit. A crash after
+acceptance but before cleanup can likewise leave a redundant draft.
+
+Inspect the preserved edit locally, omitting `--collection`:
+
+```sh
+petika --store /path/to/petika-draft-XXXX/snapshot.petika show Email/example
+# For recipient drafts, also provide the original --identity-file.
+```
+
+Compare with `show --collection ...`, then explicitly reapply the intended change
+against current API state. Do not upload the entire stale draft with a newer revision:
+that could overwrite someone else's edits. Keep drafts until resolved; they contain
+old ciphertext just as backups do. This is snapshot-level conflict protection;
+independent entry edits can still conflict until the per-entry format is implemented.
 
 ## Unix configuration: ~/.petikarc
 
@@ -145,10 +189,12 @@ writing. A wrong passphrase leaves the existing file untouched. `push` also veri
 the local file before uploading only its ciphertext. Offline `list`, `get`, `put`,
 `generate`, and other local commands continue to work without a server session.
 
-For groups, use `--collection ID` on `pull`, `push`, or `status`, with an ID from
-`collections`. The default is your personal collection. Read-only memberships permit
-downloads but not uploads. Group decryption still needs the separately shared group
-passphrase; browser approval does not deliver encryption keys.
+For groups, use `--collection ID` with an ID from `collections`. Legacy `pull`,
+`push`, and `status` default to the personal collection; live entry commands require
+an explicit `--collection` to select API mode. Read-only memberships permit reads
+but not writes. Legacy groups use a separately shared collection passphrase;
+recipient-enabled groups use verified identity/key-package access. Browser approval
+authenticates API access and does not itself deliver decryption keys.
 
 ## Session storage and revocation
 

@@ -38,15 +38,17 @@ The API accepts revision-checked whole-collection encrypted snapshots and mainta
 local Git history. The homelab `deploy/homelab/mirror.sh` sidecar pushes that history
 every 60 seconds using fast-forward-only pushes. The remote has collection-specific
 branches. This is outbound recovery replication, not a configurable two-way Git
-backend. CLI pull/push is explicit; `show --collection` fetches live API data and
-unlocks with a collection passphrase without caching. Plain `show` remains local.
+backend. CLI `--collection` reads and writes use the API with local passphrase or
+recipient-identity unlock; writes preserve encrypted drafts on conflicts or uncertain
+acknowledgements. Commands without `--collection` remain local; pull/push is explicit.
 
 ### Implementation gap checklist
 
 - [x] API-authorized, revision-checked snapshot writes and durable journal.
 - [x] Local Git mirror serialization and fast-forward-only homelab remote pushes.
 - [x] Live CLI passphrase-based `show --collection`, with no stale local fallback.
-- [ ] Live recipient-identity unlock and managed CLI mutation transactions.
+- [x] Live recipient-identity unlock and managed CLI snapshot mutation transactions,
+  with encrypted draft preservation and no automatic stale-write retry.
 - [ ] Entry/index format, authenticated deletion and migration/restore validation.
 - [ ] Per-entry revisions with atomic shared-index changes and preserved stale drafts.
 - [ ] Provider-neutral remote configuration and selectable replication triggers.

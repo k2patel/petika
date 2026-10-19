@@ -5,7 +5,7 @@
 | Component | Purpose | Current state |
 | --- | --- | --- |
 | `petika-core` | Shared records, encryption, local storage | Standard/hybrid envelopes, record operations, local recipient identities/recovery, atomic native persistence |
-| `petika` | Rust CLI | Offline password management, GPG import, managed login, live passphrase-based show, encrypted collection pull/push |
+| `petika` | Rust CLI | Offline password management, GPG import, managed login, live API reads/writes with passphrase or recipient unlock, encrypted collection pull/push |
 | `petika-server` | Self-hosted API and web hosting | Accounts, permissions, provisioning, revision checks, snapshot journals, Git mirrors |
 | `petika-web` and `clients/web` | Browser password manager | Rust/WASM encryption worker and JavaScript/CSS interface |
 | `petika-desktop` | Native messaging and platform authentication | Library placeholder |
@@ -97,8 +97,8 @@ Clients encrypt/decrypt locally using the shared Rust core. Server authenticatio
 separate from collection unlocking. The API authorizes personal/group collection access
 and accepts whole encrypted snapshots using compare-and-swap revisions. Stale writes
 are rejected; clients retain local changes for explicit resolution. There is no automatic
-per-record merge. The CLI supports live `show --collection` with local passphrase
-unlock and explicit pull/push; the web client saves encrypted drafts
+per-record merge. The CLI supports live reads/writes using `--collection`, local passphrase or
+recipient-identity unlock, encrypted conflict drafts, and explicit pull/push; the web client saves encrypted drafts
 and attempts synchronization.
 
 Accepted snapshots are journaled and mirrored to separate local Git repositories. Git
@@ -122,8 +122,8 @@ The Chromium preview uses local WASM; native messaging and mobile platform autof
 and biometric bindings remain planned. Platform packaging preserves the no-npm requirement.
 
 The [Git sync design](research/git-vault-sync.md) makes the API the single write
-authority for all managed clients. Entry-granular encrypted storage, managed CLI
-mutations and selectable remote replication triggers remain implementation gaps.
+authority for all managed clients. Entry-granular encrypted storage and selectable remote replication triggers
+remain implementation gaps.
 
 A revoked user/device may retain downloaded ciphertext, keys, and plaintext. Git history
 retains old ciphertext. Rotation cannot erase passwords already disclosed. The server's

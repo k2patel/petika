@@ -100,8 +100,9 @@ parallel. Feature backlog items remain open but do not replace these security ga
 - [x] Rust CLI `show` with local unlock, interactive TOTP expiry, encrypted TOTP setup,
   password-store-style aliases, and non-secret `~/.petikarc` defaults.
 - [x] Live CLI `show --collection` via the authenticated API with local passphrase
-  unlock and no vault cache or offline fallback. Recipient-identity live unlock and
-  managed mutations remain pending.
+  unlock and no vault cache or offline fallback.
+- [x] Managed CLI reads/mutations, live recipient-identity unlock, revision/epoch/
+  membership checks, and encrypted drafts for rejected or uncertain saves.
 
 - [x] Experimental Chromium toolbar login/TOTP filling with local WASM and per-fill
   origin, permission, session and document checks ([preview](../clients/extension/README.md)).

@@ -283,18 +283,6 @@ pub fn status(path: &Path, selected: &str) -> Result<()> {
     );
     Ok(())
 }
-pub fn show(path: &Path, selected: &str, name: &str, totp: bool, stdin: bool) -> Result<()> {
-    let client = client(path)?;
-    let id = collection(&client, selected, false)?;
-    let (_, revision, encrypted) =
-        client.request("GET", &format!("/v1/collections/{id}/snapshot"), None, None)?;
-    revision.ok_or("Missing server revision")?;
-    petika_core::validate_envelope(encrypted.as_bytes())?;
-    let passphrase = crate::secret("Collection passphrase (local only): ", stdin)?;
-    let store = UnlockedStore::open(encrypted.as_bytes(), &passphrase)?;
-    crate::show_entry(store.get(name)?, totp)
-}
-
 pub fn pull(path: &Path, selected: &str, store: &Path, replace: bool, stdin: bool) -> Result<()> {
     let file = StoreFile::lock(store)?;
     if file.exists() && !replace {

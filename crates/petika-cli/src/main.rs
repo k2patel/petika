@@ -2,6 +2,7 @@ mod account;
 mod config;
 mod import;
 mod keys;
+mod managed;
 mod otp;
 
 use clap::{Parser, Subcommand, ValueEnum};
@@ -120,10 +121,18 @@ enum Command {
     },
     /// List entry names, optionally filtered by a case-insensitive substring.
     #[command(visible_alias = "ls")]
-    List { query: Option<String> },
+    List {
+        query: Option<String>,
+        /// Use this managed API collection instead of the local store.
+        #[arg(long)]
+        collection: Option<String>,
+    },
     /// Show metadata; use --reveal explicitly to print the password only.
     Get {
         name: String,
+        /// Use this managed API collection instead of the local store.
+        #[arg(long)]
+        collection: Option<String>,
         #[arg(long)]
         reveal: bool,
     },
@@ -139,6 +148,9 @@ enum Command {
     },
     /// Configure or remove a login's encrypted TOTP setup key.
     Otp {
+        /// Use this managed API collection instead of the local store.
+        #[arg(long, global = true)]
+        collection: Option<String>,
         #[command(subcommand)]
         command: OtpCommand,
     },
@@ -146,6 +158,9 @@ enum Command {
     #[command(visible_alias = "insert")]
     Put {
         name: String,
+        /// Use this managed API collection instead of the local store.
+        #[arg(long)]
+        collection: Option<String>,
         #[arg(long, default_value = "")]
         username: String,
         #[arg(long, default_value = "")]
@@ -158,6 +173,9 @@ enum Command {
     /// Generate and save a password without printing it.
     Generate {
         name: String,
+        /// Use this managed API collection instead of the local store.
+        #[arg(long)]
+        collection: Option<String>,
         #[arg(long, default_value_t = 24)]
         length: usize,
         #[arg(long, default_value = "")]
@@ -171,6 +189,9 @@ enum Command {
     #[command(visible_alias = "rm")]
     Remove {
         name: String,
+        /// Use this managed API collection instead of the local store.
+        #[arg(long)]
+        collection: Option<String>,
         #[arg(long, required = true)]
         yes: bool,
     },
@@ -338,17 +359,17 @@ fn run(mut cli: Cli) -> Result<()> {
         Command::Whoami => return account::whoami(&session()?),
         Command::Collections => return account::collections(&session()?),
         Command::Status { collection } => return account::status(&session()?, collection),
-        Command::Show {
-            name,
-            collection: Some(collection),
-            totp,
-        } => {
-            if cli.identity_file.is_some() {
-                return Err("Live show currently supports collection passphrases; use keys pull and local show for recipient identities".into());
-            }
-            return account::show(&session()?, collection, name, *totp, cli.passphrase_stdin);
-        }
         _ => {}
+    }
+    if let Some(selected) = managed::selection(&cli.command) {
+        let selected = selected.to_owned();
+        return managed::run(
+            &session()?,
+            cli.identity_file.as_deref(),
+            &selected,
+            cli.command,
+            cli.passphrase_stdin,
+        );
     }
     let path = match cli.store.clone() {
         Some(path) => path,
@@ -410,7 +431,19 @@ fn run(mut cli: Cli) -> Result<()> {
         let passphrase = secret("Passphrase: ", cli.passphrase_stdin)?;
         file.open(&passphrase)?
     };
-    match cli.command {
+    operate(cli.command, &mut store, cli.passphrase_stdin, |store| {
+        file.save(store, false)?;
+        Ok(())
+    })
+}
+
+fn operate(
+    command: Command,
+    store: &mut UnlockedStore,
+    passphrase_stdin: bool,
+    mut save: impl FnMut(&mut UnlockedStore) -> Result<()>,
+) -> Result<()> {
+    match command {
         Command::Keys { .. }
         | Command::Init { .. }
         | Command::Login { .. }
@@ -425,11 +458,11 @@ fn run(mut cli: Cli) -> Result<()> {
             gpg_home,
             replace,
         } => {
-            let count = import::gpg_store(&mut store, &source, gpg_home.as_deref(), replace)?;
-            file.save(&mut store, false)?;
+            let count = import::gpg_store(store, &source, gpg_home.as_deref(), replace)?;
+            save(store)?;
             println!("Imported {count} entries. Source store unchanged.");
         }
-        Command::List { query } => {
+        Command::List { query, .. } => {
             let query = query.unwrap_or_default().to_lowercase();
             for name in store
                 .names()
@@ -438,7 +471,7 @@ fn run(mut cli: Cli) -> Result<()> {
                 println!("{name}");
             }
         }
-        Command::Get { name, reveal } => {
+        Command::Get { name, reveal, .. } => {
             let entry = store.get(&name)?;
             if reveal {
                 println!("{}", entry.password);
@@ -451,7 +484,7 @@ fn run(mut cli: Cli) -> Result<()> {
             }
         }
         Command::Show { name, totp, .. } => show_entry(store.get(&name)?, totp)?,
-        Command::Otp { command } => {
+        Command::Otp { command, .. } => {
             let (name, value) = match command {
                 OtpCommand::Set {
                     name,
@@ -480,7 +513,7 @@ fn run(mut cli: Cli) -> Result<()> {
                 otp: value.as_deref().map(|v| v.to_string()),
             };
             store.put(name, entry, true)?;
-            file.save(&mut store, false)?;
+            save(store)?;
             println!("Updated encrypted TOTP setup. Website MFA settings are unchanged.");
         }
         Command::Put {
@@ -489,6 +522,7 @@ fn run(mut cli: Cli) -> Result<()> {
             url,
             replace,
             password_stdin,
+            ..
         } => {
             let password = secret("Entry password: ", password_stdin)?;
             if password.is_empty() {
@@ -510,7 +544,7 @@ fn run(mut cli: Cli) -> Result<()> {
                 },
                 replace,
             )?;
-            file.save(&mut store, false)?;
+            save(store)?;
             println!("Saved entry.");
         }
         Command::Generate {
@@ -519,6 +553,7 @@ fn run(mut cli: Cli) -> Result<()> {
             username,
             url,
             replace,
+            ..
         } => {
             let password = generate_password(length)?;
             let notes = store
@@ -536,18 +571,18 @@ fn run(mut cli: Cli) -> Result<()> {
                 },
                 replace,
             )?;
-            file.save(&mut store, false)?;
-            println!("Generated and saved password. Use get --reveal to print it.");
+            save(store)?;
+            println!("Generated and saved password.");
         }
-        Command::Remove { name, yes: _ } => {
+        Command::Remove { name, yes: _, .. } => {
             store.remove(&name)?;
-            file.save(&mut store, false)?;
+            save(store)?;
             println!("Removed entry.");
         }
         Command::Passphrase => {
-            let new = new_passphrase(cli.passphrase_stdin)?;
+            let new = new_passphrase(passphrase_stdin)?;
             store.change_passphrase(&new)?;
-            file.save(&mut store, false)?;
+            save(store)?;
             println!("Changed local passphrase. Older copies still require their old passphrase.");
         }
     }
