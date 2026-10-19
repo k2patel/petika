@@ -10,10 +10,26 @@ logical folder structure and entries are encrypted and replicated. Normal edits
 should update only the affected encrypted entries and necessary metadata, rather
 than replacing the entire encrypted collection.
 
-Whether changes from other Git clients must be imported is still an open decision.
-Do not assume that outbound backup replication and two-way synchronization are the
-same feature. GitHub Actions is also not assumed to be the required scheduler:
-"on changes" can be handled by the Petika service or CLI after an accepted save.
+All clients use the Petika API for managed vault reads and writes. The API is the
+single write authority, and the Petika service is the sole writer to the vault's
+Git backend. Clients never push directly to Git. Normal synchronization is outbound;
+importing remote history is an explicit recovery operation, not two-way sync.
+GitHub Actions is not required: the service can trigger replication after an
+accepted save or on the configured schedule.
+
+```text
+Web / extension / CLI (encrypt and decrypt locally)
+                     |
+                     v
+Petika API (authorize, check revisions, durably accept changes)
+                     |
+                     v
+Serialized Git writer -> GitHub / Gitea remote
+```
+
+API authentication permits access; local vault unlocking permits decryption. A
+client does not need Git credentials. Optional local caches/offline drafts must
+return through the same revision-checked API before becoming accepted changes.
 
 ## Existing implementation
 
@@ -50,18 +66,28 @@ Expose remote, branch, sync mode (on changes / scheduled / manual), interval,
 last successful remote commit, pending changes, errors and Retry. Distinguish local
 save, API acceptance and successful remote replication in the UI and CLI.
 
-A durable queue should coalesce edits, retry transient failures and survive restarts.
+A durable queue should coalesce replication work, retry transient failures and
+survive restarts without dropping accepted revisions. API acceptance and enqueueing
+must be crash-consistent. A Git outage leaves accepted saves durable and visibly
+pending replication, rather than reporting them as remotely synced.
+Serialize writes per repository/branch, including across service replicas and
+retries; use idempotent operations and preserve accepted revision ordering.
 The server can push encrypted objects without vault-decryption keys. Git credentials
 remain separate from vault keys and API tokens. Repository writers must be authorized;
 if several users share a repository, Git access itself is not per-user vault ACLs.
 A repo-scoped credential granting read access can expose all ciphertext in that repo.
 
-For two-way sync, define the source of truth and synchronization protocol first:
-fetch before publishing, track a common base, detect changes per entry, retain both
-versions on conflicts, and never force-push away remote history. The server cannot
-merge plaintext fields without decryption keys; resolution belongs in an unlocked
-client. Specify commit authenticity, recovery/key-wrapper distribution, membership
-changes, stale clients and key epochs before allowing remote imports.
+Concurrent clients can still edit the same entry. Require an expected revision on
+every mutation and reject stale writes before acceptance; never silently overwrite
+or merge ciphertext. Preserve the client's draft so it can fetch the latest state
+and explicitly resolve the edit after unlocking. Independent entry edits should
+not conflict unnecessarily; changes to the encrypted shared index require their own
+transaction/revision checks. Define those checks in the format and API protocol.
+
+Push fast-forward-only. Unexpected external remote commits stop replication and
+surface an actionable error; never auto-merge or force-push. Restrict remote write
+credentials to the service. Explicit recovery/import must validate authenticity,
+key epochs, membership and rollback policy before restoring authoritative state.
 
 GitHub Actions could optionally orchestrate work after events or on a schedule,
 but a runner still needs authenticated access to the source. No workflow needs a
@@ -70,9 +96,10 @@ an exact-time durability guarantee.
 
 ## Delivery sequence
 
-1. Resolve outbound-only versus two-way behavior, repository ownership, and which
-   component accepts authoritative writes. Specify live CLI reads versus explicit
-   offline/local operations alongside this decision.
+1. Implement the agreed API-authoritative protocol: managed CLI operations use the
+   API, with explicit local/offline behavior. Define revision checks, repository
+   ownership, serialized writes and durable replication status. Existing local CLI
+   commands must not silently change meaning during migration.
 2. Specify and review the encrypted entry/index format and a reversible migration
    from current snapshots. Retain the current restore path until a new round-trip
    recovery test passes.

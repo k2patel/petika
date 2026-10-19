@@ -92,9 +92,10 @@ parallel. Feature backlog items remain open but do not replace these security ga
 
 ## Remaining backlog
 
-- [ ] Clarify and implement configurable Git-backed encrypted-entry sync: on-change,
-  scheduled/manual modes, encrypted folder index and per-entry updates. Outbound
-  versus two-way authority remains open ([design proposal](research/git-vault-sync.md)).
+- [ ] Implement API-authoritative Git-backed encrypted-entry sync: all managed
+  clients use revision-checked API writes; Petika is the sole Git writer, with
+  on-change/scheduled/manual replication, encrypted folder index and per-entry
+  updates. No normal two-way Git merging ([design proposal](research/git-vault-sync.md)).
 
 - [x] Rust CLI `show` with local unlock, interactive TOTP expiry, encrypted TOTP setup,
   password-store-style aliases, and non-secret `~/.petikarc` defaults.
