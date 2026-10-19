@@ -22,8 +22,8 @@ Changed ciphertext increments the entry revision once; unchanged ciphertext keep
 its revision even on rename/move. New entries start at one. Deleted entries produce
 an exact tombstone with the previous ciphertext digest, next entry revision and
 current deletion commit. Tombstones cannot be removed, rewritten or resurrected.
-Epoch transitions use separate authority proofs; they do not yet prove preservation
-of the previous epoch's entries/tombstones. That is a migration integration gate.
+Epoch transitions require both authority proofs and the content-preserving
+rotation verification described below.
 
 `verify_objects` checks exact live-object coverage and decrypts every referenced
 envelope. Opening the index alone cannot detect unavailable blobs. Deleted historical
@@ -59,8 +59,9 @@ signed checkpoint plus highest accepted head. No names, entry plaintext or keys.
 
 Ordinary updates require the caller's decrypted previous index to match the stored
 head exactly, then validate the next index before atomic replacement. Epoch updates
-verify the authority transition using the **stored** highest revision, and match
-the newly decrypted index to its new checkpoint. Missing/corrupt files fail closed;
+require a `VerifiedRotation` starting at the stored head, verify the authority
+transition using the **stored** highest revision, and match the new index to its
+signed checkpoint. Missing/corrupt files fail closed;
 there is no automatic trust reset. Unix files must be private regular files;
 writes sync a same-directory temporary file, rename, then sync the directory.
 
@@ -77,9 +78,8 @@ stale update rejection, restart persistence, an abandoned temporary file and
 corrupt-file refusal. The abandoned-file test simulates pre-rename interruption;
 it is not power-loss testing. The shared storage unit tests additionally inject
 errors after temporary write, file sync, rename and directory sync for creation
-and replacement, verifying complete old/new records when reopened. Production integration, bounded
-network catch-up integration, epoch content continuity and real process/power-loss
-tests remain required.
+and replacement, verifying complete old/new records when reopened. Client/API
+integration and real process/power-loss tests remain required.
 
 ## Bounded same-epoch catch-up
 
@@ -99,6 +99,43 @@ completed. No API response is itself a freshness anchor.
 This is a core verification API, not an HTTP endpoint or client sync command.
 Transport must enforce request/body size limits before allocation; the core budget
 cannot undo an oversized response already buffered by its caller. Epoch catch-up
-remains explicit via authority transitions and requires further content-continuity
-work. Tests exercise page limits, skipped heads, invalid tails, atomic acceptance,
+remains explicit via authority transitions and verified rotations. Tests exercise
+page limits, skipped heads, invalid tails, atomic acceptance,
 stale retries and restart continuation.
+
+## Content-preserving epoch rotation
+
+`VerifiedRotation::verify` accepts old/new verified indexes, their root keys and
+exact live ciphertext maps. It checks an adjacent epoch and commit, the previous
+head digest, unchanged data suite, distinct root bytes and epoch salts, and
+nondecreasing membership. This rejects key reuse but cannot prove the entropy or
+provenance of newly supplied keys; normal creation must use `RootKey::generate`.
+
+The folder graph and tombstones must be identical by ID, independent of array
+order. Live IDs, names and folder assignments must be identical. Every live entry
+must have a new ciphertext digest and exactly one revision increment. Each old
+and new envelope is authenticated against its index, decrypted, and compared for
+exact plaintext-byte equality. Only a pair of entry plaintext buffers is retained
+at a time, and those buffers are zeroized on drop. No plaintext hashes are published.
+This profile does not combine rotation with edits, additions, deletions or moves.
+
+The opaque result borrows the verified indexes and cannot be constructed by a
+caller. `CheckpointStore::advance` now requires that result and the signed epoch
+transition; the previous checkpoint-only persistence API has been removed. The
+local file changes only after both content continuity and authority authorization
+succeed. Tests reject omissions, renamed/moved records, revised tombstones,
+revision resets/skips, wrong parents, changed passwords and stale rotations.
+
+Both old and new decrypting keys and all live objects must be available to this
+verification path. Missing material fails closed. This does not mean removed
+readers receive the new root: only an authorized rotating client performs the
+comparison. New recipients without old access need an explicitly designed trust
+handoff or independent bootstrap, not an implicit bypass. Recovery/authority-only
+transition verification remains a lower-level primitive and does not satisfy the
+content-preserving persistence gate. Production onboarding/handoff and migration
+integration remain pending; no existing client behavior changes.
+
+The prototype accepts ciphertext maps already buffered by its caller. Each index
+and entry retains its existing size/count limits; transport must also enforce a
+total fetch budget. Streaming object retrieval is a future integration requirement
+for large collections.

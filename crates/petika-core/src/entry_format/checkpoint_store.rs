@@ -86,20 +86,23 @@ impl CheckpointStore {
         self.save(&trusted, &next, false)?;
         Ok(next)
     }
-    /// Epoch changes require an authorized proof and a decrypted new checkpoint
-    /// head, while the revision floor comes exclusively from the locked local file.
+    /// Persist only an authorized, content-preserving adjacent epoch rotation.
+    /// Missing old keys/objects require an explicit recovery workflow, not bypass.
     pub fn advance(
         &self,
-        expected: &Context,
         transition: &Transition,
-        next: &VerifiedIndex,
+        rotation: &super::rotation::VerifiedRotation<'_>,
     ) -> Result<()> {
+        let expected = &rotation.previous.head().context;
         let record = self.read(expected)?;
+        if record.head != *rotation.previous.head() {
+            return Err(Error::Authentication);
+        }
         let trusted = self
             .trusted(expected)?
             .advance(transition, record.head.revision)?;
-        next.matches_checkpoint(&trusted)?;
-        self.save(&trusted, next, false)
+        rotation.next.matches_checkpoint(&trusted)?;
+        self.save(&trusted, rotation.next, false)
     }
     fn save(&self, trusted: &TrustedCheckpoint, index: &VerifiedIndex, create: bool) -> Result<()> {
         let bytes = serde_json::to_vec(&Record {

@@ -182,7 +182,8 @@ fn continuity_deletions_and_durable_local_floor() {
 fn persisted_epoch_transition_uses_local_revision_floor() {
     let mut authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
     let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
-    let (mut index, _) = initial(&root);
+    let (mut index, payload) = initial(&root);
+    let old_objects = BTreeMap::from([("c".repeat(64), payload)]);
     let first = seal(&root, &index).unwrap();
     let sign = |root: &RootKey, index: &VerifiedIndex, authority: &UnlockedIdentity| {
         let cp = authority
@@ -210,7 +211,24 @@ fn persisted_epoch_transition_uses_local_revision_floor() {
     let second = seal(&root, &index).unwrap();
     store.observe(&first, &second).unwrap();
     let new_root = RootKey::generate("a".repeat(64), "b".repeat(64), 2).unwrap();
+    use petika_core::entry_format::rotation::*;
     let (mut next_index, _) = initial(&new_root);
+    let encrypted = new_root
+        .seal(
+            &Header {
+                entry_format_version: 1,
+                suite: SUITE.into(),
+                context: new_root.context().clone(),
+                kind: Kind::Entry,
+                object_id: "c".repeat(64),
+                revision: 2,
+            },
+            b"synthetic password",
+        )
+        .unwrap();
+    next_index.entries[0].revision = 2;
+    next_index.entries[0].digest = hex(&digest(&encrypted));
+    let new_objects = BTreeMap::from([("c".repeat(64), encrypted)]);
     next_index.revision = 2;
     next_index.parent_digest = first.head().digest().unwrap();
     let stale = seal(&new_root, &next_index).unwrap();
@@ -218,7 +236,20 @@ fn persisted_epoch_transition_uses_local_revision_floor() {
     let proof = authority
         .authorize_entry_transition(&trusted, stale_cp.checkpoint().clone(), 1)
         .unwrap();
-    assert!(store.advance(root.context(), &proof, &stale).is_err());
+    let stale_rotation = VerifiedRotation::verify(
+        RotationSnapshot {
+            index: &first,
+            root: &root,
+            objects: &old_objects,
+        },
+        RotationSnapshot {
+            index: &stale,
+            root: &new_root,
+            objects: &new_objects,
+        },
+    )
+    .unwrap();
+    assert!(store.advance(&proof, &stale_rotation).is_err());
     assert_eq!(store.head(root.context()).unwrap(), *second.head());
     next_index.revision = 3;
     next_index.parent_digest = second.head().digest().unwrap();
@@ -227,10 +258,23 @@ fn persisted_epoch_transition_uses_local_revision_floor() {
     let proof = authority
         .authorize_entry_transition(&trusted, next_cp.checkpoint().clone(), 2)
         .unwrap();
-    store.advance(root.context(), &proof, &next).unwrap();
+    let rotation = VerifiedRotation::verify(
+        RotationSnapshot {
+            index: &second,
+            root: &root,
+            objects: &old_objects,
+        },
+        RotationSnapshot {
+            index: &next,
+            root: &new_root,
+            objects: &new_objects,
+        },
+    )
+    .unwrap();
+    store.advance(&proof, &rotation).unwrap();
     assert!(store.head(root.context()).is_err());
     assert_eq!(store.head(new_root.context()).unwrap(), *next.head());
-    assert!(store.advance(new_root.context(), &proof, &next).is_err());
+    assert!(store.advance(&proof, &rotation).is_err());
 }
 
 #[test]
@@ -377,4 +421,99 @@ fn bounded_history_is_all_or_nothing_and_resumes_after_restart() {
         )
         .unwrap();
     assert_eq!(store.head(root.context()).unwrap(), fourth);
+}
+
+#[test]
+fn rotation_rejects_content_loss_and_metadata_changes() {
+    use petika_core::entry_format::rotation::*;
+    let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+    let new_root = RootKey::generate("a".repeat(64), "b".repeat(64), 2).unwrap();
+    let (mut index, payload) = initial(&root);
+    index.revision = 3;
+    index.parent_digest = "9".repeat(64);
+    index.folders.push(Folder {
+        id: "8".repeat(64),
+        parent: String::new(),
+        name: "private".into(),
+    });
+    index.tombstones.push(Tombstone {
+        id: "7".repeat(64),
+        final_revision: 2,
+        deletion_revision: 2,
+        prior_digest: "6".repeat(64),
+    });
+    let old = seal(&root, &index).unwrap();
+    let old_objects = BTreeMap::from([("c".repeat(64), payload)]);
+    let mut rotated = index.clone();
+    rotated.context = new_root.context().clone();
+    rotated.revision = 4;
+    rotated.parent_digest = old.head().digest().unwrap();
+    let encrypt = |plaintext: &[u8]| {
+        new_root
+            .seal(
+                &Header {
+                    entry_format_version: 1,
+                    suite: SUITE.into(),
+                    context: new_root.context().clone(),
+                    kind: Kind::Entry,
+                    object_id: "c".repeat(64),
+                    revision: 2,
+                },
+                plaintext,
+            )
+            .unwrap()
+    };
+    let ciphertext = encrypt(b"synthetic password");
+    rotated.entries[0].revision = 2;
+    rotated.entries[0].digest = hex(&digest(&ciphertext));
+    let objects = BTreeMap::from([("c".repeat(64), ciphertext)]);
+    let check = |candidate: &Index, blobs: &BTreeMap<String, Vec<u8>>| {
+        let new = seal(&new_root, candidate).unwrap();
+        VerifiedRotation::verify(
+            RotationSnapshot {
+                index: &old,
+                root: &root,
+                objects: &old_objects,
+            },
+            RotationSnapshot {
+                index: &new,
+                root: &new_root,
+                objects: blobs,
+            },
+        )
+        .is_ok()
+    };
+    assert!(check(&rotated, &objects));
+    assert!(!check(&rotated, &BTreeMap::new()));
+    let mut bad = rotated.clone();
+    bad.entries.clear();
+    assert!(!check(&bad, &BTreeMap::new()));
+    let mut bad = rotated.clone();
+    bad.entries[0].name = "changed".into();
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.entries[0].folder = "8".repeat(64);
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.entries[0].revision = 1;
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.folders.clear();
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.tombstones.clear();
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.tombstones[0].prior_digest = "5".repeat(64);
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.parent_digest = "4".repeat(64);
+    assert!(!check(&bad, &objects));
+    let mut bad = rotated.clone();
+    bad.revision = 5;
+    assert!(!check(&bad, &objects));
+    let altered = encrypt(b"silently changed password");
+    let mut bad = rotated;
+    bad.entries[0].digest = hex(&digest(&altered));
+    assert!(!check(&bad, &BTreeMap::from([("c".repeat(64), altered)])));
 }

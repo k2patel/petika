@@ -5,6 +5,7 @@ pub mod checkpoint;
 pub mod checkpoint_store;
 pub mod history;
 pub mod index;
+pub mod rotation;
 use crate::{Error, Result, crypto};
 use base64::{Engine, engine::general_purpose::STANDARD};
 use hkdf::Hkdf;

@@ -191,6 +191,12 @@ impl VerifiedIndex {
             root_commitment: root.commitment(),
         })
     }
+    pub(crate) fn validate_root(&self, root: &RootKey) -> Result<()> {
+        if root.context() != &self.head.context || root.commitment() != self.root_commitment {
+            return Err(Error::Authentication);
+        }
+        Ok(())
+    }
     pub fn head(&self) -> &Head {
         &self.head
     }

@@ -158,5 +158,7 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
 
 - [x] Independent head-digest vectors, bounded same-epoch history verification and
   atomic catch-up pin updates; injected atomic-write boundary failures.
-- [ ] Wire history transport/client sync; verify epoch content continuity and test
+- [x] Experimental content-preserving rotation verification, including every live
+  payload, folder and tombstone; require it for persisted epoch advancement.
+- [ ] Wire history transport/client sync and explicit new-recipient handoff; test
   real process termination before enabling per-entry transactions.

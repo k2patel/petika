@@ -200,5 +200,6 @@ The [index/checkpoint storage extension](entry-index.md) now provides decrypted
 index semantics, bounded same-epoch page verification and locked atomic native pin
 persistence. Earlier references to these as pending refer to client integration:
 no production client calls these APIs yet. Independent head vectors and injected
-write-boundary tests now run in CI. Network catch-up integration, epoch content
-continuity and real power-loss tests remain pending.
+write-boundary tests now run in CI. The index extension also requires a verified
+content-preserving rotation before persisting an epoch transition. Network/client
+integration, new-recipient handoff and real power-loss tests remain pending.
