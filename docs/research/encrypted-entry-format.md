@@ -4,6 +4,9 @@ Status: **proposed, not implemented or independently reviewed**, 2026-10-18.
 The API-authoritative workflow is agreed; the format below is a review candidate.
 No existing vault, wrapper, API route or Git tree changes as a result of this document.
 Acceptance criteria are in [the validation plan](../testing/encrypted-entry-format.md).
+An [opt-in core primitive prototype](entry-format-prototype.md) now implements
+strict object headers, entry/index AEAD and an explicit recovery wrapper. The full
+format and migration remain unimplemented; the prototype encoding is experimental.
 
 ## Scope and invariants
 

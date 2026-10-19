@@ -1,0 +1,47 @@
+{
+  "provenance": "cryptography 46.0.3 HKDF-SHA256; PyNaCl 1.6.2 libsodium XChaCha20-Poly1305 and Argon2id",
+  "objects": [
+    {
+      "header": {
+        "entry_format_version": 1,
+        "suite": "xchacha20poly1305-hkdf-sha256-v1",
+        "context": {
+          "deployment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "collection_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "key_epoch": 7,
+          "epoch_salt": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        },
+        "kind": "entry",
+        "object_id": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "revision": 11
+      },
+      "key_info": "AAAAGnBldGlrYTplbnRyeS1mb3JtYXQ6a2RmOnYxAAAAAQAAACB4Y2hhY2hhMjBwb2x5MTMwNS1oa2RmLXNoYTI1Ni12MQAAAEBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhAAAAQGJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIAAAAAAAAABwAAAAVlbnRyeQAAAEBjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2Nj",
+      "aad": "AAAAG3BldGlrYTplbnRyeS1mb3JtYXQ6YWVhZDp2MQAAASMAAAAacGV0aWthOmVudHJ5LWZvcm1hdDprZGY6djEAAAABAAAAIHhjaGFjaGEyMHBvbHkxMzA1LWhrZGYtc2hhMjU2LXYxAAAAQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEAAABAYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYgAAAAAAAAAHAAAABWVudHJ5AAAAQGNjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2NjY2MAAAAgAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMAAAAAAAAACw==",
+      "object_key": "Paoqy/81D7Xesteo2CcXkO4acrcRFpkPRGjkEDpuI7U=",
+      "plaintext": "c3ludGhldGljIGVudHJ5IHBheWxvYWQ6IGNhZsOp",
+      "envelope": "{\"header\":{\"entry_format_version\":1,\"suite\":\"xchacha20poly1305-hkdf-sha256-v1\",\"context\":{\"deployment_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"collection_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"key_epoch\":7,\"epoch_salt\":\"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=\"},\"kind\":\"entry\",\"object_id\":\"cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\",\"revision\":11},\"nonce\":\"BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF\",\"ciphertext\":\"OasGw63A3u4TP2jAr94NH/A2pueJGSYORSTfVDEqCyP6sV4ynr/QkCzqg1c43A==\"}"
+    },
+    {
+      "header": {
+        "entry_format_version": 1,
+        "suite": "xchacha20poly1305-hkdf-sha256-v1",
+        "context": {
+          "deployment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "collection_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "key_epoch": 7,
+          "epoch_salt": "AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM="
+        },
+        "kind": "index",
+        "object_id": "",
+        "revision": 11
+      },
+      "key_info": "AAAAGnBldGlrYTplbnRyeS1mb3JtYXQ6a2RmOnYxAAAAAQAAACB4Y2hhY2hhMjBwb2x5MTMwNS1oa2RmLXNoYTI1Ni12MQAAAEBhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhAAAAQGJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmIAAAAAAAAABwAAAAVpbmRleAAAAAA=",
+      "aad": "AAAAG3BldGlrYTplbnRyeS1mb3JtYXQ6YWVhZDp2MQAAAOMAAAAacGV0aWthOmVudHJ5LWZvcm1hdDprZGY6djEAAAABAAAAIHhjaGFjaGEyMHBvbHkxMzA1LWhrZGYtc2hhMjU2LXYxAAAAQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEAAABAYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYgAAAAAAAAAHAAAABWluZGV4AAAAAAAAACADAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwAAAAAAAAAL",
+      "object_key": "u6vGypQwDguIdbEbQ5itehe80GSmHw/XyiEjIBY6VZI=",
+      "plaintext": "c3ludGhldGljIGluZGV4IHBheWxvYWQ6IGNhZsOp",
+      "envelope": "{\"header\":{\"entry_format_version\":1,\"suite\":\"xchacha20poly1305-hkdf-sha256-v1\",\"context\":{\"deployment_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"collection_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"key_epoch\":7,\"epoch_salt\":\"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=\"},\"kind\":\"index\",\"object_id\":\"\",\"revision\":11},\"nonce\":\"BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF\",\"ciphertext\":\"q1oY4WK0wmL2c85Zb+OB0LG9+a0jk4uZ+9ThWDAO7Q1jQP/uuN8Cy9dv3rcSww==\"}"
+    }
+  ],
+  "wrapper": "{\"wrapper_version\":1,\"profile\":\"argon2id-v19-xchacha20poly1305-entry-root-v1\",\"suite\":\"xchacha20poly1305-hkdf-sha256-v1\",\"context\":{\"deployment_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"collection_id\":\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\"key_epoch\":7,\"epoch_salt\":\"AwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwM=\"},\"wrapper_id\":\"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\",\"salt\":\"BAQEBAQEBAQEBAQEBAQEBA==\",\"memory_kib\":65536,\"iterations\":3,\"lanes\":1,\"nonce\":\"BQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUF\",\"ciphertext\":\"Hoh/A9bYHlZ5aukaOOhf3+09R+cqAAoh3vdUjoeuWaOKx95XileoPcS3DJQTm8+GckQcvBZBNiy8aWB7yGR64IKBezuj\"}",
+  "wrapper_aad": "AAAAH3BldGlrYTplbnRyeS1mb3JtYXQ6cmVjb3Zlcnk6djEAAAABAAAALGFyZ29uMmlkLXYxOS14Y2hhY2hhMjBwb2x5MTMwNS1lbnRyeS1yb290LXYxAAAAIHhjaGFjaGEyMHBvbHkxMzA1LWhrZGYtc2hhMjU2LXYxAAAAQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEAAABAYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYgAAAAAAAAAHAAAAIAMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAAAAQGVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWUAAAAQBAQEBAQEBAQEBAQEBAQEBAABAAAAAAADAAAAAQAAABVwZXRpa2E6ZW50cnktcm9vdDp2MQA="
+}

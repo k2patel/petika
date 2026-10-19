@@ -35,6 +35,7 @@ and limitations.
 - [Sync, backup, and recovery](recovery.md)
 - [Git-backed vault synchronization proposal](research/git-vault-sync.md)
 - [Proposed encrypted entry format and API transactions](research/encrypted-entry-format.md)
+- [Opt-in entry cryptographic prototype](research/entry-format-prototype.md)
 - [Encrypted entry acceptance and failure-injection plan](testing/encrypted-entry-format.md)
 
 Implemented: encrypted CLI and Rust/WASM web client, standard/hybrid setup modes,

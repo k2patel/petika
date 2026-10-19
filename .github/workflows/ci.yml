@@ -18,6 +18,10 @@ jobs:
           python-version: '3.12'
       - name: Install contract validator
         run: python -m pip install -r scripts/requirements-contracts.txt
+      - name: Verify independent experimental entry vectors
+        run: |
+          python -m pip install -r scripts/requirements-entry-vectors.txt
+          python scripts/generate_entry_vectors.py --check
       - name: Validate proposed API contracts and schema fixtures
         run: python scripts/check_api_contracts.py
 
@@ -40,6 +44,10 @@ jobs:
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
         run: cargo test --workspace --locked
+      - name: Experimental entry format tests (opt-in only)
+        run: cargo test --locked -p petika-core --features experimental-entry-format
+      - name: Experimental entry format Clippy
+        run: cargo clippy --locked -p petika-core --features experimental-entry-format --all-targets -- -D warnings
       - name: Dependency licenses
         if: runner.os == 'Linux'
         run: python3 scripts/check_licenses.py
@@ -99,6 +107,8 @@ jobs:
         run: |
           rustup target add wasm32-unknown-unknown
           cargo install wasm-bindgen-cli --version 0.2.114 --locked
+      - name: Check experimental entry core for WASM
+        run: cargo check --locked -p petika-core --features experimental-entry-format --target wasm32-unknown-unknown
       - name: Build native and browser clients
         run: |
           cargo build --workspace --locked

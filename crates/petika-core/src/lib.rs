@@ -1,5 +1,8 @@
 //! Experimental local encrypted storage for Petika.
 mod crypto;
+/// Opt-in prototype; not connected to production storage or APIs.
+#[cfg(feature = "experimental-entry-format")]
+pub mod entry_format;
 pub mod identity;
 #[cfg(not(target_arch = "wasm32"))]
 mod storage;
