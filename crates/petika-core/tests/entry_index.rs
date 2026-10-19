@@ -517,3 +517,128 @@ fn rotation_rejects_content_loss_and_metadata_changes() {
     bad.entries[0].digest = hex(&digest(&altered));
     assert!(!check(&bad, &BTreeMap::from([("c".repeat(64), altered)])));
 }
+
+#[test]
+fn recipient_handoff_requires_independent_confirmation_and_cannot_replace_local_pin() {
+    use petika_core::identity::EntryHandoff;
+    for profile in [
+        DeliveryProfile::Standard,
+        DeliveryProfile::ExperimentalXwingDraft06,
+    ] {
+        let mut authority =
+            UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
+        let mut recipient =
+            UnlockedIdentity::generate(&"a".repeat(64), &"1".repeat(64), 1).unwrap();
+        let mut other = UnlockedIdentity::generate(&"a".repeat(64), &"2".repeat(64), 1).unwrap();
+        let public = recipient.public_identity();
+        authority
+            .verify_contact(&public.user_id, public, &public.fingerprint, None)
+            .unwrap();
+        let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+        let package = authority
+            .create_entry_key_package(&root, recipient.public_identity(), 1, profile.clone())
+            .unwrap();
+        let package_bytes = serde_json::to_vec(&package).unwrap();
+        let (mut index, _) = initial(&root);
+        index.wrappers = vec![package.reference().unwrap()];
+        let verified = seal(&root, &index).unwrap();
+        let cp = authority
+            .sign_entry_checkpoint(
+                &root,
+                CheckpointTarget {
+                    head_revision: 1,
+                    head_digest: verified.head().digest().unwrap(),
+                    membership_generation: 1,
+                    delivery_profile: profile,
+                },
+                &index.wrappers,
+            )
+            .unwrap();
+        let cp_digest = cp.digest().unwrap();
+        let fingerprint = cp.authority.fingerprint.clone();
+        let trusted = TrustedCheckpoint::bootstrap(cp, &cp_digest, &fingerprint).unwrap();
+        let handoff = authority
+            .prepare_entry_handoff(
+                &trusted,
+                &verified,
+                recipient.public_identity(),
+                &package_bytes,
+                &index.wrappers,
+            )
+            .unwrap();
+        let confirmation = handoff.confirmation_digest().unwrap();
+        let bytes = serde_json::to_vec(&handoff).unwrap();
+        assert!(
+            recipient
+                .accept_entry_handoff(&bytes, &confirmation, &fingerprint)
+                .is_err()
+        );
+        for client in [&mut recipient, &mut other] {
+            let public = authority.public_identity();
+            client
+                .verify_contact(&public.user_id, public, &public.fingerprint, None)
+                .unwrap();
+        }
+        assert!(
+            recipient
+                .accept_entry_handoff(&bytes, &"0".repeat(64), &fingerprint)
+                .is_err()
+        );
+        assert!(
+            recipient
+                .accept_entry_handoff(&bytes, &confirmation, &"0".repeat(64))
+                .is_err()
+        );
+        assert!(
+            other
+                .accept_entry_handoff(&bytes, &confirmation, &fingerprint)
+                .is_err()
+        );
+        let (accepted, key) = recipient
+            .accept_entry_handoff(&bytes, &confirmation, &fingerprint)
+            .unwrap();
+        assert_eq!(key.commitment(), root.commitment());
+        let (head, envelope) = wire(&root, &index).unwrap();
+        // Re-encryption has a different head, so it cannot satisfy the old pin.
+        let different = VerifiedIndex::open(&key, head, &envelope).unwrap();
+        assert!(different.matches_checkpoint(&accepted).is_err());
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("pin");
+        let store = CheckpointStore::lock(&path).unwrap();
+        store.initialize(&accepted, &verified).unwrap();
+        let saved = std::fs::read(&path).unwrap();
+        // Handoff is a confirmable bootstrap record, not a one-time API token.
+        // Replaying it cannot overwrite even the same existing local pin.
+        let (replayed, _) = recipient
+            .accept_entry_handoff(&bytes, &confirmation, &fingerprint)
+            .unwrap();
+        assert!(store.initialize(&replayed, &verified).is_err());
+        assert_eq!(std::fs::read(&path).unwrap(), saved);
+        let mut tampered: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        tampered["handoff_version"] = 2.into();
+        assert!(EntryHandoff::parse(&serde_json::to_vec(&tampered).unwrap()).is_err());
+        let mut tampered: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        tampered["wrappers"][0]["digest"] = "0".repeat(64).into();
+        assert!(EntryHandoff::parse(&serde_json::to_vec(&tampered).unwrap()).is_err());
+        assert!(EntryHandoff::parse(&vec![b' '; 256 * 1024 + 1]).is_err());
+        let duplicate = format!(
+            "{{\"handoff_version\":1,{}",
+            std::str::from_utf8(&bytes).unwrap().trim_start_matches('{')
+        );
+        assert!(EntryHandoff::parse(duplicate.as_bytes()).is_err());
+    }
+}
+
+#[test]
+fn independent_handoff_confirmation_vectors() {
+    let cases: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/entry-handoff-v1.json")).unwrap();
+    for case in cases.as_array().unwrap() {
+        let bytes = serde_json::to_vec(&case["handoff"]).unwrap();
+        let handoff = petika_core::identity::EntryHandoff::parse(&bytes).unwrap();
+        assert_eq!(
+            handoff.confirmation_digest().unwrap(),
+            case["confirmation_digest"].as_str().unwrap()
+        );
+    }
+}

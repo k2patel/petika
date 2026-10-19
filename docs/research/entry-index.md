@@ -129,10 +129,10 @@ revision resets/skips, wrong parents, changed passwords and stale rotations.
 Both old and new decrypting keys and all live objects must be available to this
 verification path. Missing material fails closed. This does not mean removed
 readers receive the new root: only an authorized rotating client performs the
-comparison. New recipients without old access need an explicitly designed trust
-handoff or independent bootstrap, not an implicit bypass. Recovery/authority-only
+comparison. New recipients without old access use the explicit [recipient handoff](entry-handoff.md)
+or independently pinned bootstrap. Recovery/authority-only
 transition verification remains a lower-level primitive and does not satisfy the
-content-preserving persistence gate. Production onboarding/handoff and migration
+content-preserving persistence gate. Production onboarding UI and migration
 integration remain pending; no existing client behavior changes.
 
 The prototype accepts ciphertext maps already buffered by its caller. Each index

@@ -4,7 +4,11 @@
 //! a trust directory. An enrollment self-signature does not verify a person's identity.
 mod contacts;
 #[cfg(feature = "experimental-entry-format")]
+mod entry_handoff;
+#[cfg(feature = "experimental-entry-format")]
 mod entry_packages;
+#[cfg(feature = "experimental-entry-format")]
+pub use entry_handoff::EntryHandoff;
 mod hybrid_hpke;
 mod packages;
 pub use contacts::{ContactPin, ContactStatus, MAX_VERIFIED_CONTACTS};

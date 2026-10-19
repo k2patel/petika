@@ -102,7 +102,7 @@ impl EntryKeyPackage {
         }
         Ok(bytes)
     }
-    fn message(&self) -> Result<Vec<u8>> {
+    pub(super) fn message(&self) -> Result<Vec<u8>> {
         let mut bytes = domain(b"petika:entry-package:signature:v1", &self.header()?);
         field(
             &mut bytes,

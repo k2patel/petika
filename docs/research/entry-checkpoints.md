@@ -202,4 +202,5 @@ persistence. Earlier references to these as pending refer to client integration:
 no production client calls these APIs yet. Independent head vectors and injected
 write-boundary tests now run in CI. The index extension also requires a verified
 content-preserving rotation before persisting an epoch transition. Network/client
-integration, new-recipient handoff and real power-loss tests remain pending.
+integration and real power-loss tests remain pending. The explicit
+[new-recipient handoff](entry-handoff.md) is now available as an opt-in core API.

@@ -160,5 +160,7 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
   atomic catch-up pin updates; injected atomic-write boundary failures.
 - [x] Experimental content-preserving rotation verification, including every live
   payload, folder and tombstone; require it for persisted epoch advancement.
-- [ ] Wire history transport/client sync and explicit new-recipient handoff; test
+- [x] Experimental recipient-bound handoff with independent confirmation and
+  no-overwrite checkpoint initialization ([details](research/entry-handoff.md)).
+- [ ] Wire history transport/client sync and handoff UI; test
   real process termination before enabling per-entry transactions.

@@ -24,6 +24,7 @@ jobs:
           python scripts/generate_entry_vectors.py --check
           python scripts/generate_entry_trust_vectors.py --check
           python scripts/generate_entry_head_vectors.py --check
+          python scripts/generate_entry_handoff_vectors.py --check
       - name: Validate proposed API contracts and schema fixtures
         run: python scripts/check_api_contracts.py
 
