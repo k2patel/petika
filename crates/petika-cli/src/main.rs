@@ -130,6 +130,9 @@ enum Command {
     /// Unlock and print a password; Enter displays TOTP with a live expiry countdown.
     Show {
         name: String,
+        /// Fetch a managed collection live through the API, without saving a local copy.
+        #[arg(long)]
+        collection: Option<String>,
         /// Print the current TOTP and remaining seconds once, without interactive prompts.
         #[arg(long)]
         totp: bool,
@@ -335,6 +338,16 @@ fn run(mut cli: Cli) -> Result<()> {
         Command::Whoami => return account::whoami(&session()?),
         Command::Collections => return account::collections(&session()?),
         Command::Status { collection } => return account::status(&session()?, collection),
+        Command::Show {
+            name,
+            collection: Some(collection),
+            totp,
+        } => {
+            if cli.identity_file.is_some() {
+                return Err("Live show currently supports collection passphrases; use keys pull and local show for recipient identities".into());
+            }
+            return account::show(&session()?, collection, name, *totp, cli.passphrase_stdin);
+        }
         _ => {}
     }
     let path = match cli.store.clone() {
@@ -437,7 +450,7 @@ fn run(mut cli: Cli) -> Result<()> {
                 println!("Password: hidden (use --reveal to print it)");
             }
         }
-        Command::Show { name, totp } => show_entry(store.get(&name)?, totp)?,
+        Command::Show { name, totp, .. } => show_entry(store.get(&name)?, totp)?,
         Command::Otp { command } => {
             let (name, value) = match command {
                 OtpCommand::Set {

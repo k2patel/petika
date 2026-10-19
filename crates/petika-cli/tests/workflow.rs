@@ -4,6 +4,119 @@ use std::{
     process::{Command, Output, Stdio},
 };
 
+#[test]
+fn live_show_uses_api_without_reading_or_writing_local_vault() {
+    use std::io::{BufRead, BufReader};
+    use std::net::TcpListener;
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("source.petika");
+    let password = "synthetic live passphrase\n";
+    assert!(
+        run(&source, &["init"], &password.repeat(2))
+            .status
+            .success()
+    );
+    assert!(
+        run(
+            &source,
+            &["put", "example", "--password-stdin"],
+            &format!("{password}live-secret\n")
+        )
+        .status
+        .success()
+    );
+    let encrypted = std::fs::read_to_string(&source).unwrap();
+    for (status, unlock, succeeds) in [
+        (200, password, true),
+        (200, "incorrect\n", false),
+        (401, password, false),
+    ] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let session = dir.path().join("session.json");
+        let token = format!("cli_{}", "a".repeat(64));
+        petika_core::StoreFile::lock(&session).unwrap().write(serde_json::json!({"version":1,"server":format!("http://{}", listener.local_addr().unwrap()),"token":token}).to_string().as_bytes(), false).unwrap();
+        let ciphertext = encrypted.clone();
+        let worker = std::thread::spawn(move || {
+            let id = "b".repeat(64);
+            let responses = if status == 401 {
+                vec![("/v1/collections".to_owned(), "{}".to_owned())]
+            } else {
+                vec![
+                    (
+                        "/v1/collections".to_owned(),
+                        serde_json::json!([{"id":id,"group":false,"edit":false}]).to_string(),
+                    ),
+                    (format!("/v1/collections/{id}/snapshot"), ciphertext),
+                ]
+            };
+            for (path, body) in responses {
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                let (mut socket, _) = loop {
+                    match listener.accept() {
+                        Ok(connection) => break connection,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(
+                                std::time::Instant::now() < deadline,
+                                "CLI never requested {path}"
+                            );
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                        }
+                        Err(error) => panic!("{error}"),
+                    }
+                };
+                socket
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)))
+                    .unwrap();
+                let mut reader = BufReader::new(socket.try_clone().unwrap());
+                let mut request = String::new();
+                loop {
+                    let mut line = String::new();
+                    assert!(reader.read_line(&mut line).unwrap() > 0);
+                    if line == "\r\n" {
+                        break;
+                    }
+                    request.push_str(&line);
+                }
+                assert!(request.starts_with(&format!("GET {path} HTTP/1.1\r\n")));
+                assert!(
+                    request
+                        .to_lowercase()
+                        .contains(&format!("authorization: bearer {token}"))
+                );
+                assert!(!request.contains("synthetic live passphrase"));
+                write!(socket, "HTTP/1.1 {status} Test\r\nContent-Length: {}\r\nETag: \"7\"\r\nConnection: close\r\n\r\n{body}", body.len()).unwrap();
+            }
+        });
+        let local = dir.path().join("unused.petika");
+        let result = run(
+            &local,
+            &[
+                "--session-file",
+                session.to_str().unwrap(),
+                "show",
+                "example",
+                "--collection",
+                "personal",
+            ],
+            unlock,
+        );
+        worker.join().unwrap();
+        assert_eq!(
+            result.status.success(),
+            succeeds,
+            "{}",
+            String::from_utf8_lossy(&result.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&result.stdout).contains("live-secret"),
+            succeeds
+        );
+        assert!(!local.exists());
+        assert!(!local.with_extension("petika.lock").exists());
+    }
+}
+
 fn run(path: &Path, args: &[&str], input: &str) -> Output {
     let mut command = Command::new(env!("CARGO_BIN_EXE_petika"));
     let mut child = command

@@ -64,6 +64,26 @@ format; these command aliases do not imply GPG-file compatibility. Existing GPG
 password stores can be [imported locally](import.md). The workflow is inspired by
 [password-store](https://www.passwordstore.org/), not copied shell code.
 
+## Live API password retrieval
+
+```sh
+petika login --server https://petika.example.com
+petika show Email/example --collection personal
+petika show Email/example --collection COLLECTION_ID --totp
+```
+
+With `--collection`, `show` authenticates with the saved API session and fetches the
+current encrypted snapshot before prompting for a local collection passphrase.
+It does not read or write `--store`, create an encrypted vault cache, or fall back
+to stale local data on an API failure. A read-only collection grant is sufficient.
+Password/TOTP display works as above; the unlock passphrase is never sent to the API.
+
+This first live operation supports collection-passphrase unlocking. Configured
+recipient identities are rejected explicitly; use `keys pull` and local `show`
+for that workflow until live recipient-key delivery is integrated. Without
+`--collection`, `show` remains a local command. Mutations still require explicit
+pull/edit/push with revision checks; automatic managed mutations are pending.
+
 ## Unix configuration: ~/.petikarc
 
 An optional `~/.petikarc` supplies non-secret defaults. A [sample rc file](examples/petikarc)

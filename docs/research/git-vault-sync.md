@@ -1,6 +1,7 @@
 # Git-backed encrypted vault synchronization
 
-Status: requirements clarified on 2026-10-18; design proposal, not implemented.
+Status: requirements clarified on 2026-10-18; implementation in progress. The
+entry-granular format and selectable Git triggers remain unimplemented.
 
 ## User-requested behavior
 
@@ -37,7 +38,24 @@ The API accepts revision-checked whole-collection encrypted snapshots and mainta
 local Git history. The homelab `deploy/homelab/mirror.sh` sidecar pushes that history
 every 60 seconds using fast-forward-only pushes. The remote has collection-specific
 branches. This is outbound recovery replication, not a configurable two-way Git
-backend. CLI pull/push is explicit; local show does not fetch live API data.
+backend. CLI pull/push is explicit; `show --collection` fetches live API data and
+unlocks with a collection passphrase without caching. Plain `show` remains local.
+
+### Implementation gap checklist
+
+- [x] API-authorized, revision-checked snapshot writes and durable journal.
+- [x] Local Git mirror serialization and fast-forward-only homelab remote pushes.
+- [x] Live CLI passphrase-based `show --collection`, with no stale local fallback.
+- [ ] Live recipient-identity unlock and managed CLI mutation transactions.
+- [ ] Entry/index format, authenticated deletion and migration/restore validation.
+- [ ] Per-entry revisions with atomic shared-index changes and preserved stale drafts.
+- [ ] Provider-neutral remote configuration and selectable replication triggers.
+- [ ] Durable remote replication status, retry handling and divergence reporting.
+- [ ] Validate single-writer enforcement and crash consistency end to end; do not
+  infer multi-replica support from local file locks.
+
+See the [full software diagram](../architecture.md#full-software-diagram) for
+current components and planned boundaries.
 
 Re-encrypting a whole snapshot changes ciphertext broadly. Git object transfer does
 not make this an efficient per-entry update format. Do not describe the existing
