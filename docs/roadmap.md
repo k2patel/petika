@@ -92,6 +92,9 @@ parallel. Feature backlog items remain open but do not replace these security ga
 
 ## Remaining backlog
 
+- [x] Draft per-entry format, atomic index/entry transactions, migration/rollback
+  constraints and [acceptance matrix](testing/encrypted-entry-format.md). Review and
+  execution remain pending; no new-format vaults are enabled.
 - [ ] Implement API-authoritative Git-backed encrypted-entry sync: all managed
   clients use revision-checked API writes; Petika is the sole Git writer, with
   on-change/scheduled/manual replication, encrypted folder index and per-entry

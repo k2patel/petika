@@ -65,6 +65,12 @@ snapshot mirror as incremental encrypted-entry synchronization.
 
 ## Proposed storage model
 
+The [entry format and transaction specification](encrypted-entry-format.md) and
+[acceptance matrix](../testing/encrypted-entry-format.md) now detail this proposal.
+They are not implemented or independently reviewed. The first version retains a
+collection-wide encrypted-index CAS: per-entry files reduce ciphertext churn, but
+do not yet eliminate conflicts between different-entry edits.
+
 - Keep stable opaque identifiers for collections, folders, and entries. Never use
   plaintext website names, usernames, or folder names as Git paths.
 - Encrypt each entry independently with fresh nonces on writes. An authenticated,
