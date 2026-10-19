@@ -86,6 +86,29 @@ impl CheckpointStore {
         self.save(&trusted, &next, false)?;
         Ok(next)
     }
+    /// Decode an untrusted bounded response and durably accept its final index.
+    /// None means the server reported the requested cursor as its target; it is
+    /// not proof that no newer server state exists.
+    pub fn accept_history_response(
+        &self,
+        request: &super::transport::HistoryRequest,
+        bytes: &[u8],
+        root: &RootKey,
+        previous: &VerifiedIndex,
+    ) -> Result<Option<VerifiedIndex>> {
+        let page = super::transport::HistoryPage::parse(bytes, request)?;
+        let record = self.read(&previous.head().context)?;
+        if record.head != *previous.head() {
+            return Err(Error::Authentication);
+        }
+        let accepted = page.verify(request, root, previous)?;
+        if let Some(next) = &accepted {
+            let trusted = self.trusted(&previous.head().context)?;
+            trusted.validate_root(root)?;
+            self.save(&trusted, next, false)?;
+        }
+        Ok(accepted)
+    }
     /// Persist only an authorized, content-preserving adjacent epoch rotation.
     /// Missing old keys/objects require an explicit recovery workflow, not bypass.
     pub fn advance(

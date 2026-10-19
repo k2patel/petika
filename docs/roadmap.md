@@ -164,3 +164,8 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
   no-overwrite checkpoint initialization ([details](research/entry-handoff.md)).
 - [ ] Wire history transport/client sync and handoff UI; test
   real process termination before enabling per-entry transactions.
+
+- [x] Experimental bounded history wire contract, server page builder and native
+  durable response acceptance ([details](research/entry-history-transport.md)).
+- [ ] Implement isolated committed entry journal/CAS before enabling authorized
+  HTTP history routes and bounded CLI sync transport.

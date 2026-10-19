@@ -139,3 +139,10 @@ The prototype accepts ciphertext maps already buffered by its caller. Each index
 and entry retains its existing size/count limits; transport must also enforce a
 total fetch budget. Streaming object retrieval is a future integration requirement
 for large collections.
+
+## Wire transport extension
+
+The [history transport contract](entry-history-transport.md) now binds page cursors
+and targets, supplies strict bounded wire parsing and a durable native response
+acceptance adapter. A feature-gated server builder is tested end to end against
+that adapter. HTTP routing and the committed per-entry journal remain pending.
