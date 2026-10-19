@@ -27,8 +27,9 @@ The root README's local HTTP example is for development; the extension requires
 an HTTPS server with a certificate trusted by your browser.
 
 Use your own server hostname throughout this guide. `petika.example.com` below
-is a placeholder, not a hosted Petika service. Repository examples mentioning
-`petika.k2patel.in` describe the maintainer's deployment, not a public signup service.
+is a placeholder, not a hosted Petika service. You can test the web app at
+`http://localhost:8080`; use your own HTTPS domain and trusted certificate for
+the extension preview.
 
 Sign in, create a test collection, and add a synthetic login using the
 [user guide](user-guide.md). Your account password signs you in; your collection

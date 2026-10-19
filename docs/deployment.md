@@ -116,6 +116,50 @@ file stays private. Named volumes retain data across pod replacement. The manife
 binds port 8080 only to loopback. Stop with `podman kube down deploy/podman/petika.yaml`;
 do not request volume deletion unless you intend to erase the data and mirror.
 
+## Choose your Git host
+
+The source clone URL in this guide points to the project's upstream repository.
+Your Petika installation, optional source fork and encrypted-backup repository
+belong to you; they do not depend on the maintainer's infrastructure.
+
+Create a **private** repository for encrypted Git history on your chosen host.
+Use its actual clone URL, for example:
+
+| Provider | Example backup remote |
+| --- | --- |
+| GitHub | `https://github.com/YOUR_ACCOUNT/petika-vault-backup.git` |
+| GitLab | `https://gitlab.com/YOUR_NAMESPACE/petika-vault-backup.git` |
+| Codeberg | `https://codeberg.org/YOUR_ACCOUNT/petika-vault-backup.git` |
+| Your Git server | Use the HTTPS or SSH clone URL supplied by your server |
+
+Replace the account/namespace and repository name with your own. Configure the
+operator-managed push job with that remote and repository-scoped write credentials.
+The optional [mirror sidecar](../deploy/homelab/README.md) uses `PETIKA_BACKUP_URL`
+and an HTTPS credential helper; customize its username/token handling for your
+provider. A separate SSH push job needs its own protected key and verified host
+keys. Neither the Git remote nor credentials belong in client vault configuration.
+Keep credentials out of URLs, committed files and logs.
+
+Git is an outbound encrypted-history copy: clients still read/write through the
+Petika API. Do not let clients push competing ciphertext edits or enable automatic
+two-way Git imports. Git hosting is also separate from your container registry;
+build your image locally or publish it to a registry you control. A Git mirror
+alone does not back up accounts and access grants; retain full-server backups too.
+
+## Localhost or a custom domain
+
+For local web testing, bind to loopback and open `http://localhost:8080`. Set
+`PETIKA_COOKIE_SECURE=false` and leave `PETIKA_ENDPOINT` empty or set it to that
+localhost URL. The Docker and Kubernetes examples above show loopback access.
+
+For remote use, choose a domain you control (for example `petika.example.com`),
+point its DNS record at your reverse proxy, and install a trusted TLS certificate.
+Set `PETIKA_ENDPOINT=https://petika.example.com` with your actual hostname and
+`PETIKA_COOKIE_SECURE=true`, then restart/roll out Petika. Follow the
+[Nginx/Caddy guide](reverse-proxy.md) for your proxy's upstream address and ports.
+The example domain is a placeholder, not a public Petika service. The extension
+preview requires HTTPS; localhost HTTP testing here refers to the web app.
+
 ## Operations
 
 `GET /healthz` checks the process; `GET /readyz` checks storage access. Authenticated

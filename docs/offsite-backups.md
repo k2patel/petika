@@ -119,8 +119,9 @@ python3 scripts/user_backup.py --server https://petika.example.net \
 
 The key file must be owner-only (`chmod 600`). HTTPS is required except on loopback;
 redirects are rejected. API pulls capture collections sequentially rather than as
-one transactional snapshot. The homelab public endpoint is `https://petika.k2patel.in`; use it for remote
-API pull clients with normal certificate validation.
+one transactional snapshot. Use your installation’s HTTPS domain for remote API
+pull clients, with normal certificate validation. For local tests on the server
+machine, use `http://localhost:8080`.
 
 ## Recover independently of the server
 

@@ -43,7 +43,7 @@ For a deployment-pinned package with the existing narrower CSP:
 
 
 ```sh
-python3 scripts/build_extension.py --endpoint https://petika.k2patel.in
+python3 scripts/build_extension.py --endpoint https://petika.example.com
 ```
 
 In Chromium/Chrome 127 or newer, open `chrome://extensions`, enable Developer mode, choose

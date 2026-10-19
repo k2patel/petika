@@ -1,61 +1,78 @@
-# Homelab deployment
+# Customize the homelab overlay
 
-See the [reverse-proxy guide](../../docs/reverse-proxy.md) for Nginx/Caddy,
-external TLS termination, and HTTP/HTTPS settings.
+For a new installation, start with the portable [deployment guide](../../docs/deployment.md)
+and [administrator guide](../../docs/administrator-guide.md). Run Petika on your
+own server or test the web app at `http://localhost:8080`. Configure a custom HTTPS
+domain using the [reverse-proxy guide](../../docs/reverse-proxy.md).
 
-The private Gitea source mirror at `https://git.k2patel.in/k2patel/petika`
-pulls GitHub every ten minutes. `.gitea/workflows/image.yml` builds AMD64 images
-in the existing Gitea runners using the account-level `CONTAINER_TOKEN` secret.
-Images use full commit SHA tags. Deployment is performed with local kubectl;
-the build runner receives no Kubernetes credentials. Dispatch the workflow after
-synchronizing the mirror when an immediate build is needed.
+This directory is a deployment-specific overlay, not a ready-to-apply public
+installation. Before using it, review and replace its image registry, backup remote,
+secret names, Service configuration, storage settings, and TLS certificate paths.
+Do not apply it unchanged to your cluster.
 
-Deploy a published image with local kubectl:
+## Choose your Git host and image registry
+
+Your private encrypted-history repository can be on GitHub, GitLab, Codeberg, or
+a Git server you operate. Examples of repository URLs you create yourself:
+
+- `https://github.com/YOUR_ACCOUNT/petika-vault-backup.git`
+- `https://gitlab.com/YOUR_NAMESPACE/petika-vault-backup.git`
+- `https://codeberg.org/YOUR_ACCOUNT/petika-vault-backup.git`
+
+Set the mirror container's `PETIKA_BACKUP_URL` to your repository and provide
+repository-scoped write credentials through the `petika-backup-auth` Secret.
+Review `askpass.sh` for the credential format and adapt it to your provider's
+HTTPS authentication requirements; do not put credentials in the URL or commit them.
+Git hosting and container hosting are separate choices. Build Petika yourself and
+set the image to your registry path, such as
+`registry.example.com/YOUR_NAMESPACE/petika:FULL_COMMIT_SHA`, or use a local image
+loaded into your cluster. Replace `gitea-registry` with your own image-pull Secret
+when authentication is needed.
+
+The optional `.gitea/workflows/image.yml` is a Gitea-specific CI example. Other Git
+hosts need their own build/publish workflow; GitHub, GitLab and Codeberg are not
+interchangeable CI APIs. No CI runner needs Kubernetes credentials when you deploy
+with local kubectl.
+
+## Deployment helper limitations
+
+`scripts/deploy_homelab.py` renders this overlay and can apply it with `--apply`.
+Its fallback Actions-variable lookup is tied to a particular Gitea repository.
+To avoid that lookup, explicitly set all three environment values below, after
+customizing the overlay files:
 
 ```sh
-python3 scripts/deploy_homelab.py --image git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA --apply
+HTTPS=off PETIKA_COOKIE_SECURE=true PETIKA_ENDPOINT=https://petika.example.com \
+  python3 scripts/deploy_homelab.py \
+  --image registry.example.com/YOUR_NAMESPACE/petika:FULL_COMMIT_SHA
 ```
 
-Omit `--apply` to render for review. The script reads Gitea repository Actions
-variables, with environment overrides: `HTTPS=off` exposes HTTP port 80,
-`HTTPS=on` exposes HTTPS port 443 with the optional TLS proxy, and `HTTPS=both`
-exposes both. Petika itself always receives HTTP; TLS may terminate at any upstream
-proxy. `PETIKA_COOKIE_SECURE=true` is independent and should be used whenever the
-browser connects over HTTPS, including external TLS termination. For direct HTTP
-testing only, set it to `false`. Initial Gitea values are `HTTPS=off` and
-`PETIKA_COOKIE_SECURE=false`. `PETIKA_ENDPOINT` sets the public browser origin
-(initially `http://10.10.12.115`); an empty value uses the current origin.
-No kubeconfig is stored in Gitea.
+This renders for review. Add `--apply` only after reviewing the resulting manifest.
+Use your domain and image path. `HTTPS=off` exposes HTTP port 80 for an external
+proxy; `on` exposes the optional TLS sidecar on 443; `both` exposes both. Petika
+itself receives HTTP. Keep Secure cookies enabled when browsers connect over HTTPS.
+For localhost-only testing, use `PETIKA_COOKIE_SECURE=false` and an empty endpoint
+or `http://localhost:8080`. The overlay's port-forward is `8080:80` with HTTP enabled;
+the portable base manifests use `8080:8080`.
 
-Required namespace secrets: `petika-auth` (`token`, `admin-password`),
-`petika-backup-auth` (`token`), `petika-tls` (`tls.crt`, `tls.key`), and
-`gitea-registry` (registry pull credential). Never commit their values.
-New installations use administrator username `admin`. Changing this bootstrap
-setting does not rename accounts in an existing database; older deployments may
-still use `owner`. After provisioning, remove the bootstrap
-password and configure setup mode `disabled` as described in `docs/setup.md`.
+Provision `petika-auth` (`token`, `admin-password`), `petika-backup-auth` (`token`),
+your registry pull credentials, and, only for the TLS sidecar, `petika-tls`
+(`tls.crt`, `tls.key`). Certificates must cover your hostname or address and be
+trusted by clients. New bootstrap installs use username `admin`; changing bootstrap
+settings does not rename existing accounts. Remove the bootstrap password after
+provisioning; see [setup](../../docs/setup.md).
 
-The initial LoadBalancer IP is `10.10.12.115`. HTTP is enabled initially.
-When using the optional local TLS proxy, its certificate must be trusted on each testing device; HTTP on a LAN
-IP cannot provide the secure browser context required for encryption and OTP.
-If the IP changes, replace the certificate with a matching IP SAN certificate.
+## Replication and recovery
 
-The mirror sidecar pushes ciphertext-only Git histories every minute to the
-private `k2patel/petika-vault-backup` repository. Each managed collection uses
-`collections/<opaque collection ID>`; the legacy API uses `legacy`.
-It mounts only the mirror volume, read-only, and uses a write token scoped to
-that one repository. Pushes are fast-forward only; rollback conflicts remain
-visible in `kubectl -n petika logs deployment/petika -c mirror` for operator repair.
-No keys, accounts, identity bundles, contact pins, or grants enter this backup.
-Back up the data PVC separately and retain client identity/recovery backups;
-the Git repository alone does not restore server accounts or recipient access.
-Gitea and Petika share this homelab: arrange an off-site backup independently.
-Use the [backup and recovery runbook](../../docs/recovery.md) for complete offline
-backups, historical ciphertext recovery, retention, and isolated restore validation.
-The operator tool requires stopped writers; the ciphertext sidecar cannot back up accounts
-or recipient grants.
+The mirror sidecar pushes ciphertext-only Git histories every minute. Managed
+collections use `collections/<opaque collection ID>` branches; the legacy API uses
+`legacy`. Pushes are fast-forward only. The sidecar mounts only the mirror volume,
+read-only, and should have write access only to its destination repository.
 
-Check rollout and replication:
+The Git copy does not include accounts, identity bundles, contact pins or grants.
+Back up the complete server data and retain client recovery material separately.
+If your Git server shares the same host/site, arrange an independent off-site copy.
+See [backup and recovery](../../docs/recovery.md).
 
 ```sh
 kubectl -n petika rollout status deployment/petika --timeout=300s

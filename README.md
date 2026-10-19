@@ -25,6 +25,11 @@ signing and store-release plans. No browser extension is needed for the web app.
 - **Administrators:** [Install the server, onboard users, prepare S3 buckets/SSH storage, and operate backups/recovery](docs/administrator-guide.md).
 - **Developers:** [Build and verify changes](docs/development.md).
 
+Install Petika on your own server; there is no hosted signup service. Test the web
+app at `http://localhost:8080`, or use a custom HTTPS domain for remote access.
+For encrypted Git backups, choose your own private repository on GitHub, GitLab,
+Codeberg, or a Git server you operate; see [Git hosting choices](docs/deployment.md#choose-your-git-host).
+
 ## What works today
 
 - **Rust CLI:** local encrypted storage, password generation, GPG password-store import,

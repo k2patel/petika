@@ -4,55 +4,40 @@ Petika serves HTTP on `PETIKA_LISTEN` (normally `0.0.0.0:8080`). TLS can termina
 at an existing reverse proxy, an ingress controller, or the optional homelab TLS
 sidecar. It does not need to terminate inside Petika.
 
-For this homelab, the HTTP upstream is `http://10.10.12.115:80`. A proxy inside
-Kubernetes can instead use `http://petika.petika.svc.cluster.local:80`.
+The examples below assume the proxy runs on the same host as Petika and forwards
+to `http://127.0.0.1:8080`. If it runs elsewhere, use your server's reachable
+address and port. A proxy inside Kubernetes can use
+`http://petika.petika.svc.cluster.local:8080` with the portable base manifests.
 Use a dedicated hostname such as `petika.example.com` at the site root `/`;
 subpath hosting such as `/petika/` is not supported by the current frontend.
 Point that hostname to your proxy and provision a certificate trusted by clients.
 
 ## Settings
 
-| Browser connection | Gitea `HTTPS` | `PETIKA_COOKIE_SECURE` | Upstream |
-| --- | --- | --- | --- |
-| HTTPS through an external proxy | `off` | `true` | HTTP port 80 |
-| HTTPS through the bundled TLS sidecar | `on` | `true` | HTTPS port 443 |
-| Both listeners, HTTPS used by browsers | `both` | `true` | HTTP 80 and HTTPS 443 |
-| Local HTTP testing through localhost | `off` | `false` | HTTP port 80 |
+| Browser connection | `PETIKA_COOKIE_SECURE` | Example `PETIKA_ENDPOINT` |
+| --- | --- | --- |
+| HTTPS through your proxy | `true` | `https://petika.example.com` |
+| Local HTTP testing | `false` | `http://localhost:8080` or empty |
 
-`HTTPS` is a **deployment setting**, not a Rust server TLS switch. It controls the
-homelab Service and optional TLS sidecar. `PETIKA_COOKIE_SECURE` controls the
-session cookie's Secure attribute. Petika does not infer cookie security from
-`X-Forwarded-Proto`; set it explicitly according to the browser-facing URL.
-As of 2026-10-18, the homelab uses `HTTPS=both`, `PETIKA_COOKIE_SECURE=true`,
-and `PETIKA_ENDPOINT=https://petika.k2patel.in`. The public domain terminates TLS
-at the external proxy; the bundled IP TLS listener remains available.
+Set these server environment variables using your container runtime or deployment
+manifest, then restart/roll out the server. Petika does not infer cookie security
+from `X-Forwarded-Proto`; use the browser-facing URL to choose the setting.
 
-For external TLS termination, update the repository Actions variables and reapply:
+For HTTPS, create a DNS record for a domain you control pointing to your proxy,
+obtain a certificate covering that domain, and configure Nginx or Caddy below.
+Replace every `petika.example.com` with your domain. No particular Git hosting
+provider or CI service is required to configure HTTPS.
 
-```sh
-tea api -X PUT repos/k2patel/petika/actions/variables/HTTPS -f value=off
-tea api -X PUT repos/k2patel/petika/actions/variables/PETIKA_COOKIE_SECURE -f value=true
-python3 scripts/deploy_homelab.py \
-  --image git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA --apply
-```
-
-Changing Gitea variables alone does not restart the deployment. The script uses
-local kubectl and reads these variables; environment variables override them:
-
-```sh
-HTTPS=off PETIKA_COOKIE_SECURE=true python3 scripts/deploy_homelab.py \
-  --image git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA --apply
-```
-
-With `on` or `both`, provision the `petika-tls` Kubernetes Secret with `tls.crt`
-and `tls.key`. The initial local certificate is for IP `10.10.12.115`; use a
-matching certificate when changing the address. External termination with `off`
-does not mount or require that Secret.
+The optional [homelab overlay](../deploy/homelab/README.md) also has an `HTTPS`
+setting (`off`, `on`, `both`) for its Service/TLS sidecar. It is specific to that
+deployment helper, not a general Petika server option. Customize the overlay
+before using it; the portable [deployment guide](deployment.md) is the starting
+point for a new installation.
 
 ## Public domain or endpoint address
 
 Set `PETIKA_ENDPOINT=https://petika.example.com` for the browser-facing domain,
-or `PETIKA_ENDPOINT=http://10.10.12.115` for direct IP testing. Include the scheme
+or `PETIKA_ENDPOINT=http://localhost:8080` for local testing. Include the scheme
 and optional port, but no credentials, subpath, query, or fragment. Leave it empty
 to use whichever origin served the page. This does not change `PETIKA_LISTEN`,
 create DNS records, allocate an IP, or configure a TLS certificate.
@@ -63,17 +48,14 @@ it moves to the configured origin before making authenticated API calls. The
 frontend and API then share that origin, keeping cookies and identity state
 consistent; this is not a separate cross-origin API/CORS setting.
 
-```sh
-# Create the repository variable once; use PUT to update an existing variable.
-tea api -X PUT repos/k2patel/petika/actions/variables/PETIKA_ENDPOINT \
-  -f value=https://petika.example.com
-PETIKA_ENDPOINT=https://petika.example.com HTTPS=off PETIKA_COOKIE_SECURE=true \
-  python3 scripts/deploy_homelab.py \
-  --image git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA --apply
+For your deployment, set:
+
+```ini
+PETIKA_ENDPOINT=https://petika.example.com
+PETIKA_COOKIE_SECURE=true
 ```
 
-The deployment script reads `PETIKA_ENDPOINT` from Gitea unless overridden in
-the environment. Changing the endpoint needs a rollout, not an image rebuild.
+Changing these values needs a restart or rollout, not an image rebuild.
 The hostname must resolve to the proxy that serves Petika; pointing it back to
 an address which redirects elsewhere can cause a redirect loop. To test using
 localhost while a canonical address is configured, temporarily deploy with
@@ -107,7 +89,7 @@ server {
 
     location / {
         limit_req zone=petika_requests burst=60 nodelay;
-        proxy_pass http://10.10.12.115:80;
+        proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_set_header Host $http_host;
         proxy_set_header X-Forwarded-Host $http_host;
@@ -138,7 +120,7 @@ petika.example.com {
     request_body {
         max_size 24MB
     }
-    reverse_proxy http://10.10.12.115:80 {
+    reverse_proxy http://127.0.0.1:8080 {
         transport http {
             dial_timeout 5s
             response_header_timeout 60s
@@ -156,7 +138,7 @@ See [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reve
 
 ## Verification and troubleshooting
 
-1. Check upstream health: `curl --fail http://10.10.12.115/readyz`.
+1. Check upstream health: `curl --fail http://127.0.0.1:8080/readyz`.
 2. Check the browser-facing path: `curl --fail https://petika.example.com/readyz`.
    With a private CA, use `--cacert /path/to/ca.crt` rather than disabling validation.
 3. Open `https://petika.example.com/`, sign in, and verify the session cookie has
@@ -165,7 +147,7 @@ See [Caddy reverse proxy](https://caddyserver.com/docs/caddyfile/directives/reve
 4. Create/unlock a test collection, save an entry, reload, and unlock again. Check
    the mirror sidecar logs for successful replication after a save.
 
-A plain LAN URL such as `http://10.10.12.115/` can serve the UI and API, but it is
+A plain LAN URL such as `http://192.0.2.10:8080/` can serve the UI and API, but it is
 not a browser secure context. The sample demo works there, with an explanatory
 message for unavailable OTP and clipboard features. Account collection workflows
 and OTP require the
@@ -173,7 +155,7 @@ HTTPS proxy or localhost. For local browser tests without any TLS proxy, leave
 cookie security `false` and run:
 
 ```sh
-kubectl -n petika port-forward service/petika 8080:80
+kubectl -n petika port-forward service/petika 8080:8080
 # Open http://localhost:8080/
 ```
 

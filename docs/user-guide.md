@@ -11,8 +11,10 @@ are no published mobile apps, browser-store extension, or public binary installe
 ## What you need
 
 Ask your administrator for your Petika HTTPS address, your own username, and your
-initial account password. For this homelab, the address is
-**https://petika.k2patel.in**. Other installations have their own address.
+initial account password. Use your installation’s custom domain, such as
+`https://petika.example.com`; this is a placeholder, not a hosted service. If you
+are testing your own local installation, use `http://localhost:8080` as described
+in the [installation guide](deployment.md).
 
 Open that address in your browser. No installation is needed for the web app.
 Do not use the administrator's account for everyday access. There is no public

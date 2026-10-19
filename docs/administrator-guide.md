@@ -13,10 +13,10 @@ procedures do not establish production readiness or compliance certification.
 | Server without push jobs | [Default container runtime](deployment.md#docker); encrypted API and web app |
 | Scheduled S3 or SSH backups | `push-runtime` container target, or configured native push worker |
 | Kubernetes | [Deployment manifests](deployment.md#kubernetes), one replica, persistent data/mirror volumes |
-| Existing homelab | [Homelab overlay](../deploy/homelab/README.md) and `scripts/deploy_homelab.py` |
+| Customized homelab | [Overlay customization notes](../deploy/homelab/README.md); start from portable Kubernetes manifests |
 
 There is no public ready-to-install binary/container release. Build a reviewed
-source revision; the homelab's private registry is not a public download source.
+source revision and use a local image or publish it to a container registry you control.
 For scheduled push backups:
 
 ```sh
@@ -38,6 +38,10 @@ Retain the exact image digest or native release for restore. Keep one writer per
 data directory. Persist the complete data directory and mirror; restarting a
 container without its volumes is not an upgrade.
 
+Choose your private backup remote using [Git hosting choices](deployment.md#choose-your-git-host):
+GitHub, GitLab, Codeberg, or your own Git server. This is separate from the upstream
+source repository and from the registry hosting your container image.
+
 ## Bootstrap the administrator and configure HTTPS
 
 Prepare a protected random setup/API token and an initial administrator password
@@ -55,7 +59,7 @@ PETIKA_COOKIE_SECURE=true
 
 The homelab overlay defaults to `admin` for new installations. Generic manual setup
 lets you choose the username. Changing bootstrap variables does not rename an
-existing account or reset its password: the earlier homelab account remains `owner`.
+existing account or reset its password.
 The file `/run/secrets/admin-password` supplies a password, not a username.
 
 Point your DNS name to the reverse proxy, install its certificate, and follow the
@@ -63,9 +67,11 @@ Point your DNS name to the reverse proxy, install its certificate, and follow th
 browser-facing `PETIKA_ENDPOINT` correct or the app will redirect elsewhere.
 Secure cookies remain enabled even when Nginx forwards HTTP to the backend.
 
-For this homelab, the public URL is **https://petika.k2patel.in** and Nginx can use
-`http://10.10.12.115:80` as its upstream. `HTTPS=both` currently keeps the bundled
-IP TLS listener too. These are deployment-specific values, not universal defaults.
+For local web testing, use `http://localhost:8080`, set
+`PETIKA_COOKIE_SECURE=false`, and leave `PETIKA_ENDPOINT` empty or set it to that
+localhost URL. For remote use, replace `petika.example.com` with a domain you
+control, set `PETIKA_COOKIE_SECURE=true`, and configure your proxy’s upstream to
+the address and port of your Petika server.
 
 After startup, verify HTTPS `/readyz`, `/config.json`, sign-in, and a synthetic
 collection save/reload/unlock. After initial provisioning, remove bootstrap password
@@ -114,7 +120,7 @@ origin using the [extension build guide](../clients/extension/README.md):
 
 ```sh
 sh scripts/build_web.sh
-python3 scripts/build_extension.py --endpoint https://petika.k2patel.in
+python3 scripts/build_extension.py --endpoint https://petika.example.com
 ```
 
 Distribute the entire `output/extension-chromium` folder, optionally zipped, through
@@ -271,8 +277,8 @@ client lists and backup status. On Kubernetes, useful non-secret checks are:
 ```sh
 kubectl -n petika get pods
 kubectl -n petika rollout status deployment/petika --timeout=300s
-curl --fail https://petika.k2patel.in/readyz
-curl --fail https://petika.k2patel.in/config.json
+curl --fail https://petika.example.com/readyz
+curl --fail https://petika.example.com/config.json
 ```
 
 For rollback, follow the recovery runbook with compatible state; changing the image

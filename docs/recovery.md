@@ -223,10 +223,10 @@ The helper image must provide Python 3; its resolved image ID is recorded in the
 
 ```sh
 python3 scripts/drill_kubernetes_recovery.py \
-  --context kubernetes-admin@homelab \
-  --image git.k2patel.in/k2patel/petika@sha256:EXACT_IMAGE_DIGEST \
-  --source-node desk --restore-node vashu --storage-class nfs-csi \
-  --registry-secret-namespace petika --registry-secret gitea-registry \
+  --context YOUR_KUBERNETES_CONTEXT \
+  --image registry.example.com/YOUR_NAMESPACE/petika@sha256:EXACT_IMAGE_DIGEST \
+  --source-node SOURCE_NODE --restore-node RESTORE_NODE --storage-class YOUR_STORAGE_CLASS \
+  --registry-secret-namespace petika --registry-secret YOUR_REGISTRY_SECRET \
   --report output/kubernetes-recovery.json
 ```
 
