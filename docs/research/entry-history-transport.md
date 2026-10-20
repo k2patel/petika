@@ -1,10 +1,10 @@
 # Experimental history transport contract
 
-Status: core wire contract, native client acceptance adapter and server page builder
-implemented behind `experimental-entry-format`. A committed index-history journal
-is now implemented as a storage primitive. No HTTP route, entry payload transaction,
-CLI sync command, migration or production deployment is enabled by this change.
-The existing snapshot API remains unchanged. Do not populate a fake entry journal
+Status: core wire contract, durable journal with entry deltas, account-authorized
+HTTP routes, and native CLI index-history sync implemented behind
+`experimental-entry-format`. HTTP additionally requires `PETIKA_EXPERIMENTAL_ENTRIES=1`.
+Migration, entry edit/submission CLI, wrapper/epoch changes, entry Git replication,
+and production deployment remain unavailable. Do not populate a fake entry journal
 from whole-vault snapshots: their formats and trust contexts differ.
 
 ## Request and response
@@ -49,7 +49,7 @@ not implement an HTTP reader. WASM callers must provide their own durable pin
 storage; native callers use the existing atomic storage protocol. After uncertain
 write outcomes, reload/reconcile the pin rather than resetting trust.
 
-## Server builder and remaining integration
+## Server builder
 
 `petika_server::entry_history::build_page` takes a validated request, a captured
 current cursor and a committed-record reader. It checks base, target and current
@@ -72,19 +72,24 @@ stale replay, missing records, wrong cursor/context, tampered envelopes, empty
 skipping responses, duplicate fields and size/count limits. CI runs tests and
 Clippy with the feature enabled; default builds have no new endpoint.
 
-## Committed index journal
+## Committed journal
 
 `petika_server::entry_journal::Journal` holds an exclusive root lock for its entire
 lifetime. Opening a second handle fails. Records are immutable, content-addressed
-JSON containing an encrypted index/head, a parent-record address, and a writer-scoped
-operation receipt. Record publication uses file sync, atomic rename, and directory
+JSON containing an encrypted index/head, changed entry ciphertexts and delete
+preconditions, a parent-record address, and a writer-scoped operation receipt.
+Unchanged entry ciphertexts are referenced through committed ancestry, never resealed
+or copied into the next record. The record is an immutable transaction bundle;
+there is no separately published entry-object directory. Record publication uses file sync, atomic rename, and directory
 sync before the committed root pointer is replaced using the same protocol. Only
 the root's verified ancestry is readable; no directory scan promotes orphan records.
 
 Append compares the complete expected cursor, requires adjacent same-context heads,
 and prohibits access-set or membership changes pending the rotation transaction.
 The journal computes a request digest over the expected cursor, writer, operation
-and candidate index, including exact envelope text. Exact retries return the original
+and candidate index plus entry deltas, including exact envelope text. Empty-delta
+requests retain the original index-only digest encoding for existing journal records.
+Exact retries return the original
 receipt; changed submissions under the same writer/operation are rejected. Historical
 records and receipts are retained, bounded by 1,024 records and 64 MiB of serialized
 committed records. Quota exhaustion rejects the next append, without pruning.
@@ -101,12 +106,83 @@ power-loss behavior or all T08/T09 release criteria. Restart also verifies every
 reachable record hash, parent link and receipt before serving history. Missing or
 corrupt committed ancestors fail closed.
 
-This primitive does **not** accept entry payload deltas, validate encrypted index
-contents, persist wrapper changes, authorize accounts, or replicate Git. Its opaque
-index bytes must still be decrypted/authenticated by clients. No snapshot is imported
-or converted. It is not yet the complete entry transaction backend required by T01–T14.
+`Journal::transact` checks bounded public index/entry envelopes, revisions, contexts,
+duplicate IDs, expected previous entry revision/digest and permanent tombstones.
+`Journal::entry` resolves an ID and exact digest at a committed cursor, including old
+reader roots. It rejects deleted, absent, mismatched and mixed-root ciphertexts.
+It cannot validate encrypted names, index completeness or encrypted tombstones;
+unlocked clients must verify these. No snapshot is imported or converted.
 
-Next gate: entry-object storage and public delta/precondition validation under the
-same atomic publication, followed by account-authorized HTTP routing and bounded
-CLI transport. Migration and confirmation/recovery UX remain pending. No client Git
-writes or ciphertext merge behavior will be added.
+## Account HTTP boundary
+
+All entry routes use POST JSON with the existing session/CLI authentication,
+`X-Petika-Request: 1` and same-origin request checks. There is no single-account
+bootstrap-bearer access. Routes require an already initialized journal at
+`collections/{id}/entries`; initialization and migration are not exposed.
+An existing `snapshot.json` rejects entry requests, preventing implicit cutover.
+Conversely, a committed entry root rejects legacy snapshot/delivery requests with
+426 after authorization, including in default server builds. Collection `status`
+advertises `entry-v1`, supported capabilities, runtime gate state and unavailable
+migration/replication. Capability support does not grant write permission.
+
+| Suffix under `/v1/collections/{id}/` | Request | Response |
+| --- | --- | --- |
+| `entry-history` | `HistoryRequest` (4 KiB) | Bounded `HistoryPage` |
+| `entry-object` | `{context,root,id,digest}` (4 KiB) | Exact encrypted envelope |
+| `entry-receipt` | `{context,operation}` (4 KiB) | Current writer's receipt |
+| `entry-transactions` | `{version:1,operation,expected,object,changes}` (12 MiB) | `{receipt,replication:"unavailable"}` |
+
+`changes` contains at most 256 tagged puts/deletes. A put is
+`{action:"put",id,expected,revision,envelope}`; expected is null for creation or
+`{revision,digest}` for replacement. Delete is
+`{action:"delete",id,expected:{revision,digest}}`. Deleted IDs are permanently
+reserved (4,096 total live/deleted IDs). The committed delete records preserve the
+prior digest/revision and deletion collection revision; clients must require the
+matching authenticated index tombstone with final entry revision = prior + 1.
+
+The server checks access before reading journal state, then acquires the journal
+lock, authenticates again, and holds the account database lock through the operation.
+Writes require edit permission, unchanged membership generation, and no required
+group rotation. Context must bind both deployment and collection. Receipt lookup
+is writer-scoped and requires current read access. Non-access validation/storage
+failures use a generic 409 response: preserve drafts and reconcile receipts; no
+rollback or retry under a new operation ID is implied. The server caps request
+reads before buffering them in full. Nothing reports remote Git completion.
+
+## CLI confirmation and resumable index sync
+
+Compile the CLI with `--features experimental-entry-format`. `petika entries trust`
+requires a local signed checkpoint, its independently compared digest and authority
+fingerprint, the matching encrypted `HistoryObject`, a recovery wrapper and an
+explicit `--confirm`. It creates a new pin and never replaces an existing one.
+It does not establish global freshness, prove absence of forks, or perform migration.
+Recovery-wrapper passphrases remain local. Unlock checks the pinned root commitment
+and requires the exact recovery wrapper in the authenticated active wrapper set;
+another valid wrapper for the same key is not a fallback. Recipient-wrapper CLI
+unlock is pending.
+
+```sh
+petika entries trust --checkpoint checkpoint.json \
+  --checkpoint-digest '<independently-confirmed-digest>' \
+  --authority-fingerprint '<independently-confirmed-fingerprint>' --confirm \
+  --index anchor.json --recovery recovery.json --pin pin.json --cache encrypted-index-cache
+
+petika entries sync --collection personal --anchor anchor.json \
+  --recovery recovery.json --pin pin.json --cache encrypted-index-cache
+```
+
+Sync reads at most 32 MiB plus one rejection byte from the HTTP reader, verifies each
+page, caches its immutable encrypted indexes **before** advancing the durable pin,
+and keeps the first response's target throughout that run. After a lost response,
+restart from the saved pin and corresponding cached index. An empty page leaves
+the pin unchanged. Missing or corrupt pinned cache requires restoring the exact
+encrypted index from backup; the command never resets trust. Keep the anchor,
+recovery wrapper, pin and cache backed up, and provision their directories durably.
+This command synchronizes authenticated index history only, not entry payloads,
+wrappers, drafts or remote Git state. A retained server journal alone is not a
+complete offsite recovery path.
+
+Remaining release gates include migration/cutover and compatibility scenarios,
+encrypted edit drafts and receipt-confirmed CLI submission, wrapper/epoch
+transactions, ordered Git replication/restore, physical durability/disk-full testing,
+and broader native/WASM interoperability. Default enablement remains off.

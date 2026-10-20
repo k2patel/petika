@@ -54,6 +54,13 @@ pub struct Group {
 }
 const MAX_COUNTER: u64 = (1 << 53) - 1;
 
+#[cfg(feature = "experimental-entry-format")]
+pub struct EntryAuthorization {
+    pub writer: String,
+    pub deployment_id: String,
+    pub membership_generation: u64,
+}
+
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Database {
@@ -166,6 +173,48 @@ fn label(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 100 && !value.chars().any(char::is_control)
 }
 impl Accounts {
+    /// Acquire the journal first. Keep the account database locked through the
+    /// callback so membership/disable changes cannot race publication.
+    #[cfg(feature = "experimental-entry-format")]
+    pub fn with_entry_access<T>(
+        &mut self,
+        token: &str,
+        id: &str,
+        write: bool,
+        run: impl FnOnce(EntryAuthorization) -> Result<T>,
+    ) -> Result<T> {
+        let user = self
+            .authenticate(token)?
+            .ok_or("collection access denied")?;
+        let file = StoreFile::lock(&self.path)?;
+        let db = Self::load(&file)?;
+        if !db.users.iter().any(|u| u.id == user.id && !u.disabled) {
+            return Err("collection access denied".into());
+        }
+        let membership_generation = if user.id == id {
+            1
+        } else {
+            let group = db
+                .groups
+                .iter()
+                .find(|g| g.id == id)
+                .ok_or("collection access denied")?;
+            if !group
+                .members
+                .iter()
+                .any(|m| m.user_id == user.id && (!write || m.edit))
+                || (write && group.rotation_required)
+            {
+                return Err("collection access denied".into());
+            }
+            group.membership_generation
+        };
+        run(EntryAuthorization {
+            writer: user.id,
+            deployment_id: db.deployment_id,
+            membership_generation,
+        })
+    }
     pub fn new(path: PathBuf) -> Self {
         Self {
             path,

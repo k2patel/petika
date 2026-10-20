@@ -51,6 +51,42 @@ impl Drop for Client {
     }
 }
 impl Client {
+    #[cfg(feature = "experimental-entry-format")]
+    pub(crate) fn entry_history(&self, collection: &str, body: &[u8]) -> Result<Vec<u8>> {
+        use petika_core::entry_format::transport::{HistoryRequest, MAX_HISTORY_WIRE_BYTES};
+        let request = HistoryRequest::parse(body)?;
+        if request.context.collection_id != collection {
+            return Err("History collection mismatch".into());
+        }
+        let auth = Zeroizing::new(format!("Bearer {}", self.token));
+        let mut response = self
+            .agent
+            .post(format!(
+                "{}/v1/collections/{collection}/entry-history",
+                self.server
+            ))
+            .header("Authorization", auth.as_str())
+            .header("Content-Type", "application/json")
+            .header("X-Petika-Request", "1")
+            .send(body)?;
+        if response.status().as_u16() != 200 {
+            return Err(format!(
+                "History request rejected (HTTP {}); local checkpoint retained",
+                response.status()
+            )
+            .into());
+        }
+        let mut bytes = Vec::new();
+        response
+            .body_mut()
+            .as_reader()
+            .take(MAX_HISTORY_WIRE_BYTES as u64 + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > MAX_HISTORY_WIRE_BYTES {
+            return Err("History response exceeds wire limit".into());
+        }
+        Ok(bytes)
+    }
     fn new(server: &str, token: String) -> Result<Self> {
         Ok(Self {
             server: origin(server)?,

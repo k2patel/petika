@@ -146,6 +146,24 @@ struct Envelope {
     ciphertext: String,
 }
 
+/// Checks bounded public encoding only; does not authenticate ciphertext or
+/// encrypted index semantics. Servers must never treat this as decryption proof.
+pub fn inspect_envelope(bytes: &[u8], expected: &Header) -> Result<()> {
+    expected.validate()?;
+    if bytes.len() > (expected.kind.limit() + 16).div_ceil(3) * 4 + 4096 {
+        return Err(Error::Format);
+    }
+    let envelope: Envelope = serde_json::from_slice(bytes).map_err(|_| Error::Format)?;
+    if envelope.header != *expected {
+        return Err(Error::Authentication);
+    }
+    fixed::<24>(&envelope.nonce)?;
+    if decode(&envelope.ciphertext, expected.kind.limit() + 16)?.len() < 16 {
+        return Err(Error::Format);
+    }
+    Ok(())
+}
+
 /// Secret material is never serialized or exposed through Debug. Context is fixed
 /// for the lifetime of this key: advancing an epoch requires a separately verified key.
 pub struct RootKey {

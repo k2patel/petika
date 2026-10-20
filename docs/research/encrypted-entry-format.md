@@ -152,7 +152,10 @@ AES profile remain separate work; this proposal grants neither production status
 ## API transaction contract
 
 Proposed route family: `/v1/collections/{id}/entry-state` and
-`/v1/collections/{id}/entry-transactions`. These routes do not exist today.
+`/v1/collections/{id}/entry-transactions`. Experimental account-only transaction,
+history, exact-root object and scoped-receipt routes now exist behind compile/runtime
+gates; see [transport and journal implementation](entry-history-transport.md).
+The proposed general `entry-state` route and migration/cutover remain pending.
 Discovery must advertise the format and read/write capabilities; older clients must
 receive an explicit upgrade-required error, not a synthetic empty legacy snapshot.
 

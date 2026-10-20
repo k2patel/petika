@@ -8,6 +8,10 @@ license.workspace = true
 repository.workspace = true
 publish = false
 
+[features]
+default = []
+experimental-entry-format = ["petika-core/experimental-entry-format"]
+
 [dependencies]
 petika-core.workspace = true
 clap.workspace = true

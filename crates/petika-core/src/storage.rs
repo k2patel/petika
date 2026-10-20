@@ -12,6 +12,15 @@ pub struct StoreFile {
     _lock: File,
 }
 
+impl Drop for StoreFile {
+    fn drop(&mut self) {
+        // A concurrently spawned child can briefly inherit the open file
+        // description before exec closes it. Explicitly unlock on handle drop
+        // instead of waiting for every inherited descriptor to close.
+        let _ = FileExt::unlock(&self._lock);
+    }
+}
+
 impl StoreFile {
     pub fn lock(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
@@ -158,6 +167,23 @@ fn check_file(path: &Path) -> Result<()> {
 #[cfg(test)]
 mod failure_tests {
     use super::*;
+    #[cfg(unix)]
+    #[test]
+    fn drop_releases_lock_without_waiting_for_inherited_descriptors() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("record");
+        let file = StoreFile::lock(&path).unwrap();
+        // dup shares the same open file description, as a child temporarily
+        // does between process creation and close-on-exec.
+        let inherited = file._lock.try_clone().unwrap();
+        assert!(matches!(StoreFile::lock(&path), Err(Error::Busy)));
+        drop(file);
+        let reopened = StoreFile::lock(&path).unwrap();
+        drop(inherited);
+        assert!(matches!(StoreFile::lock(&path), Err(Error::Busy)));
+        drop(reopened);
+        assert!(StoreFile::lock(&path).is_ok());
+    }
     #[test]
     fn atomic_write_failure_boundaries_preserve_whole_records() {
         for create in [false, true] {

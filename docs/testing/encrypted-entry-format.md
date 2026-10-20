@@ -15,8 +15,8 @@ automated evidence, without completing the full transaction scenarios below:
 
 - `entry_journal::tests::process_termination_never_promotes_orphan_records` exits
   a child process at eight record/root persistence boundaries and reopens the
-  journal. This covers index-record process crashes, not physical power loss or
-  complete entry payload transactions (T08).
+  journal. This now includes a changed entry ciphertext, without simulating
+  physical power loss or completing all transaction durability criteria (T08).
 - `retries_conflicts_lock_and_recovery` and
   `changed_request_quota_and_uncertain_publication_fail_closed` cover index CAS,
   exact retries, changed operation requests, scoped receipts, exclusive handles,
@@ -25,8 +25,30 @@ automated evidence, without completing the full transaction scenarios below:
   reachable records; `committed_journal_pages_authenticate_after_restart` verifies
   real encrypted index history through the bounded transport after restart.
 
-HTTP authorization, entry deltas, encrypted conflict drafts, Git replication and
-migration are outside this primitive's coverage. No T-series row is marked complete.
+Additional experimental evidence now covers entry deltas and HTTP/CLI integration:
+
+- `entry_transactions_preserve_other_ciphertexts_and_tombstones` uses real encrypted
+  multi-entry fixtures to check preservation, exact-root reads, stale edits, operation
+  replays, deletion/resurrection rejection and restart. It does not verify Git blob IDs.
+- `account_entry_api_binds_access_context_receipts_and_legacy_boundary` checks read-only
+  access, revocation, scoped receipts, collection/deployment binding, membership changes,
+  bounded reads and exclusion of legacy state. The account lock is asserted held.
+- `real_http_entry_routes_require_runtime_gate_session_and_request_headers` starts the
+  real server and checks opt-in gating, session/CSRF requirements, legacy write rejection,
+  capabilities and request bounds.
+- CLI `confirmed_entry_history_resumes_after_partial_sync_without_resetting_pin`
+  runs separate CLI processes, rejects an inactive but otherwise valid recovery
+  wrapper, confirms a new anchor, refuses replacement, accepts one
+  page then loses a response, resumes at the durable cursor and checks empty-page behavior.
+- The eight-boundary process-exit test now includes a real encrypted entry payload
+  committed with its index/receipt, asserting pre-publication invisibility and complete
+  post-publication recovery.
+- `storage::failure_tests::drop_releases_lock_without_waiting_for_inherited_descriptors`
+  covers explicit guard release while a duplicate open file description remains alive,
+  preventing spawned children from temporarily prolonging a dropped journal lock.
+
+Encrypted conflict drafts and submission UX, Git replication and migration are still
+outside this coverage. No full T-series row is marked complete.
 
 ## Test harness and evidence
 

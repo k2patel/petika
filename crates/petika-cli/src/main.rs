@@ -1,5 +1,7 @@
 mod account;
 mod config;
+#[cfg(feature = "experimental-entry-format")]
+mod entry_sync;
 mod import;
 mod keys;
 mod managed;
@@ -62,6 +64,12 @@ impl From<SetupEncryption> for EncryptionMode {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Experimental confirmed checkpoints and bounded encrypted index history.
+    #[cfg(feature = "experimental-entry-format")]
+    Entries {
+        #[command(subcommand)]
+        command: entry_sync::Command,
+    },
     /// Enroll, verify, deliver, and rotate recipient access.
     Keys {
         #[command(subcommand)]
@@ -347,6 +355,10 @@ fn run(mut cli: Cli) -> Result<()> {
             cli.passphrase_stdin,
         );
     }
+    #[cfg(feature = "experimental-entry-format")]
+    if let Command::Entries { command } = &cli.command {
+        return entry_sync::run(&session()?, command, cli.passphrase_stdin);
+    }
     match &cli.command {
         Command::Login { server } => {
             let server = server
@@ -444,6 +456,8 @@ fn operate(
     mut save: impl FnMut(&mut UnlockedStore) -> Result<()>,
 ) -> Result<()> {
     match command {
+        #[cfg(feature = "experimental-entry-format")]
+        Command::Entries { .. } => unreachable!(),
         Command::Keys { .. }
         | Command::Init { .. }
         | Command::Login { .. }

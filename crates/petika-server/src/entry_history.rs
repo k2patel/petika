@@ -1,4 +1,4 @@
-//! Page construction for a future committed entry journal. Not an HTTP endpoint.
+//! Bounded page construction for committed entry history.
 //! Call only after collection authorization, under a stable journal read view.
 use petika_core::{
     Error, Result,

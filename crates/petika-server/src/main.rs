@@ -309,6 +309,94 @@ fn run() -> Result<()> {
                 continue;
             };
             let action = action.split('?').next().unwrap_or(action);
+            // Recognize active entry collections even in default builds. Legacy
+            // snapshot and delivery routes must never create a second authority.
+            if action != "status"
+                && !action.starts_with("entry-")
+                && data
+                    .join("collections")
+                    .join(id)
+                    .join("entries/committed-root")
+                    .is_file()
+            {
+                let allowed = accounts
+                    .authenticate(&web::session(&request))
+                    .ok()
+                    .flatten()
+                    .is_some_and(|u| accounts.access(&u, id, false).unwrap_or(false));
+                if allowed {
+                    respond(
+                        request,
+                        426,
+                        "{\"error\":\"Collection uses entry-v1; upgrade client\"}",
+                        None,
+                    );
+                } else {
+                    respond(
+                        request,
+                        403,
+                        "{\"error\":\"Collection access denied\"}",
+                        None,
+                    );
+                }
+                continue;
+            }
+            #[cfg(feature = "experimental-entry-format")]
+            if matches!(
+                action,
+                "entry-history" | "entry-object" | "entry-receipt" | "entry-transactions"
+            ) {
+                let mut request = request;
+                if env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() != Ok("1") {
+                    respond(
+                        request,
+                        404,
+                        "{\"error\":\"Experimental entry API disabled\"}",
+                        None,
+                    );
+                    continue;
+                }
+                if request.method() != &Method::Post || !web::csrf(&request) {
+                    respond(request, 403, "{\"error\":\"Entry request denied\"}", None);
+                    continue;
+                }
+                let session = web::session(&request);
+                if accounts
+                    .with_entry_access(&session, id, action == "entry-transactions", |_| Ok(()))
+                    .is_err()
+                {
+                    respond(
+                        request,
+                        403,
+                        "{\"error\":\"Collection access denied\"}",
+                        None,
+                    );
+                    continue;
+                }
+                let result = petika_server::entry_api::dispatch(
+                    &mut accounts,
+                    &data,
+                    &session,
+                    id,
+                    action,
+                    request.as_reader(),
+                );
+                match result {
+                    Ok(bytes) => respond(
+                        request,
+                        200,
+                        std::str::from_utf8(&bytes).unwrap_or("{}"),
+                        None,
+                    ),
+                    Err(_) => respond(
+                        request,
+                        409,
+                        "{\"error\":\"Entry request unavailable or rejected; preserve draft and reconcile\"}",
+                        None,
+                    ),
+                }
+                continue;
+            }
             if matches!(
                 action,
                 "key-access"
@@ -342,6 +430,31 @@ fn run() -> Result<()> {
             }
             let collection =
                 Repository::new(data.join("collections").join(id).join("snapshot.json"));
+            if data
+                .join("collections")
+                .join(id)
+                .join("entries/committed-root")
+                .is_file()
+            {
+                if action == "status" {
+                    respond(request, 200, &serde_json::json!({
+                        "format": "entry-v1",
+                        "experimental": true,
+                        "entry_api_enabled": cfg!(feature = "experimental-entry-format") && env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1"),
+                        "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions"],
+                        "migration": "unavailable",
+                        "replication": "unavailable"
+                    }).to_string(), None);
+                    continue;
+                }
+                respond(
+                    request,
+                    426,
+                    "{\"error\":\"Collection uses experimental entry format; upgrade client\",\"format\":\"entry-v1\"}",
+                    None,
+                );
+                continue;
+            }
             let mirrored = if let Some(root) = &mirror {
                 mirror_once(&collection, &root.join(id))
                     .ok()

@@ -12,6 +12,219 @@ use std::{
     time::Duration,
 };
 const PASSWORD: &str = "synthetic collection passphrase";
+
+#[cfg(feature = "experimental-entry-format")]
+#[test]
+fn confirmed_entry_history_resumes_after_partial_sync_without_resetting_pin() {
+    use petika_core::{
+        entry_format::{
+            checkpoint::*, checkpoint_store::CheckpointStore, index::*, transport::*, *,
+        },
+        identity::{CheckpointTarget, UnlockedIdentity},
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+    let recovery_bytes = root.wrap_recovery(PASSWORD).unwrap();
+    let recovery_value: Value = serde_json::from_slice(&recovery_bytes).unwrap();
+    let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let wrappers = vec![WrapperRef {
+        wrapper_id: recovery_value["wrapper_id"].as_str().unwrap().into(),
+        digest: hex(&digest(&recovery_bytes)),
+    }];
+    let mut objects = Vec::new();
+    let mut parent = String::new();
+    for revision in 1..=35 {
+        let index = Index {
+            version: 1,
+            context: root.context().clone(),
+            suite: SUITE.into(),
+            revision,
+            parent_digest: parent.clone(),
+            membership_generation: 1,
+            wrappers: wrappers.clone(),
+            root_folder: String::new(),
+            folders: vec![],
+            entries: vec![],
+            tombstones: vec![],
+        };
+        let envelope = root
+            .seal(
+                &Header {
+                    entry_format_version: 1,
+                    suite: SUITE.into(),
+                    context: root.context().clone(),
+                    kind: Kind::Index,
+                    object_id: String::new(),
+                    revision,
+                },
+                &serde_json::to_vec(&index).unwrap(),
+            )
+            .unwrap();
+        let head = Head {
+            version: 1,
+            context: root.context().clone(),
+            suite: SUITE.into(),
+            revision,
+            parent_digest: parent,
+            index_digest: hex(&digest(&envelope)),
+            wrapper_set_digest: wrapper_set_digest(&wrappers).unwrap(),
+            membership_generation: 1,
+        };
+        parent = head.digest().unwrap();
+        objects.push(HistoryObject {
+            head,
+            envelope: String::from_utf8(envelope).unwrap(),
+        });
+    }
+    let authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
+    let checkpoint = authority
+        .sign_entry_checkpoint(
+            &root,
+            CheckpointTarget {
+                head_revision: 1,
+                head_digest: objects[0].head.digest().unwrap(),
+                membership_generation: 1,
+                delivery_profile: DeliveryProfile::Standard,
+            },
+            &wrappers,
+        )
+        .unwrap();
+    let checkpoint_digest = checkpoint.digest().unwrap();
+    let fingerprint = checkpoint.authority.fingerprint.clone();
+    let anchor = dir.path().join("anchor.json");
+    let cp = dir.path().join("checkpoint.json");
+    let recovery = dir.path().join("recovery.json");
+    let pin = dir.path().join("pin.json");
+    let cache = dir.path().join("cache");
+    for (path, bytes) in [
+        (&anchor, serde_json::to_vec(&objects[0]).unwrap()),
+        (&cp, serde_json::to_vec(&checkpoint).unwrap()),
+        (&recovery, recovery_bytes.clone()),
+    ] {
+        StoreFile::lock(path).unwrap().write(&bytes, true).unwrap();
+    }
+    let mut trust = vec![
+        "entries",
+        "trust",
+        "--checkpoint",
+        cp.to_str().unwrap(),
+        "--checkpoint-digest",
+        &checkpoint_digest,
+        "--authority-fingerprint",
+        &fingerprint,
+        "--index",
+        anchor.to_str().unwrap(),
+        "--recovery",
+        recovery.to_str().unwrap(),
+        "--pin",
+        pin.to_str().unwrap(),
+        "--cache",
+        cache.to_str().unwrap(),
+    ];
+    assert!(!run(dir.path(), &trust, "").status.success());
+    assert!(!pin.exists());
+    trust.push("--confirm");
+    // Another valid wrapper for the same root is not an authorized fallback.
+    StoreFile::lock(&recovery)
+        .unwrap()
+        .write(&root.wrap_recovery(PASSWORD).unwrap(), false)
+        .unwrap();
+    assert!(
+        !run(dir.path(), &trust, &format!("{PASSWORD}\n"))
+            .status
+            .success()
+    );
+    assert!(!pin.exists());
+    StoreFile::lock(&recovery)
+        .unwrap()
+        .write(&recovery_bytes, false)
+        .unwrap();
+    ok(&run(dir.path(), &trust, &format!("{PASSWORD}\n")));
+    let original_pin = std::fs::read(&pin).unwrap();
+    assert!(
+        !run(dir.path(), &trust, &format!("{PASSWORD}\n"))
+            .status
+            .success()
+    );
+    assert_eq!(std::fs::read(&pin).unwrap(), original_pin);
+    let context = root.context().clone();
+    let api = Api::new(move |request| {
+        if request.path == "/v1/collections" {
+            return Some(response(
+                json!([{"id":"b".repeat(64), "group":false, "edit":true}]),
+            ));
+        }
+        assert_eq!(
+            request.path,
+            format!("/v1/collections/{}/entry-history", "b".repeat(64))
+        );
+        assert!(request.headers.contains("x-petika-request: 1"));
+        let input = HistoryRequest::parse(request.body.as_bytes()).unwrap();
+        assert_eq!(input.context, context);
+        // First process accepts one page, then loses the connection. A new
+        // process starts from its saved head, without an ad hoc trust reset.
+        if input.target.is_some() {
+            return None;
+        }
+        let target = Cursor::from_head(&objects[34].head).unwrap();
+        let items = objects
+            .iter()
+            .skip(input.after.revision as usize)
+            .take(input.limit)
+            .cloned()
+            .collect();
+        let page = HistoryPage {
+            version: 1,
+            context: context.clone(),
+            after: input.after.clone(),
+            target,
+            items,
+        };
+        Some(Response {
+            status: 200,
+            revision: None,
+            body: String::from_utf8(page.encode(&input).unwrap()).unwrap(),
+        })
+    });
+    api.session(dir.path());
+    let sync = [
+        "entries",
+        "sync",
+        "--anchor",
+        anchor.to_str().unwrap(),
+        "--recovery",
+        recovery.to_str().unwrap(),
+        "--pin",
+        pin.to_str().unwrap(),
+        "--cache",
+        cache.to_str().unwrap(),
+    ];
+    assert!(
+        !run(dir.path(), &sync, &format!("{PASSWORD}\n"))
+            .status
+            .success()
+    );
+    assert_eq!(
+        CheckpointStore::lock(&pin)
+            .unwrap()
+            .head(root.context())
+            .unwrap()
+            .revision,
+        33
+    );
+    ok(&run(dir.path(), &sync, &format!("{PASSWORD}\n")));
+    assert_eq!(
+        CheckpointStore::lock(&pin)
+            .unwrap()
+            .head(root.context())
+            .unwrap()
+            .revision,
+        35
+    );
+    let pinned = std::fs::read(&pin).unwrap();
+    ok(&run(dir.path(), &sync, &format!("{PASSWORD}\n")));
+    assert_eq!(std::fs::read(&pin).unwrap(), pinned);
+}
 fn entry() -> Entry {
     Entry {
         username: "alice".into(),

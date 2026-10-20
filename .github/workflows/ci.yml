@@ -52,9 +52,13 @@ jobs:
       - name: Experimental entry format Clippy
         run: cargo clippy --locked -p petika-core --features experimental-entry-format --all-targets -- -D warnings
       - name: Experimental entry history transport
-        run: cargo test --locked -p petika-server --features experimental-entry-format --test entry_history
+        run: cargo test --locked -p petika-server --features experimental-entry-format --lib --test entry_history
       - name: Experimental entry history Clippy
         run: cargo clippy --locked -p petika-server --features experimental-entry-format --all-targets -- -D warnings
+      - name: Experimental CLI checkpoint and history sync
+        run: cargo test --locked -p petika --features experimental-entry-format --test managed confirmed_entry_history
+      - name: Experimental CLI Clippy
+        run: cargo clippy --locked -p petika --features experimental-entry-format --all-targets -- -D warnings
       - name: Dependency licenses
         if: runner.os == 'Linux'
         run: python3 scripts/check_licenses.py

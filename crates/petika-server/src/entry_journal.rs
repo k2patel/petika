@@ -1,6 +1,7 @@
-//! Isolated, single-writer committed index history. No legacy snapshot import.
-//! Authorization and complete entry-object transactions belong to the API layer.
+//! Isolated, single-writer committed index/entry history. No legacy snapshot import.
+//! Authorization belongs to the account API layer; encrypted semantics to clients.
 use crate::Result;
+use crate::entry_transaction::{self, Entries, EntryChange, Transaction};
 use petika_core::{
     StoreFile,
     entry_format::{digest, history::MAX_HISTORY_BYTES, transport::*},
@@ -12,10 +13,10 @@ use std::{collections::BTreeMap, path::PathBuf};
 const MAX_RECORDS: usize = 1024;
 const MAX_JOURNAL_BYTES: usize = 64 * 1024 * 1024;
 
-fn hash(bytes: &[u8]) -> String {
+pub(crate) fn hash(bytes: &[u8]) -> String {
     digest(bytes).iter().map(|b| format!("{b:02x}")).collect()
 }
-fn identifier(value: &str) -> bool {
+pub(crate) fn identifier(value: &str) -> bool {
     value.len() == 64
         && value
             .bytes()
@@ -37,6 +38,8 @@ struct Record {
     parent: Option<String>,
     object: HistoryObject,
     receipt: Receipt,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    changes: Vec<EntryChange>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,7 +48,8 @@ struct Root {
     record: String,
 }
 
-/// Keep this handle alive for the server lifetime. A second writer fails to open.
+/// Retain the handle for the entire read/write operation. A second writer fails
+/// to open it. The server also holds its instance lock for the process lifetime.
 /// All reads use the captured committed chain; orphan files are never enumerated.
 pub struct Journal {
     directory: PathBuf,
@@ -53,6 +57,7 @@ pub struct Journal {
     records: BTreeMap<u64, (String, Record)>,
     uncertain: bool,
     retained_bytes: usize,
+    entries: Entries,
 }
 impl Journal {
     pub fn open(directory: PathBuf) -> Result<Self> {
@@ -63,6 +68,7 @@ impl Journal {
             records: BTreeMap::new(),
             uncertain: false,
             retained_bytes: 0,
+            entries: Entries::new(),
         };
         if journal.root.exists() {
             let root: Root = serde_json::from_slice(&journal.root.read()?)?;
@@ -123,12 +129,27 @@ impl Journal {
                 }
             }
         }
+        for (_, record) in journal.records.values() {
+            journal.entries =
+                entry_transaction::apply(&journal.entries, &record.object, &record.changes)?;
+        }
         Ok(journal)
     }
     pub fn current(&self) -> Option<Cursor> {
         self.records
             .last_key_value()
             .map(|(_, (_, r))| r.receipt.accepted.clone())
+    }
+    pub fn check_context(&self, context: &petika_core::entry_format::Context) -> Result<()> {
+        if self.uncertain
+            || self
+                .records
+                .last_key_value()
+                .is_none_or(|(_, (_, r))| &r.object.head.context != context)
+        {
+            return Err("journal context mismatch or uncertain root".into());
+        }
+        Ok(())
     }
     /// Caller must check current access before every receipt lookup, including retries.
     pub fn receipt(&self, writer: &str, operation: &str) -> Option<Receipt> {
@@ -165,12 +186,88 @@ impl Journal {
     ) -> Result<Receipt> {
         self.append_checked(expected, writer, operation, object, |_| Ok(()))
     }
+    /// Complete same-epoch entry update. API callers must authorize again after
+    /// acquiring the journal lock and bind collection/deployment/membership.
+    pub fn transact(&mut self, writer: &str, transaction: Transaction) -> Result<Receipt> {
+        use petika_core::entry_format::{Header, Kind, inspect_envelope};
+        if transaction.version != 1
+            || serde_json::to_vec(&transaction)?.len() > entry_transaction::MAX_TRANSACTION_BYTES
+        {
+            return Err("invalid or oversized transaction".into());
+        }
+        let head = &transaction.object.head;
+        inspect_envelope(
+            transaction.object.envelope.as_bytes(),
+            &Header {
+                entry_format_version: 1,
+                suite: head.suite.clone(),
+                context: head.context.clone(),
+                kind: Kind::Index,
+                object_id: String::new(),
+                revision: head.revision,
+            },
+        )?;
+        self.commit(
+            Some(&transaction.expected),
+            writer,
+            &transaction.operation,
+            transaction.object,
+            transaction.changes,
+            |_| Ok(()),
+        )
+    }
+    /// Fetch exact ciphertext under a committed immutable root, including old
+    /// roots retained for readers. Never resolve an unversioned latest object.
+    pub fn entry(&self, root: &Cursor, id: &str, digest: &str) -> Result<String> {
+        if self.uncertain || !identifier(id) || !identifier(digest) {
+            return Err("invalid entry read".into());
+        }
+        let record = self
+            .records
+            .get(&root.revision)
+            .ok_or("unknown read root")?;
+        if record.1.receipt.accepted != *root {
+            return Err("read root mismatch".into());
+        }
+        for (_, (_, record)) in self.records.range(..=root.revision).rev() {
+            for change in &record.changes {
+                match change {
+                    EntryChange::Put {
+                        id: candidate,
+                        envelope,
+                        ..
+                    } if candidate == id => {
+                        if hash(envelope.as_bytes()) != digest {
+                            return Err("entry digest mismatch".into());
+                        }
+                        return Ok(envelope.clone());
+                    }
+                    EntryChange::Delete { id: candidate, .. } if candidate == id => {
+                        return Err("entry deleted at read root".into());
+                    }
+                    _ => {}
+                }
+            }
+        }
+        Err("entry absent at read root".into())
+    }
     fn append_checked(
         &mut self,
         expected: Option<&Cursor>,
         writer: &str,
         operation: &str,
         object: HistoryObject,
+        boundary: impl FnMut(u8) -> petika_core::Result<()>,
+    ) -> Result<Receipt> {
+        self.commit(expected, writer, operation, object, vec![], boundary)
+    }
+    fn commit(
+        &mut self,
+        expected: Option<&Cursor>,
+        writer: &str,
+        operation: &str,
+        object: HistoryObject,
+        changes: Vec<EntryChange>,
         mut boundary: impl FnMut(u8) -> petika_core::Result<()>,
     ) -> Result<Receipt> {
         if !identifier(writer) || !identifier(operation) {
@@ -180,9 +277,15 @@ impl Journal {
             return Err("reopen journal after uncertain publication".into());
         }
         validate(&object)?;
-        let request_digest = hash(&serde_json::to_vec(&(
-            1u32, expected, writer, operation, &object,
-        ))?);
+        let request_digest = if changes.is_empty() {
+            hash(&serde_json::to_vec(&(
+                1u32, expected, writer, operation, &object,
+            ))?)
+        } else {
+            hash(&serde_json::to_vec(&(
+                1u32, expected, writer, operation, &object, &changes,
+            ))?)
+        };
         if let Some(receipt) = self.receipt(writer, operation) {
             if receipt.request_digest != request_digest
                 || receipt.accepted != Cursor::from_head(&object.head)?
@@ -194,6 +297,7 @@ impl Journal {
         if self.current().as_ref() != expected {
             return Err("entry root conflict".into());
         }
+        let entries = entry_transaction::apply(&self.entries, &object, &changes)?;
         let parent = if let Some((_, (address, previous))) = self.records.last_key_value() {
             adjacent(&previous.object, &object)?;
             Some(address.clone())
@@ -214,6 +318,7 @@ impl Journal {
             parent,
             object,
             receipt: receipt.clone(),
+            changes,
         };
         let bytes = serde_json::to_vec(&record)?;
         let retained_bytes = self
@@ -244,6 +349,7 @@ impl Journal {
         self.records
             .insert(record.object.head.revision, (address, record));
         self.retained_bytes = retained_bytes;
+        self.entries = entries;
         self.uncertain = false;
         Ok(receipt)
     }
@@ -436,12 +542,16 @@ mod tests {
             .unwrap();
         let mut j = Journal::open(directory.into()).unwrap();
         let expected = j.current().unwrap();
-        let object = object(2, expected.digest.clone());
-        let _ = j.append_checked(
+        let transaction: Transaction = serde_json::from_slice(
+            &std::fs::read(j.directory.join("test-candidate.json")).unwrap(),
+        )
+        .unwrap();
+        let _ = j.commit(
             Some(&expected),
             &"a".repeat(64),
             &"e".repeat(64),
-            object,
+            transaction.object,
+            transaction.changes,
             |stage| {
                 if stage == stop {
                     std::process::exit(73);
@@ -456,7 +566,47 @@ mod tests {
         for stage in 1..=8 {
             let dir = tempfile::tempdir().unwrap();
             let mut j = Journal::open(dir.path().into()).unwrap();
-            append(&mut j, 1);
+            let key = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+            let mut initial = object(1, String::new());
+            initial.head.context = key.context().clone();
+            j.append(None, &"a".repeat(64), &"1".repeat(64), initial)
+                .unwrap();
+            let expected = j.current().unwrap();
+            let mut candidate = object(2, expected.digest.clone());
+            candidate.head.context = key.context().clone();
+            let id = "8".repeat(64);
+            let envelope = String::from_utf8(
+                key.seal(
+                    &petika_core::entry_format::Header {
+                        entry_format_version: 1,
+                        suite: SUITE.into(),
+                        context: key.context().clone(),
+                        kind: petika_core::entry_format::Kind::Entry,
+                        object_id: id.clone(),
+                        revision: 1,
+                    },
+                    b"synthetic crash-test secret",
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let digest = hash(envelope.as_bytes());
+            let transaction = Transaction {
+                version: 1,
+                operation: "e".repeat(64),
+                expected: expected.clone(),
+                object: candidate,
+                changes: vec![EntryChange::Put {
+                    id: id.clone(),
+                    expected: None,
+                    revision: 1,
+                    envelope: envelope.clone(),
+                }],
+            };
+            StoreFile::lock(dir.path().join("test-candidate.json"))
+                .unwrap()
+                .write(&serde_json::to_vec(&transaction).unwrap(), true)
+                .unwrap();
             drop(j);
             let status = std::process::Command::new(std::env::current_exe().unwrap())
                 .args(["--exact", "entry_journal::tests::termination_worker"])
@@ -471,8 +621,28 @@ mod tests {
                 j.receipt(&"a".repeat(64), &"e".repeat(64)).is_some(),
                 stage >= 7
             );
+            if stage >= 7 {
+                assert_eq!(
+                    j.entry(&j.current().unwrap(), &id, &digest).unwrap(),
+                    envelope
+                );
+            } else {
+                assert!(j.entry(&expected, &id, &digest).is_err());
+            }
             if stage < 7 {
-                append(&mut j, 2);
+                j.commit(
+                    Some(&expected),
+                    &"a".repeat(64),
+                    &"e".repeat(64),
+                    transaction.object,
+                    transaction.changes,
+                    |_| Ok(()),
+                )
+                .unwrap();
+                assert_eq!(
+                    j.entry(&j.current().unwrap(), &id, &digest).unwrap(),
+                    envelope
+                );
             }
         }
     }
