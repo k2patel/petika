@@ -1,6 +1,8 @@
 mod account;
 mod config;
 #[cfg(feature = "experimental-entry-format")]
+mod entry_edit;
+#[cfg(feature = "experimental-entry-format")]
 mod entry_sync;
 mod import;
 mod keys;

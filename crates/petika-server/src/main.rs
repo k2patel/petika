@@ -176,6 +176,16 @@ fn run() -> Result<()> {
     let mirror = env::var_os("PETIKA_GIT_MIRROR").map(PathBuf::from);
     let enabled = mirror.is_some();
     let backup_gate = Arc::new(Mutex::new(()));
+    #[cfg(feature = "experimental-entry-format")]
+    if env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1")
+        && let Some(directory) = mirror.clone()
+    {
+        petika_server::entry_replication::start_worker(
+            data.clone(),
+            directory,
+            Arc::clone(&backup_gate),
+        );
+    }
     if let Some(directory) = mirror.clone() {
         let repository = Arc::clone(&repository);
         let mirrored = Arc::clone(&mirror_revision);
@@ -382,12 +392,22 @@ fn run() -> Result<()> {
                     request.as_reader(),
                 );
                 match result {
-                    Ok(bytes) => respond(
-                        request,
-                        200,
-                        std::str::from_utf8(&bytes).unwrap_or("{}"),
-                        None,
-                    ),
+                    Ok(mut bytes) => {
+                        if action == "entry-transactions"
+                            && mirror.is_some()
+                            && let Ok(mut value) =
+                                serde_json::from_slice::<serde_json::Value>(&bytes)
+                        {
+                            value["replication"] = "pending".into();
+                            bytes = serde_json::to_vec(&value).unwrap_or(bytes);
+                        }
+                        respond(
+                            request,
+                            200,
+                            std::str::from_utf8(&bytes).unwrap_or("{}"),
+                            None,
+                        )
+                    }
                     Err(_) => respond(
                         request,
                         409,
@@ -437,13 +457,36 @@ fn run() -> Result<()> {
                 .is_file()
             {
                 if action == "status" {
+                    #[cfg(feature = "experimental-entry-format")]
+                    let accepted = petika_server::entry_journal::Journal::open(
+                        data.join("collections").join(id).join("entries"),
+                    )
+                    .ok()
+                    .and_then(|journal| journal.current());
+                    #[cfg(not(feature = "experimental-entry-format"))]
+                    let accepted: Option<serde_json::Value> = None;
+                    #[cfg(feature = "experimental-entry-format")]
+                    let replication = mirror
+                        .as_ref()
+                        .and_then(|root| {
+                            petika_server::entry_replication::read_status(
+                                &root.join(id).join("entries"),
+                            )
+                            .ok()
+                            .flatten()
+                        })
+                        .and_then(|status| serde_json::to_value(status).ok())
+                        .unwrap_or(serde_json::json!({"state":"unavailable"}));
+                    #[cfg(not(feature = "experimental-entry-format"))]
+                    let replication = serde_json::json!({"state":"unavailable"});
                     respond(request, 200, &serde_json::json!({
                         "format": "entry-v1",
+                        "accepted": accepted,
                         "experimental": true,
                         "entry_api_enabled": cfg!(feature = "experimental-entry-format") && env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1"),
                         "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions"],
                         "migration": "unavailable",
-                        "replication": "unavailable"
+                        "replication": replication
                     }).to_string(), None);
                     continue;
                 }

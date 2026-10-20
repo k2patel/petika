@@ -240,6 +240,367 @@ struct Request {
     headers: String,
     body: String,
 }
+
+#[cfg(feature = "experimental-entry-format")]
+#[test]
+fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
+    use petika_core::{
+        entry_format::{
+            checkpoint::*, checkpoint_store::CheckpointStore, index::*, transaction::*,
+            transport::*, *,
+        },
+        identity::{CheckpointTarget, UnlockedIdentity},
+    };
+    use std::collections::BTreeMap;
+    let dir = tempfile::tempdir().unwrap();
+    let root = Arc::new(RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap());
+    let recovery_bytes = root.wrap_recovery(PASSWORD).unwrap();
+    let wrapper: Value = serde_json::from_slice(&recovery_bytes).unwrap();
+    let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
+    let wrappers = vec![WrapperRef {
+        wrapper_id: wrapper["wrapper_id"].as_str().unwrap().into(),
+        digest: hex(&digest(&recovery_bytes)),
+    }];
+    let id = "1".repeat(64);
+    let original = Entry {
+        username: "original-user".into(),
+        password: "old synthetic password".into(),
+        url: "https://example.com".into(),
+        notes: "preserve these notes".into(),
+        otp: Some("JBSWY3DPEHPK3PXP".into()),
+    };
+    let payload = String::from_utf8(
+        root.seal(
+            &Header {
+                entry_format_version: 1,
+                suite: SUITE.into(),
+                context: root.context().clone(),
+                kind: Kind::Entry,
+                object_id: id.clone(),
+                revision: 1,
+            },
+            &serde_json::to_vec(&original).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let index = Index {
+        version: 1,
+        context: root.context().clone(),
+        suite: SUITE.into(),
+        revision: 1,
+        parent_digest: String::new(),
+        membership_generation: 1,
+        wrappers: wrappers.clone(),
+        root_folder: String::new(),
+        folders: vec![],
+        entries: vec![EntryRef {
+            id: id.clone(),
+            folder: String::new(),
+            name: "Original name".into(),
+            revision: 1,
+            digest: hex(&digest(payload.as_bytes())),
+        }],
+        tombstones: vec![],
+    };
+    let envelope = String::from_utf8(
+        root.seal(
+            &Header {
+                entry_format_version: 1,
+                suite: SUITE.into(),
+                context: root.context().clone(),
+                kind: Kind::Index,
+                object_id: String::new(),
+                revision: 1,
+            },
+            &serde_json::to_vec(&index).unwrap(),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let initial = HistoryObject {
+        head: Head {
+            version: 1,
+            context: root.context().clone(),
+            suite: SUITE.into(),
+            revision: 1,
+            parent_digest: String::new(),
+            index_digest: hex(&digest(envelope.as_bytes())),
+            wrapper_set_digest: wrapper_set_digest(&wrappers).unwrap(),
+            membership_generation: 1,
+        },
+        envelope,
+    };
+    let authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
+    let checkpoint = authority
+        .sign_entry_checkpoint(
+            &root,
+            CheckpointTarget {
+                head_revision: 1,
+                head_digest: initial.head.digest().unwrap(),
+                membership_generation: 1,
+                delivery_profile: DeliveryProfile::Standard,
+            },
+            &wrappers,
+        )
+        .unwrap();
+    let trusted = TrustedCheckpoint::bootstrap(
+        checkpoint.clone(),
+        &checkpoint.digest().unwrap(),
+        &checkpoint.authority.fingerprint,
+    )
+    .unwrap();
+    let pin = dir.path().join("pin.json");
+    let anchor = dir.path().join("anchor.json");
+    let recovery = dir.path().join("recovery.json");
+    let cache = dir.path().join("cache");
+    std::fs::create_dir(&cache).unwrap();
+    let initial_bytes = serde_json::to_vec(&initial).unwrap();
+    for (path, bytes) in [
+        (anchor.clone(), initial_bytes.clone()),
+        (
+            cache.join(format!("{}.json", initial.head.digest().unwrap())),
+            initial_bytes,
+        ),
+        (recovery.clone(), recovery_bytes),
+    ] {
+        StoreFile::lock(path).unwrap().write(&bytes, true).unwrap();
+    }
+    CheckpointStore::lock(&pin)
+        .unwrap()
+        .initialize(
+            &trusted,
+            &VerifiedIndex::open(&root, initial.head.clone(), initial.envelope.as_bytes()).unwrap(),
+        )
+        .unwrap();
+    struct State {
+        current: HistoryObject,
+        payloads: BTreeMap<String, String>,
+        receipts: BTreeMap<String, Receipt>,
+        writes: usize,
+        drop_ack: bool,
+        forge: bool,
+    }
+    let state = Arc::new(Mutex::new(State {
+        current: initial,
+        payloads: BTreeMap::from([(id.clone(), payload)]),
+        receipts: BTreeMap::new(),
+        writes: 0,
+        drop_ack: true,
+        forge: false,
+    }));
+    let shared = state.clone();
+    let server_root = root.clone();
+    let api = Api::new(move |request| {
+        if request.path == "/v1/collections" {
+            return Some(response(
+                json!([{"id":"b".repeat(64),"group":false,"edit":true}]),
+            ));
+        }
+        if request.path == "/v1/auth/status" {
+            return Some(response(json!({"user":{"id":"f".repeat(64)}})));
+        }
+        let mut state = shared.lock().unwrap();
+        assert!(
+            !request.body.contains("Original name")
+                && !request.body.contains("preserve these notes")
+                && !request.body.contains("replacement synthetic password")
+        );
+        if request.path.ends_with("/entry-object") {
+            let body: Value = serde_json::from_str(&request.body).unwrap();
+            assert_eq!(body["root"]["digest"], state.current.head.digest().unwrap());
+            return Some(Response {
+                status: 200,
+                revision: None,
+                body: state.payloads[body["id"].as_str().unwrap()].clone(),
+            });
+        }
+        if request.path.ends_with("/entry-receipt") {
+            let body: Value = serde_json::from_str(&request.body).unwrap();
+            return Some(response(
+                json!({"receipt":state.receipts.get(body["operation"].as_str().unwrap())}),
+            ));
+        }
+        assert!(request.path.ends_with("/entry-transactions"));
+        let tx = Transaction::parse(request.body.as_bytes()).unwrap();
+        let previous = VerifiedIndex::open(
+            &server_root,
+            state.current.head.clone(),
+            state.current.envelope.as_bytes(),
+        )
+        .unwrap();
+        if tx.verify(&server_root, &previous).is_err() {
+            return Some(Response {
+                status: 409,
+                revision: None,
+                body: "{}".into(),
+            });
+        }
+        for change in &tx.changes {
+            match change {
+                EntryChange::Put { id, envelope, .. } => {
+                    state.payloads.insert(id.clone(), envelope.clone());
+                }
+                EntryChange::Delete { id, .. } => {
+                    state.payloads.remove(id);
+                }
+            }
+        }
+        let receipt = Receipt {
+            writer: "f".repeat(64),
+            operation: tx.operation.clone(),
+            request_digest: submission_digest(
+                Some(&tx.expected),
+                &"f".repeat(64),
+                &tx.operation,
+                &tx.object,
+                &tx.changes,
+            )
+            .unwrap(),
+            accepted: Cursor::from_head(&tx.object.head).unwrap(),
+        };
+        state.current = tx.object;
+        state.writes += 1;
+        state.receipts.insert(tx.operation, receipt.clone());
+        if state.drop_ack {
+            state.drop_ack = false;
+            return None;
+        }
+        let mut ack = receipt;
+        if state.forge {
+            ack.operation = "0".repeat(64);
+            state.forge = false;
+        }
+        Some(response(json!({"receipt":ack,"replication":"pending"})))
+    });
+    api.session(dir.path());
+    let common = [
+        "--anchor",
+        anchor.to_str().unwrap(),
+        "--recovery",
+        recovery.to_str().unwrap(),
+        "--pin",
+        pin.to_str().unwrap(),
+        "--cache",
+        cache.to_str().unwrap(),
+    ];
+    let one = dir.path().join("one.draft");
+    let two = dir.path().join("two.draft");
+    for draft in [&one, &two] {
+        let mut args = vec![
+            "entries",
+            "put",
+            "--password-stdin",
+            "--id",
+            &id,
+            "--draft",
+            draft.to_str().unwrap(),
+        ];
+        args.extend(common);
+        ok(&run(
+            dir.path(),
+            &args,
+            &format!("{PASSWORD}\nreplacement synthetic password\n"),
+        ));
+        let raw = std::fs::read_to_string(draft).unwrap();
+        assert!(
+            !raw.contains("Original name")
+                && !raw.contains("replacement synthetic password")
+                && !raw.contains("preserve these notes")
+        );
+    }
+    let mut review = vec!["entries", "review", "--draft", one.to_str().unwrap()];
+    review.extend(common);
+    let reviewed = run(dir.path(), &review, &format!("{PASSWORD}\n"));
+    ok(&reviewed);
+    assert!(String::from_utf8_lossy(&reviewed.stdout).contains("Original name"));
+    assert!(!String::from_utf8_lossy(&reviewed.stdout).contains("replacement synthetic password"));
+    let submit = |draft: &Path| {
+        let mut args = vec![
+            "entries",
+            "submit",
+            "--confirm",
+            "--draft",
+            draft.to_str().unwrap(),
+        ];
+        args.extend(common);
+        run(dir.path(), &args, &format!("{PASSWORD}\n"))
+    };
+    assert!(!submit(&one).status.success());
+    assert_eq!(state.lock().unwrap().writes, 1);
+    assert_eq!(
+        CheckpointStore::lock(&pin)
+            .unwrap()
+            .head(root.context())
+            .unwrap()
+            .revision,
+        1
+    );
+    assert!(!submit(&two).status.success());
+    assert!(one.exists() && two.exists());
+    assert_eq!(state.lock().unwrap().writes, 1);
+    ok(&submit(&one));
+    assert_eq!(state.lock().unwrap().writes, 1);
+    assert_eq!(
+        CheckpointStore::lock(&pin)
+            .unwrap()
+            .head(root.context())
+            .unwrap()
+            .revision,
+        2
+    );
+    ok(&submit(&one));
+    assert_eq!(state.lock().unwrap().writes, 1);
+    let current = state.lock().unwrap();
+    let verified = VerifiedIndex::open(
+        &root,
+        current.current.head.clone(),
+        current.current.envelope.as_bytes(),
+    )
+    .unwrap();
+    let payload: Entry = serde_json::from_slice(
+        &verified
+            .open_entry(&root, &id, current.payloads[&id].as_bytes())
+            .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(payload.notes, original.notes);
+    assert_eq!(payload.otp, original.otp);
+    assert_eq!(payload.password, "replacement synthetic password");
+    drop(current);
+    let deletion = dir.path().join("delete.draft");
+    let mut args = vec![
+        "entries",
+        "delete",
+        "--id",
+        &id,
+        "--draft",
+        deletion.to_str().unwrap(),
+    ];
+    args.extend(common);
+    ok(&run(dir.path(), &args, &format!("{PASSWORD}\n")));
+    state.lock().unwrap().forge = true;
+    assert!(!submit(&deletion).status.success());
+    assert_eq!(
+        CheckpointStore::lock(&pin)
+            .unwrap()
+            .head(root.context())
+            .unwrap()
+            .revision,
+        2
+    );
+    assert!(deletion.exists());
+    ok(&submit(&deletion));
+    assert_eq!(
+        CheckpointStore::lock(&pin)
+            .unwrap()
+            .head(root.context())
+            .unwrap()
+            .revision,
+        3
+    );
+    assert_eq!(state.lock().unwrap().writes, 2);
+}
 struct Response {
     status: u16,
     revision: Option<u64>,

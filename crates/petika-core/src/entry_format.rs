@@ -6,6 +6,7 @@ pub mod checkpoint_store;
 pub mod history;
 pub mod index;
 pub mod rotation;
+pub mod transaction;
 pub mod transport;
 use crate::{Error, Result, crypto};
 use base64::{Engine, engine::general_purpose::STANDARD};

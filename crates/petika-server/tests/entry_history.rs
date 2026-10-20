@@ -8,6 +8,220 @@ use petika_server::entry_journal::Journal;
 use std::collections::BTreeMap;
 
 #[test]
+fn entry_git_replication_preserves_blobs_recovers_checkpoints_and_stops_divergence() {
+    use petika_server::{entry_replication::*, entry_transaction::*};
+    use std::process::Command;
+    fn git(path: &std::path::Path, args: &[&str]) -> String {
+        let output = Command::new("git")
+            .arg("--git-dir")
+            .arg(path)
+            .args(args)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).unwrap().trim().to_owned()
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+    let mut journal = Journal::open(dir.path().join("journal")).unwrap();
+    journal
+        .append(
+            None,
+            &"f".repeat(64),
+            &"0".repeat(64),
+            record(&root, 1, String::new()),
+        )
+        .unwrap();
+    let seal = |id: &str, revision| {
+        String::from_utf8(
+            root.seal(
+                &Header {
+                    entry_format_version: 1,
+                    suite: SUITE.into(),
+                    context: root.context().clone(),
+                    kind: Kind::Entry,
+                    object_id: id.into(),
+                    revision,
+                },
+                b"synthetic replication payload",
+            )
+            .unwrap(),
+        )
+        .unwrap()
+    };
+    let ids = ["1".repeat(64), "2".repeat(64)];
+    let payloads = [seal(&ids[0], 1), seal(&ids[1], 1)];
+    let mut entries: Vec<_> = ids
+        .iter()
+        .zip(&payloads)
+        .map(|(id, envelope)| EntryRef {
+            id: id.clone(),
+            folder: String::new(),
+            name: format!("synthetic name {id}"),
+            revision: 1,
+            digest: hex(&digest(envelope.as_bytes())),
+        })
+        .collect();
+    let expected = journal.current().unwrap();
+    journal
+        .transact(
+            &"f".repeat(64),
+            Transaction {
+                version: 1,
+                operation: "1".repeat(64),
+                expected: expected.clone(),
+                object: record_entries(&root, 2, expected.digest, entries.clone(), vec![]),
+                changes: ids
+                    .iter()
+                    .zip(&payloads)
+                    .map(|(id, envelope)| EntryChange::Put {
+                        id: id.clone(),
+                        expected: None,
+                        revision: 1,
+                        envelope: envelope.clone(),
+                    })
+                    .collect(),
+            },
+        )
+        .unwrap();
+    let mirror = dir.path().join("mirror");
+    let repo = mirror.join("repository.git");
+    assert_eq!(mirror_local(&journal, &mirror).unwrap().local.revision, 2);
+    let unchanged = git(
+        &repo,
+        &["rev-parse", &format!("HEAD:entries/{}.json", ids[1])],
+    );
+    let payload = seal(&ids[0], 2);
+    let old = EntryVersion {
+        revision: 1,
+        digest: entries[0].digest.clone(),
+    };
+    entries[0].revision = 2;
+    entries[0].digest = hex(&digest(payload.as_bytes()));
+    let expected = journal.current().unwrap();
+    journal
+        .transact(
+            &"f".repeat(64),
+            Transaction {
+                version: 1,
+                operation: "2".repeat(64),
+                expected: expected.clone(),
+                object: record_entries(&root, 3, expected.digest, entries.clone(), vec![]),
+                changes: vec![EntryChange::Put {
+                    id: ids[0].clone(),
+                    expected: Some(old),
+                    revision: 2,
+                    envelope: payload.clone(),
+                }],
+            },
+        )
+        .unwrap();
+    mirror_local(&journal, &mirror).unwrap();
+    assert_eq!(
+        git(
+            &repo,
+            &["rev-parse", &format!("HEAD:entries/{}.json", ids[1])]
+        ),
+        unchanged
+    );
+    // Git HEAD can be ahead of a missing status after an unacknowledged write.
+    std::fs::remove_file(mirror.join("status.json")).unwrap();
+    mirror_local(&journal, &mirror).unwrap();
+    assert_eq!(git(&repo, &["rev-list", "--count", "HEAD"]), "3");
+    let remote = dir.path().join("remote.git");
+    let config = RemoteConfig {
+        version: 1,
+        remote: remote.to_str().unwrap().into(),
+    };
+    assert!(push_remote(&mirror, &config).is_err());
+    assert_eq!(read_status(&mirror).unwrap().unwrap().state, "error");
+    let expected = journal.current().unwrap();
+    journal
+        .transact(
+            &"f".repeat(64),
+            Transaction {
+                version: 1,
+                operation: "3".repeat(64),
+                expected: expected.clone(),
+                object: record_entries(&root, 4, expected.digest, entries.clone(), vec![]),
+                changes: vec![],
+            },
+        )
+        .unwrap();
+    mirror_local(&journal, &mirror).unwrap();
+    gix::init_bare(&remote).unwrap();
+    let status = push_remote(&mirror, &config).unwrap();
+    assert_eq!(status.remote.unwrap().revision, 4);
+    assert_eq!(status.state, "confirmed");
+    assert_eq!(
+        git(&remote, &["rev-list", "--count", "refs/heads/main"]),
+        "4"
+    );
+    // Recover a complete live view from the exported Git tree using only the root.
+    let head: Head =
+        serde_json::from_str(&git(&remote, &["show", "refs/heads/main:head.json"])).unwrap();
+    let envelope = git(&remote, &["show", "refs/heads/main:index.json"]);
+    let view = VerifiedIndex::open(&root, head, envelope.as_bytes()).unwrap();
+    let mut restored = BTreeMap::new();
+    for id in &ids {
+        restored.insert(
+            id.clone(),
+            git(
+                &remote,
+                &["show", &format!("refs/heads/main:entries/{id}.json")],
+            )
+            .into_bytes(),
+        );
+    }
+    view.verify_objects(&root, &restored).unwrap();
+    // An unrelated remote commit must never be merged, reset or force-pushed.
+    git(&remote, &["symbolic-ref", "HEAD", "refs/heads/main"]);
+    let remote_git = gix::open(&remote).unwrap();
+    let parent = remote_git.head_commit().unwrap();
+    let signature = gix::actor::Signature {
+        name: "Other".into(),
+        email: "other@example.com".into(),
+        time: gix::date::Time::now_utc(),
+    };
+    let mut time = Default::default();
+    let signature = signature.to_ref(&mut time);
+    let external = remote_git
+        .commit_as(
+            signature,
+            signature,
+            "HEAD",
+            "external change",
+            parent.tree_id().unwrap(),
+            [parent.id],
+        )
+        .unwrap()
+        .detach()
+        .to_string();
+    let expected = journal.current().unwrap();
+    journal
+        .transact(
+            &"f".repeat(64),
+            Transaction {
+                version: 1,
+                operation: "4".repeat(64),
+                expected: expected.clone(),
+                object: record_entries(&root, 5, expected.digest, entries, vec![]),
+                changes: vec![],
+            },
+        )
+        .unwrap();
+    mirror_local(&journal, &mirror).unwrap();
+    assert!(push_remote(&mirror, &config).is_err());
+    assert_eq!(read_status(&mirror).unwrap().unwrap().state, "diverged");
+    assert_eq!(git(&remote, &["rev-parse", "refs/heads/main"]), external);
+    assert_eq!(git(&repo, &["rev-list", "--count", "HEAD"]), "5");
+}
+
+#[test]
 fn account_entry_api_binds_access_context_receipts_and_legacy_boundary() {
     use petika_server::{
         accounts::{Accounts, KeyOperation, Membership},
@@ -196,15 +410,20 @@ fn account_entry_api_binds_access_context_receipts_and_legacy_boundary() {
     )
     .unwrap();
     assert!(
-        dispatch(
-            &mut accounts,
-            dir.path(),
-            &reader_token,
-            &group.id,
-            "entry-receipt",
-            receipt_bytes.as_slice()
+        serde_json::from_slice::<petika_core::entry_format::transaction::ReceiptLookup>(
+            &dispatch(
+                &mut accounts,
+                dir.path(),
+                &reader_token,
+                &group.id,
+                "entry-receipt",
+                receipt_bytes.as_slice()
+            )
+            .unwrap()
         )
-        .is_err()
+        .unwrap()
+        .receipt
+        .is_none()
     );
     assert!(
         dispatch(

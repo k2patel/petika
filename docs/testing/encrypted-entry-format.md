@@ -1,11 +1,9 @@
 # Encrypted entry format: acceptance and failure-injection plan
 
-Status: **full scenarios specified, not yet implemented/executed**, 2026-10-18.
-Six [prototype primitive tests](../research/entry-format-prototype.md) now cover
-parts of E01/E04/E07/E08/E09 and K01/K02; they do not complete those scenario rows.
-The [checkpoint/recipient extension](../research/entry-checkpoints.md) adds native
-trust/rotation tests and independent signature/HPKE fixtures. Durable client pins,
-server transactions, migration and complete K-series scenarios remain pending. These are release
+Status: **partially implemented behind experimental gates**. Primitive vectors,
+checkpoint/recipient verification, durable pins, journal transactions, authenticated
+HTTP, CLI drafts/history, and Git replication now have the evidence listed below.
+Migration and complete K/T/M scenario coverage remain pending. These are release
 criteria for the [candidate format](../research/encrypted-entry-format.md), not
 claims about today's snapshot implementation. Existing CLI tests do not satisfy
 these criteria merely because they exercise snapshot CAS or encrypted drafts.
@@ -47,8 +45,25 @@ Additional experimental evidence now covers entry deltas and HTTP/CLI integratio
   covers explicit guard release while a duplicate open file description remains alive,
   preventing spawned children from temporarily prolonging a dropped journal lock.
 
-Encrypted conflict drafts and submission UX, Git replication and migration are still
-outside this coverage. No full T-series row is marked complete.
+Further transaction/replication evidence:
+
+- CLI `encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts` stages
+  ciphertext-only replacements, preserves notes/OTP, loses an acceptance response,
+  rejects a stale second draft, resumes through a receipt without a second write,
+  rejects a forged acknowledgement and reconciles a deletion. Drafts remain on disk.
+- `receipt_absence_must_be_explicit_and_unambiguous` rejects missing, duplicated or
+  unknown receipt lookup fields; explicit null is the only absence response.
+- `entry_git_replication_preserves_blobs_recovers_checkpoints_and_stops_divergence`
+  checks unchanged blob IDs, ordered outage catch-up, missing-checkpoint recovery,
+  decrypted live-object restore from a local bare remote, and an external remote
+  commit. Divergence does not change the remote or prevent further API acceptance.
+- `entry_replication::tests::process_termination_replays_ordered_commits_without_duplicate_revisions`
+  exits a real child after commit publication, repository sync and checkpoint
+  publication; restart replays exactly the accepted logical revisions.
+
+Migration, wrapper/epoch transactions, complete server/recipient restore and physical
+power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
+marked complete solely from these partial synthetic scenarios.
 
 ## Test harness and evidence
 

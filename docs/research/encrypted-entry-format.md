@@ -1,16 +1,20 @@
 # Encrypted entry format and atomic API transactions
 
-Status: **proposed, not implemented or independently reviewed**, 2026-10-18.
-The API-authoritative workflow is agreed; the format below is a review candidate.
-No existing vault, wrapper, API route or Git tree changes as a result of this document.
+Status: **candidate with partial, gated implementations; no independent security review**.
+The API-authoritative workflow is agreed; the full format below remains a review candidate.
+Existing vaults and deployments are not automatically converted or enabled.
 Acceptance criteria are in [the validation plan](../testing/encrypted-entry-format.md).
 An [opt-in core primitive prototype](entry-format-prototype.md) now implements
 strict object headers, entry/index AEAD and an explicit recovery wrapper. The full
-format and migration remain unimplemented; the prototype encoding is experimental.
+format is not release-ready and migration remains unavailable; its encoding is experimental.
 An [identity-authorized checkpoint/recipient extension](entry-checkpoints.md) now
 implements explicit epoch proofs. The [index extension](entry-index.md) adds
 index semantics, adjacent-head continuity and native persisted pins. Client/API
-integration and full history catch-up remain gates.
+integration now includes bounded history, journal transactions, encrypted CLI drafts,
+receipt-confirmed submission and server-only Git replication; see
+[the implementation contract](entry-history-transport.md). Integrated wrapper/epoch
+transactions, migration, complete disaster restore and remaining validation rows
+remain gates.
 
 ## Scope and invariants
 

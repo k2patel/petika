@@ -1,55 +1,9 @@
 //! Public entry preconditions. Names and index semantics remain client-verified.
 use crate::Result;
 use petika_core::entry_format::{Header, Kind, MAX_COUNTER, inspect_envelope, transport::*};
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub const MAX_CHANGES: usize = 256;
-pub const MAX_ENTRY_IDS: usize = 4096;
-pub const MAX_TRANSACTION_BYTES: usize = 12 * 1024 * 1024;
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct EntryVersion {
-    pub revision: u64,
-    pub digest: String,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(tag = "action", rename_all = "lowercase", deny_unknown_fields)]
-pub enum EntryChange {
-    Put {
-        id: String,
-        expected: Option<EntryVersion>,
-        revision: u64,
-        envelope: String,
-    },
-    Delete {
-        id: String,
-        expected: EntryVersion,
-    },
-}
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Transaction {
-    pub version: u32,
-    pub operation: String,
-    pub expected: Cursor,
-    pub object: HistoryObject,
-    pub changes: Vec<EntryChange>,
-}
-impl Transaction {
-    pub fn parse(bytes: &[u8]) -> Result<Self> {
-        if bytes.len() > MAX_TRANSACTION_BYTES {
-            return Err("transaction too large".into());
-        }
-        let transaction: Self = serde_json::from_slice(bytes)?;
-        if transaction.version != 1 {
-            return Err("unsupported transaction".into());
-        }
-        Ok(transaction)
-    }
-}
+pub use petika_core::entry_format::transaction::*;
 // None permanently reserves a deleted ID. Public tombstone revision is retained
 // in committed Delete records; the encrypted index must agree on the client.
 pub(crate) type Entries = BTreeMap<String, Option<EntryVersion>>;

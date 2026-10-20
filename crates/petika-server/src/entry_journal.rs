@@ -23,14 +23,7 @@ pub(crate) fn identifier(value: &str) -> bool {
             .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct Receipt {
-    pub writer: String,
-    pub operation: String,
-    pub request_digest: String,
-    pub accepted: Cursor,
-}
+pub use petika_core::entry_format::transaction::Receipt;
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Record {
@@ -139,6 +132,33 @@ impl Journal {
         self.records
             .last_key_value()
             .map(|(_, (_, r))| r.receipt.accepted.clone())
+    }
+    /// Materialize only one committed logical tree for the server Git writer.
+    pub fn committed_tree(
+        &self,
+        revision: u64,
+    ) -> Result<(HistoryObject, BTreeMap<String, String>)> {
+        if self.uncertain {
+            return Err("uncertain journal root".into());
+        }
+        let record = self
+            .records
+            .get(&revision)
+            .ok_or("missing committed revision")?;
+        let mut objects = BTreeMap::new();
+        for (_, (_, record)) in self.records.range(..=revision) {
+            for change in &record.changes {
+                match change {
+                    EntryChange::Put { id, envelope, .. } => {
+                        objects.insert(id.clone(), envelope.clone());
+                    }
+                    EntryChange::Delete { id, .. } => {
+                        objects.remove(id);
+                    }
+                }
+            }
+        }
+        Ok((record.1.object.clone(), objects))
     }
     pub fn check_context(&self, context: &petika_core::entry_format::Context) -> Result<()> {
         if self.uncertain
@@ -277,15 +297,9 @@ impl Journal {
             return Err("reopen journal after uncertain publication".into());
         }
         validate(&object)?;
-        let request_digest = if changes.is_empty() {
-            hash(&serde_json::to_vec(&(
-                1u32, expected, writer, operation, &object,
-            ))?)
-        } else {
-            hash(&serde_json::to_vec(&(
-                1u32, expected, writer, operation, &object, &changes,
-            ))?)
-        };
+        let request_digest = petika_core::entry_format::transaction::submission_digest(
+            expected, writer, operation, &object, &changes,
+        )?;
         if let Some(receipt) = self.receipt(writer, operation) {
             if receipt.request_digest != request_digest
                 || receipt.accepted != Cursor::from_head(&object.head)?

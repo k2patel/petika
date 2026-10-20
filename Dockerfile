@@ -9,7 +9,12 @@ COPY crates ./crates
 COPY scripts ./scripts
 COPY clients/web ./clients/web
 RUN sh scripts/build_web.sh
-RUN cargo build --release --locked -p petika -p petika-server \
+ARG PETIKA_EXPERIMENTAL_ENTRY_FORMAT=0
+RUN if [ "$PETIKA_EXPERIMENTAL_ENTRY_FORMAT" = 1 ]; then \
+      cargo build --release --locked -p petika -p petika-server --features experimental-entry-format; \
+    elif [ "$PETIKA_EXPERIMENTAL_ENTRY_FORMAT" = 0 ]; then \
+      cargo build --release --locked -p petika -p petika-server; \
+    else exit 1; fi \
     && python3 scripts/check_licenses.py \
     && python3 scripts/third_party_notices.py > /build/THIRD_PARTY_NOTICES.txt
 
@@ -50,7 +55,7 @@ RUN case "$TARGETARCH" in \
     curl -fsSL https://raw.githubusercontent.com/restic/restic/v0.19.1/LICENSE -o /tmp/restic-LICENSE
 
 FROM debian:trixie-slim AS push-runtime
-RUN apt-get update && apt-get install -y --no-install-recommends python3 openssh-client ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends python3 openssh-client git ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=core-runtime /usr/local/bin/ /usr/local/bin/
 COPY --from=core-runtime /usr/share/petika/ /usr/share/petika/
 COPY --from=core-runtime /usr/share/doc/petika/ /usr/share/doc/petika/

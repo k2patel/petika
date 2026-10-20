@@ -52,6 +52,53 @@ impl Drop for Client {
 }
 impl Client {
     #[cfg(feature = "experimental-entry-format")]
+    pub(crate) fn entry_call(
+        &self,
+        collection: &str,
+        action: &str,
+        body: &[u8],
+        response_limit: usize,
+    ) -> Result<Vec<u8>> {
+        if !matches!(
+            action,
+            "entry-object" | "entry-receipt" | "entry-transactions"
+        ) || collection.len() != 64
+            || !collection
+                .bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+        {
+            return Err("Invalid entry route".into());
+        }
+        let auth = Zeroizing::new(format!("Bearer {}", self.token));
+        let mut response = self
+            .agent
+            .post(format!(
+                "{}/v1/collections/{collection}/{action}",
+                self.server
+            ))
+            .header("Authorization", auth.as_str())
+            .header("Content-Type", "application/json")
+            .header("X-Petika-Request", "1")
+            .send(body)?;
+        if response.status().as_u16() != 200 {
+            return Err(format!(
+                "Entry request returned HTTP {}; keep the draft and reconcile its receipt",
+                response.status()
+            )
+            .into());
+        }
+        let mut bytes = Vec::new();
+        response
+            .body_mut()
+            .as_reader()
+            .take(response_limit as u64 + 1)
+            .read_to_end(&mut bytes)?;
+        if bytes.len() > response_limit {
+            return Err("Entry response too large; keep the draft".into());
+        }
+        Ok(bytes)
+    }
+    #[cfg(feature = "experimental-entry-format")]
     pub(crate) fn entry_history(&self, collection: &str, body: &[u8]) -> Result<Vec<u8>> {
         use petika_core::entry_format::transport::{HistoryRequest, MAX_HISTORY_WIRE_BYTES};
         let request = HistoryRequest::parse(body)?;

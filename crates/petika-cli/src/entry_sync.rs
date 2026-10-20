@@ -15,6 +15,16 @@ use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// List IDs and names from the authenticated pinned index.
+    List(crate::entry_edit::StateArgs),
+    /// Decrypt and review an existing draft without revealing passwords.
+    Review(crate::entry_edit::ReviewArgs),
+    /// Stage an encrypted entry create/replacement without submitting it.
+    Put(crate::entry_edit::PutArgs),
+    /// Stage an encrypted deletion; IDs remain permanently tombstoned.
+    Delete(crate::entry_edit::DeleteArgs),
+    /// Confirm/reconcile one existing draft; never rebases or discards it.
+    Submit(crate::entry_edit::SubmitArgs),
     /// Initialize a new local pin using independently confirmed public values.
     Trust {
         #[arg(long)]
@@ -50,12 +60,12 @@ pub enum Command {
         cache: PathBuf,
     },
 }
-fn read_object(path: &Path) -> Result<HistoryObject> {
+pub(crate) fn read_object(path: &Path) -> Result<HistoryObject> {
     let object: HistoryObject = serde_json::from_slice(&StoreFile::lock(path)?.read()?)?;
     object.head.digest()?;
     Ok(object)
 }
-fn cache_object(directory: &Path, object: &HistoryObject) -> Result<()> {
+pub(crate) fn cache_object(directory: &Path, object: &HistoryObject) -> Result<()> {
     let path = directory.join(format!("{}.json", object.head.digest()?));
     let file = StoreFile::lock(path)?;
     let bytes = serde_json::to_vec(object)?;
@@ -68,7 +78,7 @@ fn cache_object(directory: &Path, object: &HistoryObject) -> Result<()> {
     }
     Ok(())
 }
-fn unlock(
+pub(crate) fn unlock(
     recovery: &Path,
     object: &HistoryObject,
     trusted: &TrustedCheckpoint,
@@ -90,6 +100,11 @@ fn unlock(
 }
 pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
     match command {
+        Command::List(args) => return crate::entry_edit::list(session, args, stdin),
+        Command::Review(args) => return crate::entry_edit::review(session, args, stdin),
+        Command::Put(args) => return crate::entry_edit::put(session, args, stdin),
+        Command::Delete(args) => return crate::entry_edit::delete(session, args, stdin),
+        Command::Submit(args) => return crate::entry_edit::submit(session, args, stdin),
         Command::Trust {
             checkpoint,
             checkpoint_digest,

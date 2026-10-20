@@ -1,10 +1,10 @@
 # Experimental history transport contract
 
 Status: core wire contract, durable journal with entry deltas, account-authorized
-HTTP routes, and native CLI index-history sync implemented behind
+HTTP routes, encrypted CLI drafts/submission, index-history sync and ordered Git replication implemented behind
 `experimental-entry-format`. HTTP additionally requires `PETIKA_EXPERIMENTAL_ENTRIES=1`.
-Migration, entry edit/submission CLI, wrapper/epoch changes, entry Git replication,
-and production deployment remain unavailable. Do not populate a fake entry journal
+Migration, wrapper/epoch changes and production deployment remain unavailable.
+Do not populate a fake entry journal
 from whole-vault snapshots: their formats and trust contexts differ.
 
 ## Request and response
@@ -123,14 +123,15 @@ An existing `snapshot.json` rejects entry requests, preventing implicit cutover.
 Conversely, a committed entry root rejects legacy snapshot/delivery requests with
 426 after authorization, including in default server builds. Collection `status`
 advertises `entry-v1`, supported capabilities, runtime gate state and unavailable
-migration/replication. Capability support does not grant write permission.
+migration status, accepted cursor and separate local/remote replication cursors.
+Capability support does not grant write permission.
 
 | Suffix under `/v1/collections/{id}/` | Request | Response |
 | --- | --- | --- |
 | `entry-history` | `HistoryRequest` (4 KiB) | Bounded `HistoryPage` |
 | `entry-object` | `{context,root,id,digest}` (4 KiB) | Exact encrypted envelope |
-| `entry-receipt` | `{context,operation}` (4 KiB) | Current writer's receipt |
-| `entry-transactions` | `{version:1,operation,expected,object,changes}` (12 MiB) | `{receipt,replication:"unavailable"}` |
+| `entry-receipt` | `{context,operation}` (4 KiB) | `{receipt: Receipt or null}` for the current writer |
+| `entry-transactions` | `{version:1,operation,expected,object,changes}` (12 MiB) | `{receipt,replication:"unavailable" or "pending"}` |
 
 `changes` contains at most 256 tagged puts/deletes. A put is
 `{action:"put",id,expected,revision,envelope}`; expected is null for creation or
@@ -148,6 +149,8 @@ is writer-scoped and requires current read access. Non-access validation/storage
 failures use a generic 409 response: preserve drafts and reconcile receipts; no
 rollback or retry under a new operation ID is implied. The server caps request
 reads before buffering them in full. Nothing reports remote Git completion.
+Receipt absence is explicit null; missing/duplicate/unknown fields fail closed.
+The lookup envelope replaces the original experimental naked-receipt response.
 
 ## CLI confirmation and resumable index sync
 
@@ -182,7 +185,93 @@ This command synchronizes authenticated index history only, not entry payloads,
 wrappers, drafts or remote Git state. A retained server journal alone is not a
 complete offsite recovery path.
 
+## Encrypted CLI edits and receipt reconciliation
+
+`entries put` stages a create or replacement using a new opaque ID or an explicit
+existing `--id`. `--name` is required for creation. Replacements fetch the old
+ciphertext under the exact pinned root, authenticate it, and preserve omitted
+username/URL plus existing notes and OTP. A password is read from the hidden prompt
+or the existing stdin mode. `--folder` is an opaque folder ID (empty for root).
+Index validation rejects duplicate paths and invalid folder references before staging.
+`entries delete` stages a tombstone for an explicit live ID. Neither command writes
+to the server. Draft files contain origin/writer bindings and encrypted transaction
+bytes, not decrypted names or entry payloads; existing drafts are never overwritten.
+Choose opaque draft filenames if local filenames are sensitive.
+`entries list` shows IDs/names from the pinned authenticated index. `entries review
+--draft ...` decrypts the staged change's IDs/names without revealing passwords or
+submitting anything. Both use the same anchor/recovery/pin/cache options.
+
+```sh
+petika entries put --name 'Example' --username 'alice' --draft edit.draft \
+  --anchor anchor.json --recovery recovery.json --pin pin.json --cache encrypted-index-cache
+
+petika entries submit --draft edit.draft --confirm \
+  --anchor anchor.json --recovery recovery.json --pin pin.json --cache encrypted-index-cache
+```
+
+Submission requires explicit confirmation and the same server/account/collection.
+For scripted input, `--passphrase-stdin` reads the recovery passphrase and the
+separate `entries put --password-stdin` reads the new entry password.
+It authenticates the candidate index, changed payloads, and the exact relationship
+between encrypted references and public deltas. It queries the scoped receipt first.
+Only explicit absence permits submitting the original operation. Lost responses,
+conflicts, revoked access, malformed acknowledgements and changed local heads retain
+the draft. No ciphertext rebase, automatic reapply, or new-operation retry occurs.
+Sync/refetch first and explicitly stage a new edit when reconciliation is needed.
+
+Acknowledgements must match writer, operation, request digest and candidate cursor;
+the cursor binds epoch, membership and access-set metadata through the head digest.
+The immutable candidate cache is saved before advancing the pin. A local
+`*.accepted.json` receipt is written afterward; repeated submission reconciles the
+same receipt if the server accepted before a lost response or local persistence
+failure. Drafts remain even after acceptance, and should be removed only by explicit
+user housekeeping. API acceptance never announces remote Git completion.
+
+## Ordered server Git replication
+
+When both entry gates are enabled and `PETIKA_GIT_MIRROR` is configured, a server
+worker replays every committed entry revision into the isolated local repository
+`$PETIKA_GIT_MIRROR/{collection}/entries/repository.git`. Each tree contains
+`head.json`, exact `index.json` bytes and live `entries/{opaque-id}.json` envelopes.
+Deleted payloads leave the current tree but remain in older commits. Unchanged entry
+bytes retain their blob IDs. Wrappers, accounts and local client trust are **not**
+included: keep their independent recovery backups.
+
+The worker verifies existing local ancestry and tree contents against the journal,
+flushes Git files/directories before its atomic status checkpoint, and recovers
+commits published before a crash without duplicating logical revisions. It does not
+coalesce or drop accepted revisions. Orphan journal staging never enters Git.
+
+Outbound replication is opt-in per collection through operator-owned mode-0600
+`collections/{id}/entry-git.json`:
+
+```json
+{"version":1,"remote":"ssh://git@git.example.com/recovery/collection.git"}
+```
+
+HTTPS URLs and absolute local bare-repository paths are also supported. Use
+per-collection scoped credentials through the server's SSH agent or Git credential
+helper; URL passwords, interactive prompts, control characters and external Git
+transports are rejected. Provision SSH host trust independently. The worker uses
+branch `main`, polls every five seconds, and runs network commands without holding
+API journal/account/backup locks. API commits remain durable during remote outages.
+Git subprocesses have a 30-second deadline and bounded output reads; errors are
+reported through status without logging remote diagnostics or credentials.
+
+Remote heads must be known accepted local ancestors and cannot regress below the
+last confirmed revision. Pushes use ordinary fast-forward Git push, followed by a
+remote ref check. An unrelated/ahead remote commit stops replication with `diverged`;
+there is no merge, reset, fetch-based reconciliation or force push. API writes can
+continue. `local`, `remote` and `state` in collection status distinguish mirrored,
+confirmed, pending/error and divergent states; the accepted cursor is separate.
+
+Native outbound replication requires Git and SSH/HTTPS tooling on the server.
+The Docker `push-runtime` target includes Git; the minimal default image still does
+not. Experimental container compilation requires the explicit build argument
+`PETIKA_EXPERIMENTAL_ENTRY_FORMAT=1` (default 0), plus the runtime entry gate.
+No container or running deployment was enabled by this implementation.
+
 Remaining release gates include migration/cutover and compatibility scenarios,
-encrypted edit drafts and receipt-confirmed CLI submission, wrapper/epoch
-transactions, ordered Git replication/restore, physical durability/disk-full testing,
-and broader native/WASM interoperability. Default enablement remains off.
+wrapper/epoch transactions and recipient CLI unlock, complete disaster recovery
+including wrappers/accounts, physical durability/disk-full testing, and broader
+native/WASM interoperability. Default enablement remains off.

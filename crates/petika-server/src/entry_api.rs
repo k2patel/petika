@@ -77,12 +77,15 @@ pub fn dispatch(
             }
             "entry-receipt" => {
                 let request: ReceiptRead = serde_json::from_slice(&bytes)?;
+                if !super::entry_journal::identifier(&request.operation) {
+                    return Err("invalid operation ID".into());
+                }
                 bind(&request.context)?;
                 journal.check_context(&request.context)?;
-                let receipt = journal
-                    .receipt(&auth.writer, &request.operation)
-                    .ok_or("receipt unavailable")?;
-                Ok(serde_json::to_vec(&receipt)?)
+                let receipt = journal.receipt(&auth.writer, &request.operation);
+                Ok(serde_json::to_vec(
+                    &petika_core::entry_format::transaction::ReceiptLookup { receipt },
+                )?)
             }
             "entry-transactions" => {
                 let transaction = Transaction::parse(&bytes)?;
