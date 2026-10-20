@@ -1,7 +1,8 @@
 # Experimental history transport contract
 
 Status: core wire contract, native client acceptance adapter and server page builder
-implemented behind `experimental-entry-format`. No HTTP route, per-entry journal,
+implemented behind `experimental-entry-format`. A committed index-history journal
+is now implemented as a storage primitive. No HTTP route, entry payload transaction,
 CLI sync command, migration or production deployment is enabled by this change.
 The existing snapshot API remains unchanged. Do not populate a fake entry journal
 from whole-vault snapshots: their formats and trust contexts differ.
@@ -71,6 +72,41 @@ stale replay, missing records, wrong cursor/context, tampered envelopes, empty
 skipping responses, duplicate fields and size/count limits. CI runs tests and
 Clippy with the feature enabled; default builds have no new endpoint.
 
-Next implementation gate: an isolated committed entry journal with atomic root
-publication and compare-and-swap, then account-authorized HTTP routing and bounded
-CLI transport. No client Git writes or ciphertext merge behavior will be added.
+## Committed index journal
+
+`petika_server::entry_journal::Journal` holds an exclusive root lock for its entire
+lifetime. Opening a second handle fails. Records are immutable, content-addressed
+JSON containing an encrypted index/head, a parent-record address, and a writer-scoped
+operation receipt. Record publication uses file sync, atomic rename, and directory
+sync before the committed root pointer is replaced using the same protocol. Only
+the root's verified ancestry is readable; no directory scan promotes orphan records.
+
+Append compares the complete expected cursor, requires adjacent same-context heads,
+and prohibits access-set or membership changes pending the rotation transaction.
+The journal computes a request digest over the expected cursor, writer, operation
+and candidate index, including exact envelope text. Exact retries return the original
+receipt; changed submissions under the same writer/operation are rejected. Historical
+records and receipts are retained, bounded by 1,024 records and 64 MiB of serialized
+committed records. Quota exhaustion rejects the next append, without pruning.
+Each individual record also inherits the storage layer's 16 MiB serialized limit.
+This small in-memory journal is experimental, not an unlimited production backend.
+
+After an uncertain root publication the handle refuses further writes/history reads;
+drop and reopen it to reconcile the root before retrying. Metadata accessors on that
+handle may still describe its last known state and must not be used as reconciliation.
+The storage directory and its ancestors must be provisioned durably before use.
+Process-exit tests cover all eight write/sync/rename/directory-sync boundaries for
+record and root publication. These demonstrate process-crash recovery, not physical
+power-loss behavior or all T08/T09 release criteria. Restart also verifies every
+reachable record hash, parent link and receipt before serving history. Missing or
+corrupt committed ancestors fail closed.
+
+This primitive does **not** accept entry payload deltas, validate encrypted index
+contents, persist wrapper changes, authorize accounts, or replicate Git. Its opaque
+index bytes must still be decrypted/authenticated by clients. No snapshot is imported
+or converted. It is not yet the complete entry transaction backend required by T01–T14.
+
+Next gate: entry-object storage and public delta/precondition validation under the
+same atomic publication, followed by account-authorized HTTP routing and bounded
+CLI transport. Migration and confirmation/recovery UX remain pending. No client Git
+writes or ciphertext merge behavior will be added.

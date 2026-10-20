@@ -80,6 +80,19 @@ impl StoreFile {
     pub fn write(&self, bytes: &[u8], create: bool) -> Result<()> {
         self.write_checked(bytes, create, |_| Ok(()))
     }
+    /// Experimental persistence harness. Called after temporary-file write,
+    /// file sync, atomic replacement and parent-directory sync, respectively.
+    /// Errors after replacement represent an uncertain durable outcome.
+    #[cfg(feature = "experimental-entry-format")]
+    #[doc(hidden)]
+    pub fn write_observed(
+        &self,
+        bytes: &[u8],
+        create: bool,
+        boundary: impl FnMut(u8) -> Result<()>,
+    ) -> Result<()> {
+        self.write_checked(bytes, create, boundary)
+    }
     // The callback permits deterministic boundary failures in tests without
     // global failpoints or changing the on-disk protocol.
     fn write_checked(

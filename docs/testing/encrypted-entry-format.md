@@ -10,6 +10,24 @@ criteria for the [candidate format](../research/encrypted-entry-format.md), not
 claims about today's snapshot implementation. Existing CLI tests do not satisfy
 these criteria merely because they exercise snapshot CAS or encrypted drafts.
 
+The experimental committed **index-history** journal now has the following
+automated evidence, without completing the full transaction scenarios below:
+
+- `entry_journal::tests::process_termination_never_promotes_orphan_records` exits
+  a child process at eight record/root persistence boundaries and reopens the
+  journal. This covers index-record process crashes, not physical power loss or
+  complete entry payload transactions (T08).
+- `retries_conflicts_lock_and_recovery` and
+  `changed_request_quota_and_uncertain_publication_fail_closed` cover index CAS,
+  exact retries, changed operation requests, scoped receipts, exclusive handles,
+  quota rejection and reconciliation after an uncertain root publication.
+- `corrupted_committed_ancestry_is_never_replaced_by_staging` rejects corrupt
+  reachable records; `committed_journal_pages_authenticate_after_restart` verifies
+  real encrypted index history through the bounded transport after restart.
+
+HTTP authorization, entry deltas, encrypted conflict drafts, Git replication and
+migration are outside this primitive's coverage. No T-series row is marked complete.
+
 ## Test harness and evidence
 
 Use synthetic secrets only. Build deterministic fixtures with fixed test-only

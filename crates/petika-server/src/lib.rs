@@ -1,6 +1,8 @@
 //! Experimental ciphertext snapshot storage and Git mirroring for API collections.
 #[cfg(feature = "experimental-entry-format")]
 pub mod entry_history;
+#[cfg(feature = "experimental-entry-format")]
+pub mod entry_journal;
 use petika_core::{StoreFile, validate_envelope};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

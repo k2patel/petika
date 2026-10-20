@@ -4,6 +4,7 @@ use petika_core::{
     identity::{CheckpointTarget, UnlockedIdentity},
 };
 use petika_server::entry_history::build_page;
+use petika_server::entry_journal::Journal;
 use std::collections::BTreeMap;
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -52,6 +53,51 @@ fn record(root: &RootKey, revision: u64, parent: String) -> HistoryObject {
         },
         envelope: String::from_utf8(envelope).unwrap(),
     }
+}
+#[test]
+fn committed_journal_pages_authenticate_after_restart() {
+    let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let mut journal = Journal::open(dir.path().into()).unwrap();
+    let first = record(&root, 1, String::new());
+    let previous =
+        VerifiedIndex::open(&root, first.head.clone(), first.envelope.as_bytes()).unwrap();
+    for revision in 1..=3 {
+        let expected = journal.current();
+        let object = if revision == 1 {
+            first.clone()
+        } else {
+            record(
+                &root,
+                revision,
+                expected
+                    .as_ref()
+                    .map(|c| c.digest.clone())
+                    .unwrap_or_default(),
+            )
+        };
+        journal
+            .append(
+                expected.as_ref(),
+                &"f".repeat(64),
+                &format!("{revision:064x}"),
+                object,
+            )
+            .unwrap();
+    }
+    drop(journal);
+    let journal = Journal::open(dir.path().into()).unwrap();
+    let request = HistoryRequest {
+        version: 1,
+        context: root.context().clone(),
+        after: Cursor::from_head(&first.head).unwrap(),
+        target: None,
+        limit: 32,
+    };
+    let bytes = journal.history(&request).unwrap();
+    let page = HistoryPage::parse(&bytes, &request).unwrap();
+    assert_eq!(page.items.len(), 2);
+    page.verify(&request, &root, &previous).unwrap();
 }
 #[test]
 fn server_pages_round_trip_to_durable_client_and_keep_a_fixed_target() {
