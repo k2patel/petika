@@ -65,6 +65,8 @@ fn live_show_uses_api_without_reading_or_writing_local_vault() {
                         Err(error) => panic!("{error}"),
                     }
                 };
+                // Windows can inherit the listener's nonblocking mode.
+                socket.set_nonblocking(false).unwrap();
                 socket
                     .set_read_timeout(Some(std::time::Duration::from_secs(5)))
                     .unwrap();
