@@ -2,7 +2,7 @@
 //! implied by these types. Same-epoch wrapper replacement is deliberately absent.
 use super::{
     checkpoint::{Transition, TrustedCheckpoint, WrapperRef, wrapper_set_digest},
-    index::VerifiedIndex,
+    index::{Head, VerifiedIndex},
     rotation::{RotationSnapshot, VerifiedRotation},
     transaction::{EntryVersion, MAX_CHANGES, MAX_TRANSACTION_BYTES, Receipt},
     transport::{Cursor, HistoryObject},
@@ -122,6 +122,84 @@ impl EpochTransaction {
         }
         Ok(())
     }
+    /// Ciphertext-only validation against a previously pinned authority/head.
+    /// Does not authenticate plaintext semantics, account access or recipients.
+    pub fn verify_public(
+        &self,
+        trusted: &TrustedCheckpoint,
+        head: &Head,
+    ) -> Result<TrustedCheckpoint> {
+        self.validate_limits()?;
+        let cp = trusted.checkpoint();
+        if Cursor::from_head(head)? != self.expected
+            || head.context != cp.context
+            || head.suite != cp.data_suite
+            || head.revision < cp.head_revision
+            || head.membership_generation != cp.membership_generation
+            || head.wrapper_set_digest != cp.wrapper_set_digest
+            || (head.revision == cp.head_revision && head.digest()? != cp.head_digest)
+        {
+            return Err(Error::Authentication);
+        }
+        let next = trusted.advance(&self.transition, head.revision)?;
+        let cp = next.checkpoint();
+        let candidate = &self.object.head;
+        if head.revision.checked_add(1) != Some(candidate.revision)
+            || candidate.parent_digest != head.digest()?
+            || candidate.context != cp.context
+            || candidate.suite != cp.data_suite
+            || candidate.revision != cp.head_revision
+            || candidate.digest()? != cp.head_digest
+            || candidate.membership_generation != cp.membership_generation
+            || candidate.wrapper_set_digest != cp.wrapper_set_digest
+            || hex(&digest(self.object.envelope.as_bytes())) != candidate.index_digest
+        {
+            return Err(Error::Authentication);
+        }
+        inspect_envelope(
+            self.object.envelope.as_bytes(),
+            &Header {
+                entry_format_version: 1,
+                suite: candidate.suite.clone(),
+                context: candidate.context.clone(),
+                kind: Kind::Index,
+                object_id: String::new(),
+                revision: candidate.revision,
+            },
+        )?;
+        let refs = self
+            .wrappers
+            .iter()
+            .map(|w| w.reference(&next))
+            .collect::<Result<Vec<_>>>()?;
+        if wrapper_set_digest(&refs)? != cp.wrapper_set_digest {
+            return Err(Error::Authentication);
+        }
+        let mut seen = BTreeSet::new();
+        for entry in &self.entries {
+            if !id(&entry.id)
+                || !seen.insert(&entry.id)
+                || !counter(entry.expected.revision)
+                || !id(&entry.expected.digest)
+                || entry.expected.revision.checked_add(1) != Some(entry.revision)
+                || entry.revision > candidate.revision
+            {
+                return Err(Error::Format);
+            }
+            inspect_envelope(
+                entry.envelope.as_bytes(),
+                &Header {
+                    entry_format_version: 1,
+                    suite: candidate.suite.clone(),
+                    context: candidate.context.clone(),
+                    kind: Kind::Entry,
+                    object_id: entry.id.clone(),
+                    revision: entry.revision,
+                },
+            )?;
+        }
+        Ok(next)
+    }
     /// Caller supplies its already authenticated current index and old objects.
     /// Public wrapper checks establish format/binding/signatures, not successful
     /// recovery or recipient decryption; those require the respective credentials.
@@ -131,20 +209,10 @@ impl EpochTransaction {
         old: RotationSnapshot<'_>,
         new_root: &RootKey,
     ) -> Result<VerifiedIndex> {
-        self.validate_limits()?;
         trusted.validate_root(old.root)?;
         old.index.validate_root(old.root)?;
-        let cp = trusted.checkpoint();
         let head = old.index.head();
-        if Cursor::from_head(head)? != self.expected
-            || head.revision < cp.head_revision
-            || head.membership_generation != cp.membership_generation
-            || head.wrapper_set_digest != cp.wrapper_set_digest
-            || (head.revision == cp.head_revision && head.digest()? != cp.head_digest)
-        {
-            return Err(Error::Authentication);
-        }
-        let next_trust = trusted.advance(&self.transition, head.revision)?;
+        let next_trust = self.verify_public(trusted, head)?;
         next_trust.validate_root(new_root)?;
         let next = VerifiedIndex::open(
             new_root,
@@ -152,14 +220,6 @@ impl EpochTransaction {
             self.object.envelope.as_bytes(),
         )?;
         next.matches_checkpoint(&next_trust)?;
-        let refs = self
-            .wrappers
-            .iter()
-            .map(|w| w.reference(&next_trust))
-            .collect::<Result<Vec<_>>>()?;
-        if wrapper_set_digest(&refs)? != next.head().wrapper_set_digest {
-            return Err(Error::Authentication);
-        }
         let mut seen = BTreeSet::new();
         let mut objects = BTreeMap::new();
         for entry in &self.entries {

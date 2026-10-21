@@ -8,6 +8,8 @@ use petika_core::{
 };
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, path::PathBuf};
+mod epochs;
+pub use epochs::EpochState;
 
 // Experimental retained-history quotas; no automatic pruning of receipts.
 const MAX_RECORDS: usize = 1024;
@@ -33,6 +35,8 @@ struct Record {
     receipt: Receipt,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     changes: Vec<EntryChange>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    epoch: Option<epochs::EpochRecord>,
 }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -99,8 +103,11 @@ impl Journal {
                 {
                     return Err("invalid committed receipt".into());
                 }
-                if let Some(child) = &child {
-                    adjacent(&record.object, child)?;
+                if let Some(child) = &child
+                    && (record.object.head.revision.checked_add(1) != Some(child.head.revision)
+                        || child.head.parent_digest != record.object.head.digest()?)
+                {
+                    return Err("discontinuous committed ancestry".into());
                 }
                 if journal
                     .receipt(&record.receipt.writer, &record.receipt.operation)
@@ -122,9 +129,12 @@ impl Journal {
                 }
             }
         }
+        let mut previous = None;
+        let mut trusted = None;
         for (_, record) in journal.records.values() {
-            journal.entries =
-                entry_transaction::apply(&journal.entries, &record.object, &record.changes)?;
+            (journal.entries, trusted) =
+                epochs::validate_record(record, previous, trusted.as_ref(), &journal.entries)?;
+            previous = Some(&record.object);
         }
         Ok(journal)
     }
@@ -182,7 +192,15 @@ impl Journal {
         if self.uncertain {
             return Err("reopen journal after uncertain publication".into());
         }
-        let current = self.current().ok_or("uninitialized journal")?;
+        // Stop at the last committed head in this exact epoch. The caller then
+        // fetches the separately authenticated adjacent transition, never skips it.
+        let current = self
+            .records
+            .values()
+            .rev()
+            .find(|(_, r)| r.object.head.context == request.context)
+            .map(|(_, r)| r.receipt.accepted.clone())
+            .ok_or("unknown history epoch")?;
         Ok(crate::entry_history::build_page(
             request,
             current,
@@ -333,7 +351,17 @@ impl Journal {
             object,
             receipt: receipt.clone(),
             changes,
+            epoch: None,
         };
+        self.publish(record, entries, &mut boundary)
+    }
+    fn publish(
+        &mut self,
+        record: Record,
+        entries: Entries,
+        mut boundary: impl FnMut(u8) -> petika_core::Result<()>,
+    ) -> Result<Receipt> {
+        let receipt = record.receipt.clone();
         let bytes = serde_json::to_vec(&record)?;
         let retained_bytes = self
             .retained_bytes

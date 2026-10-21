@@ -3,7 +3,8 @@
 Status: core wire contract, durable journal with entry deltas, account-authorized
 HTTP routes, encrypted CLI drafts/submission, index-history sync and ordered Git replication implemented behind
 `experimental-entry-format`. HTTP additionally requires `PETIKA_EXPERIMENTAL_ENTRIES=1`.
-Migration, wrapper/epoch changes and production deployment remain unavailable.
+Anchored journals additionally support atomic epoch rotation and adjacent transition
+retrieval. Migration, CLI rotation and production deployment remain unavailable.
 Do not populate a fake entry journal
 from whole-vault snapshots: their formats and trust contexts differ.
 
@@ -84,8 +85,9 @@ there is no separately published entry-object directory. Record publication uses
 sync before the committed root pointer is replaced using the same protocol. Only
 the root's verified ancestry is readable; no directory scan promotes orphan records.
 
-Append compares the complete expected cursor, requires adjacent same-context heads,
-and prohibits access-set or membership changes pending the rotation transaction.
+Ordinary append compares the complete expected cursor, requires adjacent same-context
+heads, and prohibits access-set or membership changes. The separate anchored rotation
+transaction below is the only supported path for those changes.
 The journal computes a request digest over the expected cursor, writer, operation
 and candidate index plus entry deltas, including exact envelope text. Empty-delta
 requests retain the original index-only digest encoding for existing journal records.
@@ -132,6 +134,8 @@ Capability support does not grant write permission.
 | `entry-object` | `{context,root,id,digest}` (4 KiB) | Exact encrypted envelope |
 | `entry-receipt` | `{context,operation}` (4 KiB) | `{receipt: Receipt or null}` for the current writer |
 | `entry-transactions` | `{version:1,operation,expected,object,changes}` (12 MiB) | `{receipt,replication:"unavailable" or "pending"}` |
+| `entry-rotations` | Complete `EpochTransaction` (12 MiB) | Same receipt/replication envelope |
+| `entry-epoch` | `{context,after}` (4 KiB) | `{transaction: EpochTransaction or null}` |
 
 `changes` contains at most 256 tagged puts/deletes. A put is
 `{action:"put",id,expected,revision,envelope}`; expected is null for creation or
@@ -143,8 +147,9 @@ matching authenticated index tombstone with final entry revision = prior + 1.
 
 The server checks access before reading journal state, then acquires the journal
 lock, authenticates again, and holds the account database lock through the operation.
-Writes require edit permission, unchanged membership generation, and no required
-group rotation. Context must bind both deployment and collection. Receipt lookup
+Ordinary writes require edit permission and unchanged membership generation. A required
+group rotation must be satisfied by an anchored committed epoch at the current generation.
+Context must bind both deployment and collection. Receipt lookup
 is writer-scoped and requires current read access. Non-access validation/storage
 failures use a generic 409 response: preserve drafts and reconcile receipts; no
 rollback or retry under a new operation ID is implied. The server caps request
@@ -234,8 +239,10 @@ worker replays every committed entry revision into the isolated local repository
 `$PETIKA_GIT_MIRROR/{collection}/entries/repository.git`. Each tree contains
 `head.json`, exact `index.json` bytes and live `entries/{opaque-id}.json` envelopes.
 Deleted payloads leave the current tree but remain in older commits. Unchanged entry
-bytes retain their blob IDs. Wrappers, accounts and local client trust are **not**
-included: keep their independent recovery backups.
+bytes retain their blob IDs. Anchored journals also include `epoch.json` containing
+the signed checkpoint and exact active wrapper bytes, plus `transition.json` at
+each rotation commit. Unanchored journals still have no stored wrappers. Accounts
+and local client trust are **not** included: keep their independent recovery backups.
 
 The worker verifies existing local ancestry and tree contents against the journal,
 flushes Git files/directories before its atomic status checkpoint, and recovers
@@ -272,7 +279,7 @@ not. Experimental container compilation requires the explicit build argument
 No container or running deployment was enabled by this implementation.
 
 Remaining release gates include migration/cutover and compatibility scenarios,
-wrapper/epoch transactions, complete disaster recovery
+CLI rotation and authority handover, complete disaster recovery
 including wrappers/accounts, physical durability/disk-full testing, and broader
 native/WASM interoperability. Default enablement remains off.
 
@@ -305,16 +312,15 @@ Use owner-only files and retain encrypted identity/recovery backups separately.
 With `--passphrase-stdin`, the first line is the identity passphrase instead of the
 recovery passphrase; `put --password-stdin` still reads the entry password afterward.
 No plaintext keys are written to configuration. Existing handoffs remain tied to
-their checkpoint; integrated epoch/wrapper transactions and automatic new-epoch
+their checkpoint; CLI epoch advancement and automatic new-epoch
 recipient provisioning remain pending. Tests exercise recipient and recovery
 editing, stale conflicts, lost acknowledgements, wrong identity/passphrase and
 explicit rejection of mixed unlock modes.
 
-## Complete epoch transaction verification (core only)
+## Complete epoch transaction verification
 
 `entry_format::epoch_transaction::EpochTransaction` defines the bounded candidate
-for a future atomic rotation endpoint. It is not accepted by the current HTTP
-routes or journal. A candidate contains version 1, an operation ID, the exact
+for the gated atomic rotation endpoint. A candidate contains version 1, an operation ID, the exact
 expected cursor, the authority-signed transition, the next encrypted index/head,
 every live entry's replacement ciphertext and prior revision/digest, and the exact
 bytes of every active recovery or recipient wrapper. The total wire limit is
@@ -344,9 +350,45 @@ reconcile server acceptance. A valid bundle is not evidence that the API accepte
 it. The new receipt digest domain binds the writer and complete candidate, including
 wrapper bytes and transition, and cannot be confused with an ordinary edit receipt.
 
-Still required before exposing rotation: persist the authority checkpoint and
-wrapper bytes in the same committed server record as entries; enforce current
-account/recipient permissions and membership under the write lock; provide bounded
-epoch-transition retrieval and receipt reconciliation across epochs; update Git
-trees and restore; then add CLI staging/submission and process-exit tests. Current
-routes continue rejecting wrapper/epoch changes, and deployment stays disabled.
+## Anchored journal rotation and authorization
+
+`Journal::initialize_anchored` is an offline/provisioning primitive for a new empty
+journal, requiring an independently confirmed `TrustedCheckpoint`, matching index,
+initial entries and exact wrappers. It has no HTTP endpoint. It cannot attach an
+authority to an existing unanchored journal or convert snapshots. A future migration
+workflow must validate the source and candidate before invoking it.
+
+`entry-rotations` requires current edit access and the currently enrolled identity
+of the persisted designated authority as its authenticated writer. This first server
+profile does not support authority handover. Every enabled current collection member
+must have exactly one recipient package matching their enrolled identity version and
+fingerprint; missing identities, duplicate deliveries and revoked recipients reject
+the transaction. Optional recovery wrappers remain explicit and use the fixed supported
+profile. The authority is responsible for verifying recovery availability before submission.
+
+The account database remains locked through journal publication. A changed generation
+rejects a staged request. Rotation does not separately clear the legacy account
+`rotation_required` flag: subsequent entry writes require the committed epoch's
+generation to match current membership. This avoids a two-file publication window.
+Removing or replacing the designated authority itself stops rotation until a separate
+reviewed handover/recovery workflow exists; administrator status cannot bypass it.
+
+One immutable record contains the transition, complete new wrapper set, encrypted
+index, every live entry replacement and scoped receipt. The existing record/root sync
+protocol publishes them together. Restart verifies the authority chain, exact live-entry
+coverage, envelope contexts, preconditions and request digests before serving data.
+The server cannot decrypt or prove plaintext preservation; clients must run the complete
+unlocked verifier before accepting the result. A valid signature alone is insufficient.
+
+History pages stop at the last committed head of the requested epoch. After verifying
+that history, fetch `entry-epoch` with its exact final cursor. It returns only an adjacent
+rotation, or explicit null; null is not a global freshness claim. The response is bounded
+by the 12 MiB transaction cap plus its JSON envelope (32 bytes of allowance). Historical
+entry reads bind context to their exact root. Receipt lookup accepts retained old contexts
+so a lost rotation acknowledgement can be reconciled, but always rechecks current access
+and remains writer-scoped. No revoked reader can use retained context to regain access.
+
+Remaining work includes CLI staging/submission and transition acceptance, authority
+handover, migration, full account/client restore, and physical durability testing. The
+process-exit tests cover all eight publication boundaries for rotation; they do not
+simulate power loss. Experimental compilation/runtime gates and deployment stay unchanged.

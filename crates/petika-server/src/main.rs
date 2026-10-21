@@ -354,7 +354,12 @@ fn run() -> Result<()> {
             #[cfg(feature = "experimental-entry-format")]
             if matches!(
                 action,
-                "entry-history" | "entry-object" | "entry-receipt" | "entry-transactions"
+                "entry-history"
+                    | "entry-object"
+                    | "entry-receipt"
+                    | "entry-transactions"
+                    | "entry-rotations"
+                    | "entry-epoch"
             ) {
                 let mut request = request;
                 if env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() != Ok("1") {
@@ -372,7 +377,12 @@ fn run() -> Result<()> {
                 }
                 let session = web::session(&request);
                 if accounts
-                    .with_entry_access(&session, id, action == "entry-transactions", |_| Ok(()))
+                    .with_entry_access(
+                        &session,
+                        id,
+                        matches!(action, "entry-transactions" | "entry-rotations"),
+                        |_| Ok(()),
+                    )
                     .is_err()
                 {
                     respond(
@@ -393,7 +403,7 @@ fn run() -> Result<()> {
                 );
                 match result {
                     Ok(mut bytes) => {
-                        if action == "entry-transactions"
+                        if matches!(action, "entry-transactions" | "entry-rotations")
                             && mirror.is_some()
                             && let Ok(mut value) =
                                 serde_json::from_slice::<serde_json::Value>(&bytes)
@@ -484,7 +494,7 @@ fn run() -> Result<()> {
                         "accepted": accepted,
                         "experimental": true,
                         "entry_api_enabled": cfg!(feature = "experimental-entry-format") && env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1"),
-                        "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions"],
+                        "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions", "anchored-epoch-rotation", "adjacent-epoch-read"],
                         "migration": "unavailable",
                         "replication": replication
                     }).to_string(), None);

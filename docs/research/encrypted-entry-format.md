@@ -12,8 +12,9 @@ implements explicit epoch proofs. The [index extension](entry-index.md) adds
 index semantics, adjacent-head continuity and native persisted pins. Client/API
 integration now includes bounded history, journal transactions, encrypted CLI drafts,
 receipt-confirmed submission and server-only Git replication; see
-[the implementation contract](entry-history-transport.md). Integrated wrapper/epoch
-transactions, migration, complete disaster restore and remaining validation rows
+[the implementation contract](entry-history-transport.md). Anchored journals now support
+atomic wrapper/epoch transactions with account authorization; CLI rotation,
+authority handover, migration, complete disaster restore and remaining validation rows
 remain gates.
 
 ## Scope and invariants

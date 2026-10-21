@@ -59,6 +59,8 @@ pub struct EntryAuthorization {
     pub writer: String,
     pub deployment_id: String,
     pub membership_generation: u64,
+    pub rotation_required: bool,
+    pub recipient_identities: BTreeMap<String, Option<petika_core::identity::PublicIdentity>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -191,8 +193,8 @@ impl Accounts {
         if !db.users.iter().any(|u| u.id == user.id && !u.disabled) {
             return Err("collection access denied".into());
         }
-        let membership_generation = if user.id == id {
-            1
+        let (membership_generation, rotation_required, recipients) = if user.id == id {
+            (1, false, vec![user.id.clone()])
         } else {
             let group = db
                 .groups
@@ -203,16 +205,35 @@ impl Accounts {
                 .members
                 .iter()
                 .any(|m| m.user_id == user.id && (!write || m.edit))
-                || (write && group.rotation_required)
             {
                 return Err("collection access denied".into());
             }
-            group.membership_generation
+            (
+                group.membership_generation,
+                group.rotation_required,
+                group
+                    .members
+                    .iter()
+                    .filter(|m| db.users.iter().any(|u| u.id == m.user_id && !u.disabled))
+                    .map(|m| m.user_id.clone())
+                    .collect(),
+            )
         };
+        // Rotation satisfaction is checked against the committed journal epoch,
+        // not by clearing a flag in a second, independently published database.
+        let recipient_identities = recipients
+            .into_iter()
+            .map(|id| {
+                let identity = db.identities.get(&id).map(|s| s.public_identity.clone());
+                (id, identity)
+            })
+            .collect();
         run(EntryAuthorization {
             writer: user.id,
             deployment_id: db.deployment_id,
             membership_generation,
+            rotation_required,
+            recipient_identities,
         })
     }
     pub fn new(path: PathBuf) -> Self {

@@ -5,7 +5,11 @@ use crate::{
     entry_journal::Journal,
     entry_transaction::{MAX_TRANSACTION_BYTES, Transaction},
 };
-use petika_core::entry_format::{Context, transport::*};
+use petika_core::entry_format::{
+    Context,
+    epoch_transaction::{EpochTransaction, EpochWrapper},
+    transport::*,
+};
 use serde::Deserialize;
 use std::{io::Read, path::Path};
 
@@ -23,6 +27,12 @@ struct ReceiptRead {
     context: Context,
     operation: String,
 }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EpochRead {
+    context: Context,
+    after: Cursor,
+}
 
 /// Returned bytes are bounded before callers form an HTTP response. Account
 /// denial and missing journals use the same generic error at the HTTP boundary.
@@ -37,7 +47,7 @@ pub fn dispatch(
     if !super::entry_journal::identifier(collection) {
         return Err("collection access denied".into());
     }
-    let write = action == "entry-transactions";
+    let write = matches!(action, "entry-transactions" | "entry-rotations");
     // Check access before observing even existence/lock state of the journal.
     accounts.with_entry_access(token, collection, write, |_| Ok(()))?;
     let limit = if write { MAX_TRANSACTION_BYTES } else { 4096 };
@@ -70,7 +80,7 @@ pub fn dispatch(
             "entry-object" => {
                 let request: EntryRead = serde_json::from_slice(&bytes)?;
                 bind(&request.context)?;
-                journal.check_context(&request.context)?;
+                journal.check_root_context(&request.context, &request.root)?;
                 Ok(journal
                     .entry(&request.root, &request.id, &request.digest)?
                     .into_bytes())
@@ -81,7 +91,7 @@ pub fn dispatch(
                     return Err("invalid operation ID".into());
                 }
                 bind(&request.context)?;
-                journal.check_context(&request.context)?;
+                journal.check_retained_context(&request.context)?;
                 let receipt = journal.receipt(&auth.writer, &request.operation);
                 Ok(serde_json::to_vec(
                     &petika_core::entry_format::transaction::ReceiptLookup { receipt },
@@ -93,9 +103,71 @@ pub fn dispatch(
                 if transaction.object.head.membership_generation != auth.membership_generation {
                     return Err("membership changed; preserve draft and refetch".into());
                 }
+                if auth.rotation_required
+                    && journal
+                        .epoch_state(&journal.current().ok_or("missing entry root")?)?
+                        .is_none_or(|s| {
+                            s.checkpoint.membership_generation != auth.membership_generation
+                        })
+                {
+                    return Err("membership requires an accepted epoch rotation".into());
+                }
                 let receipt = journal.transact(&auth.writer, transaction)?;
                 Ok(serde_json::to_vec(
                     &serde_json::json!({"receipt": receipt, "replication": "unavailable"}),
+                )?)
+            }
+            "entry-rotations" => {
+                let transaction = EpochTransaction::parse(&bytes)?;
+                bind(&transaction.object.head.context)?;
+                let state = journal
+                    .epoch_state(&transaction.expected)?
+                    .ok_or("rotation requires anchored journal")?;
+                let authority = &state.checkpoint.authority;
+                if auth.writer != authority.user_id
+                    || auth
+                        .recipient_identities
+                        .get(&auth.writer)
+                        .and_then(Option::as_ref)
+                        != Some(authority)
+                    || transaction.transition.next.authority != *authority
+                    || transaction.object.head.membership_generation != auth.membership_generation
+                {
+                    return Err("rotation authority or membership mismatch".into());
+                }
+                let mut delivered = std::collections::BTreeSet::new();
+                for wrapper in &transaction.wrappers {
+                    if let EpochWrapper::Recipient(bytes) = wrapper {
+                        let package =
+                            petika_core::identity::EntryKeyPackage::parse(bytes.as_bytes())?;
+                        let recipient = auth
+                            .recipient_identities
+                            .get(&package.recipient_user_id)
+                            .and_then(Option::as_ref)
+                            .ok_or("recipient unavailable or revoked")?;
+                        if package.recipient_identity_version != recipient.identity_version
+                            || package.recipient_fingerprint != recipient.fingerprint
+                            || !delivered.insert(package.recipient_user_id)
+                        {
+                            return Err("recipient identity mismatch or duplicate delivery".into());
+                        }
+                    }
+                }
+                if delivered.len() != auth.recipient_identities.len() {
+                    return Err("rotation must deliver to every current recipient".into());
+                }
+                let receipt = journal.rotate(&auth.writer, transaction)?;
+                Ok(serde_json::to_vec(
+                    &serde_json::json!({"receipt":receipt,"replication":"unavailable"}),
+                )?)
+            }
+            "entry-epoch" => {
+                let request: EpochRead = serde_json::from_slice(&bytes)?;
+                bind(&request.context)?;
+                journal.check_root_context(&request.context, &request.after)?;
+                let transaction = journal.next_epoch(&request.after)?;
+                Ok(serde_json::to_vec(
+                    &serde_json::json!({"transaction":transaction}),
                 )?)
             }
             _ => Err("unknown entry action".into()),

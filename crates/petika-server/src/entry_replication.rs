@@ -89,6 +89,20 @@ fn tree(
         gix::object::tree::EntryKind::Blob,
         git.write_blob(object.envelope.as_bytes())?,
     )?;
+    if let Some(state) = journal.epoch_state(&cursor)? {
+        tree.upsert(
+            "epoch.json",
+            gix::object::tree::EntryKind::Blob,
+            git.write_blob(serde_json::to_vec(&state)?)?,
+        )?;
+        if let Some(transition) = journal.epoch_transition(&cursor)? {
+            tree.upsert(
+                "transition.json",
+                gix::object::tree::EntryKind::Blob,
+                git.write_blob(serde_json::to_vec(&transition)?)?,
+            )?;
+        }
+    }
     for (id, envelope) in objects {
         tree.upsert(
             format!("entries/{id}.json"),

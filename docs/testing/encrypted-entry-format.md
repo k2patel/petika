@@ -61,7 +61,7 @@ Further transaction/replication evidence:
   exits a real child after commit publication, repository sync and checkpoint
   publication; restart replays exactly the accepted logical revisions.
 
-Core epoch bundle evidence (not yet server rotation support):
+Core epoch bundle evidence:
 
 - `complete_epoch_bundle_unlocks_and_advances_exact_local_pin` verifies complete
   nonempty and empty-vault rotations, recovery and recipient unlock, old-key
@@ -77,7 +77,28 @@ Core epoch bundle evidence (not yet server rotation support):
   wire/count limits and complete writer/request/cursor receipt binding, including
   exact wrapper bytes and separation from ordinary edit receipts.
 
-Migration, server wrapper/epoch transactions, complete server/recipient restore and physical
+Server epoch evidence:
+
+- `epoch_journal_replays_complete_rotation_and_preserves_old_reads` checks complete
+  replacement, missing data/wrapper rejection, operation retry, old exact-root reads,
+  epoch-bounded history and adjacent transition retrieval after restart. Unanchored
+  journals cannot rotate.
+- `epoch_process_exit_never_exposes_mixed_keys_wrappers_or_entries` exits child
+  processes at all eight publication boundaries and verifies that checkpoint,
+  wrappers, live ciphertexts and receipt recover together; retry accepts only once.
+- `epoch_uncertain_publication_requires_reopen_and_receipt_tampering_is_rejected`
+  rejects use of an uncertain handle, reconciles after reopening, and rejects a
+  rewritten receipt even when its enclosing record hash is recomputed.
+- `epoch_api_enforces_authority_roster_membership_and_reconciles_after_revocation`
+  checks read-only and non-authority editor denial, missing/revoked delivery rejection, stale membership,
+  old-context receipt reconciliation, revoked-reader denial and subsequent ordinary
+  writes using the committed membership generation without clearing account flags.
+- `epoch_git_tree_contains_exact_wrappers_and_signed_transition` checks exact active
+  wrappers/checkpoints and transition bytes in ordered local Git history.
+- The real HTTP test also checks rotation/transition runtime gates, authentication
+  and same-origin request headers. No initializer or migration route is exposed.
+
+Migration, CLI rotation, authority handover, complete server/recipient restore and physical
 power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 

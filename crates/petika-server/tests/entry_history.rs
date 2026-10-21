@@ -666,6 +666,23 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
             }),
             "{response}"
         );
+        for action in ["entry-rotations", "entry-epoch"] {
+            let response = request(
+                address,
+                "POST",
+                &format!("{prefix}/{action}"),
+                &headers,
+                "{}",
+            );
+            assert!(
+                response.starts_with(if enabled {
+                    "HTTP/1.1 409"
+                } else {
+                    "HTTP/1.1 404"
+                }),
+                "{response}"
+            );
+        }
         let legacy = request(address, "GET", &format!("{prefix}/snapshot"), &headers, "");
         assert!(legacy.starts_with("HTTP/1.1 426"));
         let delivery = request(
@@ -684,6 +701,18 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
                 format!("Cookie: {cookie}\r\nContent-Type: application/json\r\n"),
                 format!("{headers}Sec-Fetch-Site: cross-site\r\n"),
             ] {
+                for action in ["entry-rotations", "entry-epoch"] {
+                    assert!(
+                        request(
+                            address,
+                            "POST",
+                            &format!("{prefix}/{action}"),
+                            &invalid,
+                            "{}"
+                        )
+                        .starts_with("HTTP/1.1 403")
+                    );
+                }
                 assert!(
                     request(
                         address,
