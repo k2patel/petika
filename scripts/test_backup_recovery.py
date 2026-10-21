@@ -132,7 +132,7 @@ class BackupSafety(unittest.TestCase):
 
 
 class Server:
-    def __init__(self, home, provision=False, overrides=None):
+    def __init__(self, home, provision=False, overrides=None, mirror=True):
         self.home = home
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
@@ -140,10 +140,12 @@ class Server:
         self.origin = f'http://127.0.0.1:{port}'
         self.opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))
         env = {k: v for k, v in os.environ.items() if not k.startswith('PETIKA_')}
-        env.update(PETIKA_DATA_DIR=str(home / 'data'), PETIKA_GIT_MIRROR=str(home / 'mirror'),
+        env.update(PETIKA_DATA_DIR=str(home / 'data'),
                    PETIKA_TOKEN_FILE=str(home / 'config/token'), PETIKA_LISTEN=f'127.0.0.1:{port}',
                    PETIKA_COOKIE_SECURE='false', PETIKA_SETUP_MODE='auto' if provision else 'disabled',
                    PETIKA_WEB_DIR=str(ROOT / 'clients/web'))
+        if mirror:
+            env['PETIKA_GIT_MIRROR'] = str(home / 'mirror')
         if provision:
             env.update(PETIKA_ADMIN_USERNAME='alice', PETIKA_ADMIN_PASSWORD_FILE=str(home / 'config/password'))
         env.update(overrides or {})

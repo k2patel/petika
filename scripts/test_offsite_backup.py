@@ -68,7 +68,10 @@ class OffsiteTests(unittest.TestCase):
             (home/'config').mkdir(parents=True)
             (home/'config/token').write_text(secrets.token_hex(32))
             (home/'config/password').write_text(PASSWORD)
-            server = Server(home, provision=True)
+            # This test exercises API-exported backups, not Git history. A mirror
+            # pass holds the backup gate and can deliberately return HTTP 503 to
+            # concurrent API requests. Git recovery has its own drill coverage.
+            server = Server(home, provision=True, mirror=False)
             try:
                 client = root/'client'
                 account = server.login(client)
