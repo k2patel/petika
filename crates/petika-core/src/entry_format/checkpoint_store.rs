@@ -139,4 +139,25 @@ impl CheckpointStore {
         }
         self.file.write(&bytes, create)
     }
+
+    /// Accept a complete epoch candidate only against the exact locked local
+    /// head. The caller must durably cache the candidate ciphertexts/wrappers
+    /// before this call and reconcile API acceptance separately. A valid bundle
+    /// is not a server receipt or a proof of remote Git replication.
+    pub fn accept_epoch_transaction(
+        &self,
+        transaction: &super::epoch_transaction::EpochTransaction,
+        old: super::rotation::RotationSnapshot<'_>,
+        new_root: &RootKey,
+    ) -> Result<VerifiedIndex> {
+        let record = self.read(&old.index.head().context)?;
+        if record.head != *old.index.head() {
+            return Err(Error::Authentication);
+        }
+        let trusted = self.trusted(&record.head.context)?;
+        let next = transaction.verify(&trusted, old, new_root)?;
+        let next_trust = trusted.advance(&transaction.transition, record.head.revision)?;
+        self.save(&next_trust, &next, false)?;
+        Ok(next)
+    }
 }

@@ -61,7 +61,23 @@ Further transaction/replication evidence:
   exits a real child after commit publication, repository sync and checkpoint
   publication; restart replays exactly the accepted logical revisions.
 
-Migration, wrapper/epoch transactions, complete server/recipient restore and physical
+Core epoch bundle evidence (not yet server rotation support):
+
+- `complete_epoch_bundle_unlocks_and_advances_exact_local_pin` verifies complete
+  nonempty and empty-vault rotations, recovery and recipient unlock, old-key
+  rejection of new ciphertext, continued access to old ciphertext, pin restart
+  and replay rejection.
+- `incomplete_or_substituted_epoch_bundle_leaves_pin_unchanged` rejects missing or
+  duplicate entries/wrappers, wrong preconditions, old ciphertext, changed cursors,
+  bad transitions and a stale candidate after local progress, preserving pin bytes.
+- `signed_rotation_cannot_hide_content_changes_or_invalid_wrappers` rejects even
+  authority-signed candidates containing renamed entries, changed passwords,
+  weakened recovery parameters or inconsistent recipient issuer metadata.
+- `epoch_wire_and_receipts_bind_the_complete_request` checks strict parsing,
+  wire/count limits and complete writer/request/cursor receipt binding, including
+  exact wrapper bytes and separation from ordinary edit receipts.
+
+Migration, server wrapper/epoch transactions, complete server/recipient restore and physical
 power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 

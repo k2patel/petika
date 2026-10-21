@@ -41,6 +41,24 @@ fn domain(label: &[u8], header: &[u8]) -> Vec<u8> {
     bytes
 }
 impl EntryKeyPackage {
+    /// Verify public delivery metadata and the designated checkpoint authority's
+    /// signature. This does not prove recipient possession or decrypt the payload.
+    pub fn verify_checkpoint(&self, checkpoint: &Checkpoint) -> Result<()> {
+        checkpoint.verify()?;
+        let issuer = &checkpoint.authority;
+        if self.context != checkpoint.context
+            || self.data_suite != checkpoint.data_suite
+            || self.profile != checkpoint.delivery_profile
+            || self.root_commitment != checkpoint.root_commitment
+            || self.membership_generation != checkpoint.membership_generation
+            || self.issuer_user_id != issuer.user_id
+            || self.issuer_identity_version != issuer.identity_version
+            || self.issuer_fingerprint != issuer.fingerprint
+        {
+            return Err(Error::Authentication);
+        }
+        crate::entry_format::checkpoint::verify(issuer, &self.message()?, &self.signature)
+    }
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         if bytes.len() > MAX_BYTES {
             return Err(Error::Format);

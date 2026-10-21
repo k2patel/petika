@@ -3,6 +3,7 @@
 pub mod checkpoint;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod checkpoint_store;
+pub mod epoch_transaction;
 pub mod history;
 pub mod index;
 pub mod rotation;

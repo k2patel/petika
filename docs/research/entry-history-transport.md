@@ -162,7 +162,7 @@ It does not establish global freshness, prove absence of forks, or perform migra
 Recovery-wrapper passphrases remain local. Unlock checks the pinned root commitment
 and requires the exact recovery wrapper in the authenticated active wrapper set;
 another valid wrapper for the same key is not a fallback. Recipient-wrapper CLI
-unlock is pending.
+unlock is also available through the explicit handoff mode described below.
 
 ```sh
 petika entries trust --checkpoint checkpoint.json \
@@ -309,3 +309,44 @@ their checkpoint; integrated epoch/wrapper transactions and automatic new-epoch
 recipient provisioning remain pending. Tests exercise recipient and recovery
 editing, stale conflicts, lost acknowledgements, wrong identity/passphrase and
 explicit rejection of mixed unlock modes.
+
+## Complete epoch transaction verification (core only)
+
+`entry_format::epoch_transaction::EpochTransaction` defines the bounded candidate
+for a future atomic rotation endpoint. It is not accepted by the current HTTP
+routes or journal. A candidate contains version 1, an operation ID, the exact
+expected cursor, the authority-signed transition, the next encrypted index/head,
+every live entry's replacement ciphertext and prior revision/digest, and the exact
+bytes of every active recovery or recipient wrapper. The total wire limit is
+12 MiB, with at most 256 live entries and 1,000 wrappers. Larger rotations must
+fail rather than split into partially visible commits; staged large-vault rotation
+needs a separate protocol.
+
+The unlocked verifier checks the old trusted checkpoint and authenticated head,
+the signed adjacent-epoch transition, the fresh root commitment, and exact wrapper
+coverage. Every live entry must advance once and decrypt to identical bytes;
+folders, names and tombstones must survive unchanged. An ordinary edit cannot be
+hidden inside rotation. Recovery wrappers must use the existing fixed Argon2id
+profile. Recipient packages must match the new checkpoint's profile, membership,
+root and designated authority signature. No same-epoch wrapper-set replacement or
+automatic delivery-profile change is introduced.
+
+Wrapper hashes cover exact serialized bytes, including whitespace. Public wrapper
+validation cannot prove that a recipient can decrypt its package or that a recovery
+passphrase is available. Provisioning must still exercise the intended unlock paths
+with their credentials. The authority must independently check the allowed recipient
+set; this core verifier has no account database or revocation policy.
+
+`CheckpointStore::accept_epoch_transaction` verifies the complete bundle against
+the locked local head before atomically replacing the checkpoint/head pin. Callers
+must durably cache the candidate ciphertexts and wrappers first and separately
+reconcile server acceptance. A valid bundle is not evidence that the API accepted
+it. The new receipt digest domain binds the writer and complete candidate, including
+wrapper bytes and transition, and cannot be confused with an ordinary edit receipt.
+
+Still required before exposing rotation: persist the authority checkpoint and
+wrapper bytes in the same committed server record as entries; enforce current
+account/recipient permissions and membership under the write lock; provide bounded
+epoch-transition retrieval and receipt reconciliation across epochs; update Git
+trees and restore; then add CLI staging/submission and process-exit tests. Current
+routes continue rejecting wrapper/epoch changes, and deployment stays disabled.
