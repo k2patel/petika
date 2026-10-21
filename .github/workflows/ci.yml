@@ -111,7 +111,8 @@ jobs:
 
   web:
     name: Web UI and provisioning
-    runs-on: ubuntu-latest
+    # Keep the browser OS compatible with the pinned Playwright release.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: Install Rust browser toolchain

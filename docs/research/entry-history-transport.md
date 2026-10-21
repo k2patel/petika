@@ -272,6 +272,40 @@ not. Experimental container compilation requires the explicit build argument
 No container or running deployment was enabled by this implementation.
 
 Remaining release gates include migration/cutover and compatibility scenarios,
-wrapper/epoch transactions and recipient CLI unlock, complete disaster recovery
+wrapper/epoch transactions, complete disaster recovery
 including wrappers/accounts, physical durability/disk-full testing, and broader
 native/WASM interoperability. Default enablement remains off.
+
+## Recipient identity unlock in the experimental CLI
+
+All `entries` commands now accept exactly one unlock mode: `--recovery FILE`, or
+`--handoff FILE --recipient-identity FILE`. The latter prompts locally for the
+identity bundle's passphrase. It never falls back to the recovery wrapper. These
+explicit flags do not currently inherit the top-level `--identity-file` setting.
+
+The handoff must match the already confirmed checkpoint exactly. Its issuer must
+be a verified contact in the protected local identity, and its recipient must
+match that identity. Package and active-wrapper checks run before exposing the
+index. The identity file stays exclusively locked through opening, contact checks
+and resealing; changed-contact suspensions are saved even on unlock rejection.
+This path requires identity backup version 2; use the existing keys workflow to
+upgrade older identity bundles with backup preservation first.
+
+For initial trust, independently confirm the checkpoint digest and authority
+fingerprint as before. The handoff file does not automatically confirm either.
+The same recipient arguments work for trust, sync, list, review, put, delete and
+submit, for example:
+
+```sh
+petika entries list --anchor anchor.json --pin pin.json --cache encrypted-index-cache \
+  --handoff recipient-handoff.json --recipient-identity identity.json
+```
+
+Use owner-only files and retain encrypted identity/recovery backups separately.
+With `--passphrase-stdin`, the first line is the identity passphrase instead of the
+recovery passphrase; `put --password-stdin` still reads the entry password afterward.
+No plaintext keys are written to configuration. Existing handoffs remain tied to
+their checkpoint; integrated epoch/wrapper transactions and automatic new-epoch
+recipient provisioning remain pending. Tests exercise recipient and recovery
+editing, stale conflicts, lost acknowledgements, wrong identity/passphrase and
+explicit rejection of mixed unlock modes.

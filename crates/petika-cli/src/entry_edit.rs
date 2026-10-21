@@ -18,8 +18,8 @@ pub struct StateArgs {
     pub collection: String,
     #[arg(long)]
     pub anchor: PathBuf,
-    #[arg(long)]
-    pub recovery: PathBuf,
+    #[command(flatten)]
+    pub unlock: crate::entry_sync::UnlockArgs,
     #[arg(long)]
     pub pin: PathBuf,
     #[arg(long)]
@@ -99,7 +99,7 @@ fn load(args: &StateArgs, stdin: bool) -> Result<(CheckpointStore, RootKey, Veri
         return Err("Pinned cache mismatch; do not reset trust".into());
     }
     let trusted = store.trusted(&head.context)?;
-    let (root, index) = unlock(&args.recovery, &object, &trusted, stdin)?;
+    let (root, index) = unlock(&args.unlock, &object, &trusted, stdin)?;
     Ok((store, root, index))
 }
 fn client(

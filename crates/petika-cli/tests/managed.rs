@@ -244,6 +244,15 @@ struct Request {
 #[cfg(feature = "experimental-entry-format")]
 #[test]
 fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
+    entry_draft_workflow(false);
+}
+#[cfg(feature = "experimental-entry-format")]
+#[test]
+fn recipient_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
+    entry_draft_workflow(true);
+}
+#[cfg(feature = "experimental-entry-format")]
+fn entry_draft_workflow(recipient_unlock: bool) {
     use petika_core::{
         entry_format::{
             checkpoint::*, checkpoint_store::CheckpointStore, index::*, transaction::*,
@@ -257,10 +266,29 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
     let recovery_bytes = root.wrap_recovery(PASSWORD).unwrap();
     let wrapper: Value = serde_json::from_slice(&recovery_bytes).unwrap();
     let hex = |bytes: &[u8]| bytes.iter().map(|b| format!("{b:02x}")).collect::<String>();
-    let wrappers = vec![WrapperRef {
+    let mut wrappers = vec![WrapperRef {
         wrapper_id: wrapper["wrapper_id"].as_str().unwrap().into(),
         digest: hex(&digest(&recovery_bytes)),
     }];
+    let mut authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
+    let mut recipient = UnlockedIdentity::generate(&"a".repeat(64), &"2".repeat(64), 1).unwrap();
+    let public = recipient.public_identity();
+    authority
+        .verify_contact(&public.user_id, public, &public.fingerprint, None)
+        .unwrap();
+    let public = authority.public_identity();
+    recipient
+        .verify_contact(&public.user_id, public, &public.fingerprint, None)
+        .unwrap();
+    let package = authority
+        .create_entry_key_package(
+            &root,
+            recipient.public_identity(),
+            1,
+            DeliveryProfile::Standard,
+        )
+        .unwrap();
+    wrappers.push(package.reference().unwrap());
     let id = "1".repeat(64);
     let original = Entry {
         username: "original-user".into(),
@@ -331,7 +359,6 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
         },
         envelope,
     };
-    let authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
     let checkpoint = authority
         .sign_entry_checkpoint(
             &root,
@@ -350,6 +377,27 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
         &checkpoint.authority.fingerprint,
     )
     .unwrap();
+    let handoff_path = dir.path().join("handoff.json");
+    let identity_path = dir.path().join("recipient.json");
+    let verified =
+        VerifiedIndex::open(&root, initial.head.clone(), initial.envelope.as_bytes()).unwrap();
+    let handoff = authority
+        .prepare_entry_handoff(
+            &trusted,
+            &verified,
+            recipient.public_identity(),
+            &serde_json::to_vec(&package).unwrap(),
+            &wrappers,
+        )
+        .unwrap();
+    StoreFile::lock(&handoff_path)
+        .unwrap()
+        .write(&serde_json::to_vec(&handoff).unwrap(), true)
+        .unwrap();
+    StoreFile::lock(&identity_path)
+        .unwrap()
+        .write(&recipient.seal(PASSWORD).unwrap(), true)
+        .unwrap();
     let pin = dir.path().join("pin.json");
     let anchor = dir.path().join("anchor.json");
     let recovery = dir.path().join("recovery.json");
@@ -474,16 +522,53 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
         Some(response(json!({"receipt":ack,"replication":"pending"})))
     });
     api.session(dir.path());
-    let common = [
+    let mut common = vec![
         "--anchor",
         anchor.to_str().unwrap(),
-        "--recovery",
-        recovery.to_str().unwrap(),
         "--pin",
         pin.to_str().unwrap(),
         "--cache",
         cache.to_str().unwrap(),
     ];
+    if recipient_unlock {
+        common.extend([
+            "--handoff",
+            handoff_path.to_str().unwrap(),
+            "--recipient-identity",
+            identity_path.to_str().unwrap(),
+        ]);
+    } else {
+        common.extend(["--recovery", recovery.to_str().unwrap()]);
+    }
+    if recipient_unlock {
+        let mut args = vec!["entries", "list"];
+        args.extend(common.iter().copied());
+        let saved_identity = std::fs::read(&identity_path).unwrap();
+        let saved_pin = std::fs::read(&pin).unwrap();
+        assert!(
+            !run(dir.path(), &args, "wrong identity passphrase\n")
+                .status
+                .success()
+        );
+        assert_eq!(std::fs::read(&identity_path).unwrap(), saved_identity);
+        let stranger = UnlockedIdentity::generate(&"a".repeat(64), &"3".repeat(64), 1).unwrap();
+        StoreFile::lock(&identity_path)
+            .unwrap()
+            .write(&stranger.seal(PASSWORD).unwrap(), false)
+            .unwrap();
+        assert!(
+            !run(dir.path(), &args, &format!("{PASSWORD}\n"))
+                .status
+                .success()
+        );
+        assert_eq!(std::fs::read(&pin).unwrap(), saved_pin);
+        StoreFile::lock(&identity_path)
+            .unwrap()
+            .write(&saved_identity, false)
+            .unwrap();
+        args.extend(["--recovery", recovery.to_str().unwrap()]);
+        assert!(!run(dir.path(), &args, "").status.success());
+    }
     let one = dir.path().join("one.draft");
     let two = dir.path().join("two.draft");
     for draft in [&one, &two] {
@@ -496,7 +581,7 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
             "--draft",
             draft.to_str().unwrap(),
         ];
-        args.extend(common);
+        args.extend(common.iter().copied());
         ok(&run(
             dir.path(),
             &args,
@@ -510,7 +595,7 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
         );
     }
     let mut review = vec!["entries", "review", "--draft", one.to_str().unwrap()];
-    review.extend(common);
+    review.extend(common.iter().copied());
     let reviewed = run(dir.path(), &review, &format!("{PASSWORD}\n"));
     ok(&reviewed);
     assert!(String::from_utf8_lossy(&reviewed.stdout).contains("Original name"));
@@ -523,7 +608,7 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
             "--draft",
             draft.to_str().unwrap(),
         ];
-        args.extend(common);
+        args.extend(common.iter().copied());
         run(dir.path(), &args, &format!("{PASSWORD}\n"))
     };
     assert!(!submit(&one).status.success());
@@ -577,7 +662,7 @@ fn encrypted_entry_drafts_reconcile_lost_receipts_and_reject_conflicts() {
         "--draft",
         deletion.to_str().unwrap(),
     ];
-    args.extend(common);
+    args.extend(common.iter().copied());
     ok(&run(dir.path(), &args, &format!("{PASSWORD}\n")));
     state.lock().unwrap().forge = true;
     assert!(!submit(&deletion).status.success());

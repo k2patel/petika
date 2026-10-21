@@ -13,6 +13,24 @@ use petika_core::{
 };
 use std::path::{Path, PathBuf};
 
+#[derive(clap::Args)]
+#[group(multiple = true)]
+pub struct UnlockArgs {
+    /// Explicit recovery-wrapper unlock; never an automatic fallback.
+    #[arg(long, required_unless_present = "handoff", conflicts_with = "handoff")]
+    pub recovery: Option<PathBuf>,
+    /// Active recipient handoff for the already confirmed checkpoint.
+    #[arg(
+        long,
+        requires = "recipient_identity",
+        required_unless_present = "recovery"
+    )]
+    pub handoff: Option<PathBuf>,
+    /// Protected local identity bundle; unlocks locally with its own passphrase.
+    #[arg(long, requires = "handoff")]
+    pub recipient_identity: Option<PathBuf>,
+}
+
 #[derive(Subcommand)]
 pub enum Command {
     /// List IDs and names from the authenticated pinned index.
@@ -38,8 +56,8 @@ pub enum Command {
         confirm: bool,
         #[arg(long)]
         index: PathBuf,
-        #[arg(long)]
-        recovery: PathBuf,
+        #[command(flatten)]
+        unlock: UnlockArgs,
         #[arg(long)]
         pin: PathBuf,
         #[arg(long)]
@@ -52,8 +70,8 @@ pub enum Command {
         /// Original confirmed index supplies context; resume uses cached pinned head.
         #[arg(long)]
         anchor: PathBuf,
-        #[arg(long)]
-        recovery: PathBuf,
+        #[command(flatten)]
+        unlock: UnlockArgs,
         #[arg(long)]
         pin: PathBuf,
         #[arg(long)]
@@ -79,11 +97,60 @@ pub(crate) fn cache_object(directory: &Path, object: &HistoryObject) -> Result<(
     Ok(())
 }
 pub(crate) fn unlock(
-    recovery: &Path,
+    args: &UnlockArgs,
     object: &HistoryObject,
     trusted: &TrustedCheckpoint,
     stdin: bool,
 ) -> Result<(RootKey, VerifiedIndex)> {
+    if let Some(handoff_path) = &args.handoff {
+        let handoff =
+            petika_core::identity::EntryHandoff::parse(&StoreFile::lock(handoff_path)?.read()?)?;
+        if handoff.checkpoint.digest()? != trusted.checkpoint().digest()? {
+            return Err("Recipient handoff differs from confirmed checkpoint; no automatic trust replacement".into());
+        }
+        let path = args
+            .recipient_identity
+            .as_ref()
+            .ok_or("Recipient identity is required")?;
+        // Keep the file locked across unlock, contact checks and resealing so a
+        // concurrent process cannot overwrite a changed/suspended contact pin.
+        let file = StoreFile::lock(path)?;
+        let bytes = file.read()?;
+        let backup: serde_json::Value = serde_json::from_slice(&bytes)?;
+        let fingerprint = backup["public_identity"]["fingerprint"]
+            .as_str()
+            .ok_or("Invalid local identity")?;
+        // Do not silently migrate old identity bundles in this new path.
+        if backup["backup_version"].as_u64() != Some(2) {
+            return Err(
+                "Update the identity bundle with the keys workflow before recipient entry unlock"
+                    .into(),
+            );
+        }
+        let passphrase = crate::secret("Identity unlock passphrase (local only): ", stdin)?;
+        let mut identity =
+            petika_core::identity::UnlockedIdentity::open(&bytes, &passphrase, fingerprint)?;
+        let result = identity.open_entry_key_package(
+            handoff.package.as_bytes(),
+            &handoff.checkpoint.authority,
+            trusted,
+            &handoff.wrappers,
+        );
+        // Persist contact suspension even when opening the package fails.
+        file.write(&identity.seal(&passphrase)?, false)?;
+        let root = result?;
+        let verified = VerifiedIndex::open(&root, object.head.clone(), object.envelope.as_bytes())?;
+        if petika_core::entry_format::checkpoint::wrapper_set_digest(&verified.index().wrappers)?
+            != trusted.checkpoint().wrapper_set_digest
+        {
+            return Err("Active wrapper set differs from checkpoint".into());
+        }
+        return Ok((root, verified));
+    }
+    let recovery = args
+        .recovery
+        .as_ref()
+        .ok_or("Choose recovery or recipient unlock")?;
     let passphrase = crate::secret("Entry recovery passphrase (local only): ", stdin)?;
     let bytes = StoreFile::lock(recovery)?.read()?;
     let root = RootKey::open_recovery(&object.head.context, &passphrase, &bytes)?;
@@ -111,7 +178,7 @@ pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
             authority_fingerprint,
             confirm,
             index,
-            recovery,
+            unlock: unlock_args,
             pin,
             cache,
         } => {
@@ -122,7 +189,7 @@ pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
             let cp: Checkpoint = serde_json::from_slice(&StoreFile::lock(checkpoint)?.read()?)?;
             let trusted =
                 TrustedCheckpoint::bootstrap(cp, checkpoint_digest, authority_fingerprint)?;
-            let (_, verified) = unlock(recovery, &object, &trusted, stdin)?;
+            let (_, verified) = unlock(unlock_args, &object, &trusted, stdin)?;
             verified.matches_checkpoint(&trusted)?;
             let store = CheckpointStore::lock(pin)?;
             // Cache first. A crash before pin creation leaves harmless ciphertext;
@@ -136,7 +203,7 @@ pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
         Command::Sync {
             collection,
             anchor,
-            recovery,
+            unlock: unlock_args,
             pin,
             cache,
         } => {
@@ -149,7 +216,7 @@ pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
                 return Err("Pinned cache mismatch; reconcile without resetting trust".into());
             }
             let trusted = store.trusted(&object.head.context)?;
-            let (root, mut previous) = unlock(recovery, &object, &trusted, stdin)?;
+            let (root, mut previous) = unlock(unlock_args, &object, &trusted, stdin)?;
             let client = account::client(session)?;
             let id = account::collection(&client, collection, false)?;
             if id != head.context.collection_id {

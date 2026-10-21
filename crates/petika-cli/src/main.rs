@@ -70,7 +70,7 @@ enum Command {
     #[cfg(feature = "experimental-entry-format")]
     Entries {
         #[command(subcommand)]
-        command: entry_sync::Command,
+        command: Box<entry_sync::Command>,
     },
     /// Enroll, verify, deliver, and rotate recipient access.
     Keys {
