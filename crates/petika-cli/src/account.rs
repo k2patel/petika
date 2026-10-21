@@ -61,7 +61,12 @@ impl Client {
     ) -> Result<Vec<u8>> {
         if !matches!(
             action,
-            "entry-object" | "entry-receipt" | "entry-transactions"
+            "entry-object"
+                | "entry-receipt"
+                | "entry-transactions"
+                | "entry-rotations"
+                | "entry-epoch"
+                | "entry-roster"
         ) || collection.len() != 64
             || !collection
                 .bytes()

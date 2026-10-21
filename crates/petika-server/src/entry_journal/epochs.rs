@@ -10,12 +10,7 @@ use petika_core::entry_format::{
 #[cfg(test)]
 mod tests;
 
-#[derive(Clone, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct EpochState {
-    pub checkpoint: Checkpoint,
-    pub wrappers: Vec<EpochWrapper>,
-}
+pub use petika_core::entry_format::epoch_transaction::EpochState;
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub(super) enum EpochRecord {

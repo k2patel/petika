@@ -9,6 +9,22 @@ use petika_core::{
 use std::collections::BTreeMap;
 
 const PASSWORD: &str = "synthetic recovery passphrase";
+#[test]
+fn epoch_lookup_requires_explicit_transaction_or_null() {
+    assert!(
+        serde_json::from_str::<EpochLookup>(r#"{"transaction":null}"#)
+            .unwrap()
+            .transaction
+            .is_none()
+    );
+    for invalid in [
+        r#"{}"#,
+        r#"{"transaction":null,"transaction":null}"#,
+        r#"{"transaction":null,"extra":1}"#,
+    ] {
+        assert!(serde_json::from_str::<EpochLookup>(invalid).is_err());
+    }
+}
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }

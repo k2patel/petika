@@ -72,6 +72,20 @@ pub fn dispatch(
             Ok(())
         };
         match action {
+            "entry-roster" => {
+                #[derive(Deserialize)]
+                #[serde(deny_unknown_fields)]
+                struct Empty {}
+                let _: Empty = serde_json::from_slice(&bytes)?;
+                if auth.recipient_identities.len() > petika_core::entry_format::checkpoint::MAX_WRAPPERS {
+                    return Err("recipient quota exceeded".into());
+                }
+                let recipients = auth.recipient_identities.values().cloned()
+                    .collect::<Option<Vec<_>>>().ok_or("recipient identity not enrolled")?;
+                let bytes = serde_json::to_vec(&serde_json::json!({"version":1,"membership_generation":auth.membership_generation,"recipients":recipients}))?;
+                if bytes.len() > 4 * 1024 * 1024 { return Err("recipient roster too large".into()); }
+                Ok(bytes)
+            }
             "entry-history" => {
                 let request = HistoryRequest::parse(&bytes)?;
                 bind(&request.context)?;
@@ -166,9 +180,7 @@ pub fn dispatch(
                 bind(&request.context)?;
                 journal.check_root_context(&request.context, &request.after)?;
                 let transaction = journal.next_epoch(&request.after)?;
-                Ok(serde_json::to_vec(
-                    &serde_json::json!({"transaction":transaction}),
-                )?)
+                Ok(serde_json::to_vec(&petika_core::entry_format::epoch_transaction::EpochLookup { transaction })?)
             }
             _ => Err("unknown entry action".into()),
         }

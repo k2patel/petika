@@ -4,7 +4,8 @@ Status: core wire contract, durable journal with entry deltas, account-authorize
 HTTP routes, encrypted CLI drafts/submission, index-history sync and ordered Git replication implemented behind
 `experimental-entry-format`. HTTP additionally requires `PETIKA_EXPERIMENTAL_ENTRIES=1`.
 Anchored journals additionally support atomic epoch rotation and adjacent transition
-retrieval. Migration, CLI rotation and production deployment remain unavailable.
+retrieval, encrypted CLI rotation drafts and explicit client epoch advancement.
+Migration and production deployment remain unavailable.
 Do not populate a fake entry journal
 from whole-vault snapshots: their formats and trust contexts differ.
 
@@ -136,6 +137,7 @@ Capability support does not grant write permission.
 | `entry-transactions` | `{version:1,operation,expected,object,changes}` (12 MiB) | `{receipt,replication:"unavailable" or "pending"}` |
 | `entry-rotations` | Complete `EpochTransaction` (12 MiB) | Same receipt/replication envelope |
 | `entry-epoch` | `{context,after}` (4 KiB) | `{transaction: EpochTransaction or null}` |
+| `entry-roster` | `{}` (4 KiB) | `{version:1,membership_generation,recipients}` (4 MiB) |
 
 `changes` contains at most 256 tagged puts/deletes. A put is
 `{action:"put",id,expected,revision,envelope}`; expected is null for creation or
@@ -279,14 +281,16 @@ not. Experimental container compilation requires the explicit build argument
 No container or running deployment was enabled by this implementation.
 
 Remaining release gates include migration/cutover and compatibility scenarios,
-CLI rotation and authority handover, complete disaster recovery
+authority handover, complete disaster recovery
 including wrappers/accounts, physical durability/disk-full testing, and broader
 native/WASM interoperability. Default enablement remains off.
 
 ## Recipient identity unlock in the experimental CLI
 
-All `entries` commands now accept exactly one unlock mode: `--recovery FILE`, or
-`--handoff FILE --recipient-identity FILE`. The latter prompts locally for the
+All `entries` commands accept exactly one unlock mode: `--recovery FILE`, or
+`--recipient-identity FILE` with an optional `--handoff FILE`. Without a handoff,
+the identity path uses the exact checkpoint wrapper set cached by a verified
+rotation. The latter mode prompts locally for the
 identity bundle's passphrase. It never falls back to the recovery wrapper. These
 explicit flags do not currently inherit the top-level `--identity-file` setting.
 
@@ -312,8 +316,8 @@ Use owner-only files and retain encrypted identity/recovery backups separately.
 With `--passphrase-stdin`, the first line is the identity passphrase instead of the
 recovery passphrase; `put --password-stdin` still reads the entry password afterward.
 No plaintext keys are written to configuration. Existing handoffs remain tied to
-their checkpoint; CLI epoch advancement and automatic new-epoch
-recipient provisioning remain pending. Tests exercise recipient and recovery
+their checkpoint; after rotation, omit the old handoff and use the cached new
+wrapper set. Tests exercise recipient and recovery
 editing, stale conflicts, lost acknowledgements, wrong identity/passphrase and
 explicit rejection of mixed unlock modes.
 
@@ -388,7 +392,89 @@ entry reads bind context to their exact root. Receipt lookup accepts retained ol
 so a lost rotation acknowledgement can be reconciled, but always rechecks current access
 and remains writer-scoped. No revoked reader can use retained context to regain access.
 
-Remaining work includes CLI staging/submission and transition acceptance, authority
-handover, migration, full account/client restore, and physical durability testing. The
+Remaining work includes authority handover, migration, full account/client restore,
+and physical durability testing. The
 process-exit tests cover all eight publication boundaries for rotation; they do not
 simulate power loss. Experimental compilation/runtime gates and deployment stay unchanged.
+
+
+## CLI rotation and adjacent epoch acceptance
+
+This workflow requires an existing independently confirmed anchor, local pin and
+cached index in the experimental format. It does not initialize journals, migrate
+legacy vaults, change authorities, or enable deployment. Sync all same-epoch history
+before staging a rotation or accepting the next epoch.
+
+The designated authority stages a complete encrypted draft:
+
+```sh
+petika entries rotate --anchor anchor.json --pin pin.json --cache encrypted-cache \
+  --recovery old-recovery.json --authority-identity identity.json \
+  --recovery-policy replace --draft rotation.json
+petika entries rotate-review --anchor anchor.json --pin pin.json --cache encrypted-cache \
+  --recovery old-recovery.json --authority-identity identity.json --draft rotation.json
+petika entries rotate-submit --anchor anchor.json --pin pin.json --cache encrypted-cache \
+  --recovery old-recovery.json --authority-identity identity.json --draft rotation.json --confirm
+```
+
+Choose `--recovery-policy replace` to replace all recovery paths with one newly
+prompted passphrase wrapper, or explicitly choose `omit` for no recovery wrapper.
+The draft includes one new recipient package for every enabled collection member.
+The authenticated roster endpoint requires current read access and enrolled identities;
+its response is not a trust anchor. New or changed contacts require independent
+verification through the existing identity workflow before staging. No API-provided
+fingerprint is automatically trusted. Membership is rechecked atomically at submission.
+
+Staging unlocks the old epoch, then the authority identity, then (for `replace`)
+prompts for the new recovery passphrase twice. With `--passphrase-stdin`, supply
+those values as successive lines. Review and initial submission prompt for the old
+unlock credential and authority identity credential. Review shows opaque recipient
+IDs, identity versions/fingerprints and recovery-wrapper count, never passwords.
+It verifies fresh root material, signatures, wrapper coverage and identical decrypted
+live-entry payloads, including notes and TOTP seeds. Drafts retain ciphertext only.
+
+A complete draft includes the old encrypted entries needed to reconcile a lost
+acknowledgement. Its total local size is capped at 16 MiB; the submitted transaction
+is capped at 12 MiB, 256 live entries and 1,000 wrappers. Larger vaults fail before
+submission. Existing draft files are never overwritten. Stale heads fail without
+rebasing. Keep drafts private and retain them until acceptance has been reconciled.
+
+Submission looks up the exact writer-scoped operation receipt before sending the
+original transaction. Missing receipts must be explicit null. A lost response,
+incorrect receipt or conflicting cached artifact leaves the draft available for
+retry. Verified new-epoch wrappers, index, encrypted entries and transition are
+cached before changing the local pin. Repeating submission after that exact pin
+already advanced requires only the authority identity passphrase, not the retired
+old recovery credential. It still requires the matching server receipt. The
+`rotation.accepted.json` file records acceptance; it does not prove remote Git sync.
+
+Other clients verify and explicitly accept the adjacent transition:
+
+```sh
+petika entries advance-epoch --anchor anchor.json --pin pin.json --cache encrypted-cache \
+  --recovery old-recovery.json --next-identity identity.json
+# Repeat with --confirm after reviewing the verified recipients/recovery policy.
+```
+
+Use exactly one of `--next-identity FILE` or `--next-recovery FILE`; the latter
+must be an active new-epoch recovery envelope obtained through a protected channel.
+The old and new unlock credentials are prompted in that order. Without `--confirm`,
+this command verifies and reviews but leaves the pin unchanged. Confirmation caches
+the verified artifacts before advancing. It requires the old root and every old
+live ciphertext to prove payload preservation; loss of those requires a separate
+recovery workflow, never a trust reset. Missing/invalid transitions, wrong keys,
+removed entries or modified plaintext fail closed. Explicit null means no adjacent
+transition was reported, not proof of global freshness.
+
+After acceptance, the original anchor still identifies the collection while the
+protected local pin determines the current epoch. Use `--recipient-identity FILE`
+without the old handoff, or an exported `encrypted-cache/recovery-<wrapper-id>.json`.
+The encrypted cache now contains recovery material: protect and back it up alongside
+client pins and identity bundles. No usable root key is stored in a dotfile or sent
+to the API. `entries sync` remains same-epoch only; it never silently accepts rotation.
+
+The CLI subprocess regression covers both recovery policies, wrong credentials,
+draft no-overwrite, lost acknowledgements, forged receipts, cache conflicts,
+receipt-only retry, malformed transitions, review without acceptance and independent
+recipient advancement. Existing core tests validate decrypted payload equality and
+signed authority continuity. These checks do not constitute an independent audit.

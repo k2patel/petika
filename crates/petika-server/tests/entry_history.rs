@@ -666,7 +666,7 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
             }),
             "{response}"
         );
-        for action in ["entry-rotations", "entry-epoch"] {
+        for action in ["entry-rotations", "entry-epoch", "entry-roster"] {
             let response = request(
                 address,
                 "POST",
@@ -701,7 +701,7 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
                 format!("Cookie: {cookie}\r\nContent-Type: application/json\r\n"),
                 format!("{headers}Sec-Fetch-Site: cross-site\r\n"),
             ] {
-                for action in ["entry-rotations", "entry-epoch"] {
+                for action in ["entry-rotations", "entry-epoch", "entry-roster"] {
                     assert!(
                         request(
                             address,

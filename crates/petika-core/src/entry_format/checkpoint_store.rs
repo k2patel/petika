@@ -59,6 +59,18 @@ impl CheckpointStore {
     pub fn head(&self, expected: &Context) -> Result<Head> {
         Ok(self.read(expected)?.head)
     }
+    /// Find the current epoch from the locked local pin, retaining deployment and
+    /// collection binding. No network-supplied context can replace this state.
+    pub fn collection_head(&self, deployment: &str, collection: &str) -> Result<Head> {
+        let record: Record = serde_json::from_slice(&self.file.read_limited(32 * 1024)?)
+            .map_err(|_| Error::Format)?;
+        if record.head.context.deployment_id != deployment
+            || record.head.context.collection_id != collection
+        {
+            return Err(Error::Authentication);
+        }
+        self.head(&record.head.context)
+    }
     pub fn observe(&self, previous: &VerifiedIndex, next: &VerifiedIndex) -> Result<()> {
         let record = self.read(&previous.head().context)?;
         if record.head != *previous.head() {

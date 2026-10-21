@@ -153,8 +153,8 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
 
 - [x] Experimental decrypted-index validation, adjacent-head continuity, exact live
   object coverage and atomic native checkpoint storage ([details](research/entry-index.md)).
-- [ ] Integrate bounded history catch-up and checkpoint persistence into clients;
-  test real crash boundaries before API migration.
+- [x] Integrate bounded history catch-up and checkpoint persistence into the native
+  CLI; test process-crash boundaries before API migration.
 
 - [x] Independent head-digest vectors, bounded same-epoch history verification and
   atomic catch-up pin updates; injected atomic-write boundary failures.
@@ -162,10 +162,19 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
   payload, folder and tombstone; require it for persisted epoch advancement.
 - [x] Experimental recipient-bound handoff with independent confirmation and
   no-overwrite checkpoint initialization ([details](research/entry-handoff.md)).
-- [ ] Wire history transport/client sync and handoff UI; test
-  real process termination before enabling per-entry transactions.
+- [ ] Add handoff UI and complete platform validation before enabling per-entry
+  transactions by default; native history sync and process-exit tests are implemented.
 
 - [x] Experimental bounded history wire contract, server page builder and native
   durable response acceptance ([details](research/entry-history-transport.md)).
-- [ ] Implement isolated committed entry journal/CAS before enabling authorized
+- [x] Implement isolated committed entry journal/CAS, authorized experimental
   HTTP history routes and bounded CLI sync transport.
+
+### Experimental entry implementation progress
+
+The gated implementation now covers the journal/CAS, authenticated HTTP history,
+native CLI sync and drafts, server-only Git replication, recipient unlock, and
+atomic epoch transactions. CLI rotation staging/review/submission and explicit
+adjacent epoch acceptance are implemented; see the [transport contract](research/entry-history-transport.md).
+The broader integration/release gates above remain open for handoff UI,
+migration/cutover, complete restore, compatibility and physical durability testing.

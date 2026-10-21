@@ -98,7 +98,18 @@ Server epoch evidence:
 - The real HTTP test also checks rotation/transition runtime gates, authentication
   and same-origin request headers. No initializer or migration route is exposed.
 
-Migration, CLI rotation, authority handover, complete server/recipient restore and physical
+- `rotation_drafts_reconcile_lost_ack_and_clients_verify_before_advancing` runs
+  actual CLI subprocesses against a mock API for both explicit recovery policies.
+  It checks wrong credentials, unverified recipients, encrypted draft retention,
+  payload/TOTP preservation, no-overwrite, lost acknowledgements, forged receipts,
+  cache conflicts, receipt-only retries, invalid transitions and review without
+  pin advancement. A separate recipient verifies and accepts the new epoch, then
+  unlocks using cached wrappers and the original collection anchor.
+- `epoch_lookup_requires_explicit_transaction_or_null` rejects ambiguous lookup
+  responses. Roster tests enforce current access and membership generation;
+  the real HTTP route checks include roster authentication/runtime gates.
+
+Migration, authority handover, complete server/recipient restore and physical
 power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 

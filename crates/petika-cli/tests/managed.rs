@@ -14,6 +14,10 @@ use std::{
 const PASSWORD: &str = "synthetic collection passphrase";
 
 #[cfg(feature = "experimental-entry-format")]
+#[path = "managed/rotation.rs"]
+mod rotation;
+
+#[cfg(feature = "experimental-entry-format")]
 #[test]
 fn confirmed_entry_history_resumes_after_partial_sync_without_resetting_pin() {
     use petika_core::{

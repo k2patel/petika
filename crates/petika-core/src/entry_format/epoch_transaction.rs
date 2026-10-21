@@ -1,7 +1,7 @@
 //! Complete, bounded epoch candidates. No server authorization or persistence is
 //! implied by these types. Same-epoch wrapper replacement is deliberately absent.
 use super::{
-    checkpoint::{Transition, TrustedCheckpoint, WrapperRef, wrapper_set_digest},
+    checkpoint::{Checkpoint, Transition, TrustedCheckpoint, WrapperRef, wrapper_set_digest},
     index::{Head, VerifiedIndex},
     rotation::{RotationSnapshot, VerifiedRotation},
     transaction::{EntryVersion, MAX_CHANGES, MAX_TRANSACTION_BYTES, Receipt},
@@ -10,6 +10,41 @@ use super::{
 };
 use crate::identity::EntryKeyPackage;
 use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EpochState {
+    pub checkpoint: Checkpoint,
+    pub wrappers: Vec<EpochWrapper>,
+}
+impl EpochState {
+    pub fn references(&self, trusted: &TrustedCheckpoint) -> Result<Vec<WrapperRef>> {
+        if self.checkpoint.digest()? != trusted.checkpoint().digest()? {
+            return Err(Error::Authentication);
+        }
+        let refs = self
+            .wrappers
+            .iter()
+            .map(|w| w.reference(trusted))
+            .collect::<Result<Vec<_>>>()?;
+        if wrapper_set_digest(&refs)? != self.checkpoint.wrapper_set_digest {
+            return Err(Error::Authentication);
+        }
+        Ok(refs)
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EpochLookup {
+    #[serde(deserialize_with = "required_transaction")]
+    pub transaction: Option<EpochTransaction>,
+}
+fn required_transaction<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> std::result::Result<Option<EpochTransaction>, D::Error> {
+    Option::<EpochTransaction>::deserialize(d)
+}
 
 /// Exact serialized bytes are retained: wrapper references hash these bytes,
 /// including whitespace, rather than a parsed/re-encoded representation.

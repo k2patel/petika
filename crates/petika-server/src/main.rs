@@ -366,6 +366,7 @@ fn run() -> Result<()> {
                     | "entry-transactions"
                     | "entry-rotations"
                     | "entry-epoch"
+                    | "entry-roster"
             ) {
                 let mut request = request;
                 if env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() != Ok("1") {
@@ -500,7 +501,7 @@ fn run() -> Result<()> {
                         "accepted": accepted,
                         "experimental": true,
                         "entry_api_enabled": cfg!(feature = "experimental-entry-format") && env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1"),
-                        "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions", "anchored-epoch-rotation", "adjacent-epoch-read"],
+                        "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions", "anchored-epoch-rotation", "adjacent-epoch-read", "recipient-roster"],
                         "migration": "unavailable",
                         "replication": replication
                     }).to_string(), None);

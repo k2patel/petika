@@ -542,6 +542,31 @@ fn epoch_api_enforces_authority_roster_membership_and_reconciles_after_revocatio
     let first = f.initialize(&mut journal);
     drop(journal);
     let tx = f.rotation(&recipients, 1);
+    let roster: serde_json::Value = serde_json::from_slice(
+        &dispatch(
+            &mut accounts,
+            dir.path(),
+            &reader_token,
+            &group.id,
+            "entry-roster",
+            &b"{}"[..],
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(roster["membership_generation"], group.membership_generation);
+    assert_eq!(roster["recipients"].as_array().unwrap().len(), 2);
+    assert!(
+        dispatch(
+            &mut accounts,
+            dir.path(),
+            &owner_token,
+            &group.id,
+            "entry-roster",
+            &b"{\"extra\":1}"[..]
+        )
+        .is_err()
+    );
     let bytes = serde_json::to_vec(&tx).unwrap();
     assert!(
         dispatch(
@@ -608,6 +633,34 @@ fn epoch_api_enforces_authority_roster_membership_and_reconciles_after_revocatio
         )
         .unwrap();
     assert!(changed.rotation_required);
+    assert!(
+        dispatch(
+            &mut accounts,
+            dir.path(),
+            &reader_token,
+            &group.id,
+            "entry-roster",
+            &b"{}"[..]
+        )
+        .is_err()
+    );
+    let roster: serde_json::Value = serde_json::from_slice(
+        &dispatch(
+            &mut accounts,
+            dir.path(),
+            &owner_token,
+            &group.id,
+            "entry-roster",
+            &b"{}"[..],
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        roster["membership_generation"],
+        changed.membership_generation
+    );
+    assert_eq!(roster["recipients"].as_array().unwrap().len(), 1);
     assert!(
         dispatch(
             &mut accounts,

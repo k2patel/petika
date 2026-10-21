@@ -80,29 +80,35 @@ struct Draft {
     transaction: Transaction,
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
-fn random_id() -> Result<String> {
+pub(crate) fn random_id() -> Result<String> {
     let mut bytes = [0; 32];
     SystemRandom::new()
         .fill(&mut bytes)
         .map_err(|_| "random generator failed")?;
     Ok(hex(&bytes))
 }
-fn load(args: &StateArgs, stdin: bool) -> Result<(CheckpointStore, RootKey, VerifiedIndex)> {
+pub(crate) fn load(
+    args: &StateArgs,
+    stdin: bool,
+) -> Result<(CheckpointStore, RootKey, VerifiedIndex)> {
     let anchor = read_object(&args.anchor)?;
     let store = CheckpointStore::lock(&args.pin)?;
-    let head = store.head(&anchor.head.context)?;
+    let head = store.collection_head(
+        &anchor.head.context.deployment_id,
+        &anchor.head.context.collection_id,
+    )?;
     let object = read_object(&args.cache.join(format!("{}.json", head.digest()?)))?;
     if object.head != head {
         return Err("Pinned cache mismatch; do not reset trust".into());
     }
     let trusted = store.trusted(&head.context)?;
-    let (root, index) = unlock(&args.unlock, &object, &trusted, stdin)?;
+    let (root, index) = unlock(&args.unlock, &object, &trusted, stdin, &args.cache)?;
     Ok((store, root, index))
 }
-fn client(
+pub(crate) fn client(
     session: &Path,
     args: &StateArgs,
     context: &Context,

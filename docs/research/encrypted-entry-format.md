@@ -13,8 +13,9 @@ index semantics, adjacent-head continuity and native persisted pins. Client/API
 integration now includes bounded history, journal transactions, encrypted CLI drafts,
 receipt-confirmed submission and server-only Git replication; see
 [the implementation contract](entry-history-transport.md). Anchored journals now support
-atomic wrapper/epoch transactions with account authorization; CLI rotation,
-authority handover, migration, complete disaster restore and remaining validation rows
+atomic wrapper/epoch transactions with account authorization, CLI rotation drafts
+and explicitly confirmed client epoch advancement. Authority handover, migration,
+complete disaster restore and remaining validation rows
 remain gates.
 
 ## Scope and invariants

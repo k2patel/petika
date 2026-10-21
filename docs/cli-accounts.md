@@ -160,6 +160,10 @@ is present. Restrict its ACLs on Windows.
 
 ## Managed accounts and sync
 
+The opt-in per-entry format has a separate [experimental CLI rotation workflow](research/entry-history-transport.md#cli-rotation-and-adjacent-epoch-acceptance).
+It stages and reviews encrypted rotations, reconciles receipts, and requires explicit
+confirmation before clients advance their trusted epoch. It does not migrate existing vaults.
+
 The CLI signs in with your Petika-managed account. The browser confirms your identity;
 collection encryption and decryption still happen locally. No npm or external HTTP
 executable is required.
