@@ -9,6 +9,7 @@ pub mod entry_journal;
 pub mod entry_replication;
 #[cfg(feature = "experimental-entry-format")]
 pub mod entry_transaction;
+pub mod maintenance_gate;
 use petika_core::{StoreFile, validate_envelope};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};

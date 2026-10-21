@@ -36,6 +36,8 @@ must not mutate these directories. The homelab Git push sidecar mounts the mirro
 read-only. During capture, API requests return a retryable HTTP 503 while health checks
 remain available. Network transfer runs after the writers resume. Allow enough
 staging capacity for your data volume; capture has a five-minute timeout.
+Routine local Git mirroring shares the operation queue with API requests; it does
+not trigger the backup-capture 503 response. Both pause for exclusive capture.
 
 The server polls due jobs every five seconds and runs one at a time. Schedules
 are intervals of 1–720 hours. **Back up now** queues a job, including for a disabled

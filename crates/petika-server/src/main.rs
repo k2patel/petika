@@ -7,7 +7,7 @@ use std::{
     path::PathBuf,
     process::ExitCode,
     sync::{
-        Arc, Mutex,
+        Arc,
         atomic::{AtomicU64, Ordering},
     },
     thread,
@@ -175,7 +175,8 @@ fn run() -> Result<()> {
     let mirror_revision = Arc::new(AtomicU64::new(0));
     let mirror = env::var_os("PETIKA_GIT_MIRROR").map(PathBuf::from);
     let enabled = mirror.is_some();
-    let backup_gate = Arc::new(Mutex::new(()));
+    // Routine API/mirror contention waits; only backup capture returns busy.
+    let backup_gate = Arc::new(petika_server::maintenance_gate::MaintenanceGate::default());
     #[cfg(feature = "experimental-entry-format")]
     if env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1")
         && let Some(directory) = mirror.clone()
@@ -193,8 +194,13 @@ fn run() -> Result<()> {
         let gate = Arc::clone(&backup_gate);
         thread::spawn(move || {
             loop {
-                let Ok(guard) = gate.lock() else {
-                    return;
+                let guard = match gate.operation() {
+                    Ok(guard) => guard,
+                    Err(petika_server::maintenance_gate::GateError::Capturing) => {
+                        thread::sleep(Duration::from_secs(5));
+                        continue;
+                    }
+                    Err(_) => return,
                 };
                 match mirror_once(&repository, &directory) {
                     Ok(Some(revision)) => {
@@ -287,9 +293,9 @@ fn run() -> Result<()> {
             respond(request, 200, "{\"status\":\"ok\"}", None);
             continue;
         }
-        let _backup_guard = match backup_gate.try_lock() {
+        let _backup_guard = match backup_gate.operation() {
             Ok(guard) => guard,
-            Err(std::sync::TryLockError::WouldBlock) => {
+            Err(petika_server::maintenance_gate::GateError::Capturing) => {
                 respond(
                     request,
                     503,

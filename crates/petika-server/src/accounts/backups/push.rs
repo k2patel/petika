@@ -9,7 +9,7 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::Arc,
     thread,
     time::{Duration, Instant},
 };
@@ -305,7 +305,11 @@ impl Accounts {
     }
 
     /// Same-process scheduler; no external runner or user API credential is required.
-    pub fn start_backup_worker(data: PathBuf, mirror: Option<PathBuf>, gate: Arc<Mutex<()>>) {
+    pub fn start_backup_worker(
+        data: PathBuf,
+        mirror: Option<PathBuf>,
+        gate: Arc<crate::maintenance_gate::MaintenanceGate>,
+    ) {
         let Some(script) = env::var_os("PETIKA_BACKUP_SCRIPT").map(PathBuf::from) else {
             return;
         };
@@ -313,7 +317,7 @@ impl Accounts {
             let accounts = Accounts::new(data.join("accounts.json"));
             loop {
                 let outcome = (|| -> crate::Result<()> {
-                    let guard = gate.lock().map_err(|_| "Backup gate unavailable")?;
+                    let guard = gate.capture().map_err(|_| "Backup gate unavailable")?;
                     let Some((owner, destination)) = accounts.claim_backup()? else {
                         return Ok(());
                     };
@@ -330,7 +334,7 @@ impl Accounts {
                         let _=run;
                         Ok(result)
                     })().unwrap_or(json!({"verified":false}));
-                    let _guard = gate.lock().map_err(|_| "Backup gate unavailable")?;
+                    let _guard = gate.capture().map_err(|_| "Backup gate unavailable")?;
                     accounts.finish_backup(&owner, &destination.id, &result)?;
                     Ok(())
                 })();

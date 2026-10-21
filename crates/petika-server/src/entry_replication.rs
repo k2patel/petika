@@ -12,7 +12,7 @@ use std::{
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    sync::{Arc, Mutex},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -404,7 +404,11 @@ pub fn push_remote(directory: &Path, config: &RemoteConfig) -> Result<Status> {
     result?;
     Ok(status)
 }
-pub fn start_worker(data: PathBuf, mirror: PathBuf, gate: Arc<Mutex<()>>) {
+pub fn start_worker(
+    data: PathBuf,
+    mirror: PathBuf,
+    gate: Arc<crate::maintenance_gate::MaintenanceGate>,
+) {
     std::thread::spawn(move || {
         loop {
             if let Ok(entries) = std::fs::read_dir(data.join("collections")) {
@@ -418,7 +422,7 @@ pub fn start_worker(data: PathBuf, mirror: PathBuf, gate: Arc<Mutex<()>>) {
                     }
                     let directory = mirror.join(&id).join("entries");
                     let local = (|| -> Result<()> {
-                        let _gate = gate.try_lock().map_err(|_| "backup gate busy")?;
+                        let _gate = gate.operation().map_err(|_| "backup gate busy")?;
                         let journal = Journal::open(entry.path().join("entries"))?;
                         mirror_local(&journal, &directory)?;
                         Ok(())
