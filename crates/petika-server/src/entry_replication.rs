@@ -5,9 +5,10 @@ use petika_core::{
     entry_format::{digest, transport::Cursor},
 };
 use serde::{Deserialize, Serialize};
+#[cfg(unix)]
+use std::fs::File;
 use std::{
     collections::BTreeMap,
-    fs::File,
     io::Read,
     path::{Path, PathBuf},
     process::{Command, Stdio},

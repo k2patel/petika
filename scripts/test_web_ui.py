@@ -36,6 +36,18 @@ with tempfile.TemporaryDirectory(prefix='petika-ui-') as temporary:
         with sync_playwright() as p:
             browser=p.chromium.launch(headless=True,**({'executable_path':args.chrome} if args.chrome else {}))
             context=browser.new_context(viewport={'width':1440,'height':1000},color_scheme='light')
+            # Retain only worker error callbacks, never vault plaintext. Simulate a
+            # queued error from a terminated worker after a replacement is active.
+            context.add_init_script("""
+                const NativeWorker = window.Worker;
+                window.__retiredWorkerErrors = [];
+                window.Worker = class extends NativeWorker {
+                    terminate() {
+                        if (this.onerror) window.__retiredWorkerErrors.push(this.onerror);
+                        super.terminate();
+                    }
+                };
+            """)
             page=context.new_page();errors=[]
             page.on('pageerror',lambda e:errors.append(str(e)))
             page.goto(url)
@@ -198,6 +210,17 @@ with tempfile.TemporaryDirectory(prefix='petika-ui-') as temporary:
             expect(page.get_by_role('heading',name='Welcome back')).to_be_visible()
             page.get_by_role('button',name='Explore the demo',exact=True).click()
             expect(page.get_by_role('heading',name='GitHub',exact=True)).to_be_visible(timeout=30000)
+            # Lock a populated demo and start another to guarantee an old
+            # encryption worker exists, independent of account lock state.
+            page.get_by_role('button',name='Lock',exact=True).click()
+            expect(page.get_by_role('heading',name='Welcome back')).to_be_visible()
+            page.get_by_role('button',name='Explore the demo',exact=True).click()
+            expect(page.get_by_role('heading',name='GitHub',exact=True)).to_be_visible(timeout=30000)
+            retired = page.evaluate("window.__retiredWorkerErrors.length")
+            assert retired > 0, 'Expected a discarded worker before replacement demo'
+            page.evaluate("window.__retiredWorkerErrors.forEach(callback => callback(new Event('error')))")
+            expect(page.get_by_role('heading',name='GitHub',exact=True)).to_be_visible()
+
             expect(page.locator('#otp-code')).not_to_have_text('••• •••')
             page.screenshot(path=str(screenshots/'collection-light.png'))
             page.get_by_role('button',name='Settings',exact=True).click()

@@ -86,15 +86,18 @@ function rpc(action, ...args) {
     worker = new Worker('/worker.js', {
       type: 'module'
     });
+    const activeWorker = worker;
     worker.onmessage = ({
       data
     }) => {
+      if (worker !== activeWorker) return;
       const p = pending.get(data.id);
       if (!p) return;
       pending.delete(data.id);
       data.error ? p.reject(new Error(data.error)) : p.resolve(data.value)
     };
     worker.onerror = () => {
+      if (worker !== activeWorker) return;
       for (const p of pending.values()) p.reject(new Error('Encryption module could not load. Check the web build.'));
       pending.clear();
       discardWorker(); state.unlocked = false; state.rows = []; state.selected = null;
