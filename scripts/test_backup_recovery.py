@@ -179,8 +179,8 @@ class Server:
             data = response.read()
             return data if raw else json.loads(data)
 
-    def login(self, client):
-        user = self.api('/v1/auth/login', {'username': 'alice', 'password': PASSWORD})
+    def login(self, client, username='alice'):
+        user = self.api('/v1/auth/login', {'username': username, 'password': PASSWORD})
         grant = self.api('/v1/auth/device/start', {})
         self.api('/v1/auth/device/approve', {'user_code': grant['user_code'], 'password': PASSWORD, 'approve': True})
         token = self.api('/v1/auth/device/poll', {'device_code': grant['device_code']})['token']

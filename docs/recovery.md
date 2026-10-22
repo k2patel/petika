@@ -148,9 +148,34 @@ Recovery-key mode instead writes `recovery-WRAPPER_ID.json` for `--recovery`.
 `RECOVERY.json` is written last as a completion marker. Authentication failures publish
 no directory; storage failures can leave an incomplete directory without that marker.
 Keep the source backup and retry into a new directory. Existing destinations are never
-overwritten. Larger streaming exports, multi-device restore evidence and reconciliation
+overwritten. Larger streaming exports, real-device restore evidence and reconciliation
 of writes newer than a backup remain pending. Full-server restoration still requires a
 full-server backup and independently retained client trust.
+
+### Shared-vault restore and revocation checks
+
+Run `python3 scripts/test_entry_shared_recovery.py` with the same experimental native
+build used above. It exercises an owner and a read-only recipient in both Standard and
+experimental Hybrid profiles: mutual contact verification, independent checkpoint
+confirmation, scoped exports, explicit rotation acceptance and fresh-cache recovery.
+A second simulated recipient device receives only a retained encrypted identity and
+pin; it receives no account session, authority key, recovery wrapper or old entry cache.
+Final recovery runs after stopping the server and deleting the original client directories.
+
+Removing a recipient blocks further group exports. Rotate the vault root afterward to
+exclude them from future key delivery. The drill checks both controls and verifies that
+the removed recipient cannot unlock the owner's package at the new checkpoint. **Revocation
+cannot erase ciphertext or keys already retained by that person.** Their historical
+exports still decrypt with the matching historical pin and identity; the current pin
+continues to reject older backups. Existing passwords already disclosed may need changing
+at the corresponding websites/services.
+
+This is synthetic local-filesystem evidence, not a claim that every real device is ready.
+The simulated devices reuse one user's enrolled identity, rather than independently
+enrolled hardware keys. Actual device loss/replacement, identity replacement, biometric
+unlock, cross-platform key custody, and production recovery objectives remain separate
+release checks. Preserve independently verified pins and encrypted identity backups for
+each recipient, and test the recovery routes you intend to rely on.
 
 ## Full offline backup
 

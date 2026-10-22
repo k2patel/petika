@@ -185,16 +185,21 @@ may select the initial authority. Exact retries and process-exit boundaries are 
 CLI `migrate-submit --confirm` now verifies full contents and replacement recovery,
 reconciles exact receipts after interrupted submission, and caches artifacts/receipt
 before initializing a new pin. Existing different/advanced pins are never reset.
-All-recipient restore checks and source recipient-only unlock remain unfinished.
+Real-device recipient restore readiness and source recipient-only unlock remain unfinished.
 Full-server recovery now has an offline journal/account/source audit with independently
 retained head comparison. `entries verify-backup` verifies every cached live entry
 without API access. A real CLI/server clean-directory drill covers migration, rotation,
 full backup restore and separately retained client kits in Standard/Hybrid profiles.
+A shared-vault drill adds owner/read-only recipient exports, independently confirmed
+recipient trust, explicit epoch acceptance, restored identity/pin copies, and access
+revocation followed by root rotation. Retained old backups remain decryptable by design.
+The simulated devices reuse an identity; independently enrolled/hardware-backed device
+keys and actual cross-device readiness remain unverified.
 
 ### Remaining entry-format work, in order
 
-1. **Remaining recovery paths:** multi-recipient/device restore evidence and explicit
-   reconciliation of writes newer than a chosen backup. Full-server/client-kit
+1. **Remaining recovery paths:** explicit reconciliation of writes newer than a chosen
+   backup and real-device/cross-platform recipient restore evidence. Full-server/client-kit
    restore and rejection of pre-migration server rollback now have a synthetic drill.
    Exact-pin Git-only recovery and recipient-scoped entry API exports are implemented;
    streaming/chunking beyond the current 16 MiB export/recovery limit remains pending.
@@ -203,7 +208,7 @@ full backup restore and separately retained client kits in Standard/Hybrid profi
    and explicit old-client upgrade behavior. Current core/CLI work is not full
    browser/mobile support.
 3. **Migration access/readiness:** recipient-only legacy source unlock, working
-   recipient-device/recovery evidence beyond the authority-only real-server drill.
+   recipient-device/recovery readiness beyond synthetic retained-identity copies.
    The new replacement recovery wrapper is checked locally, but that does not
    establish every recipient’s ability to restore.
 4. **Release evidence:** remaining E/T/K/M matrix scenarios, disk-full/permission

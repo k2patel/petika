@@ -141,8 +141,8 @@ Encrypted migration staging evidence:
 - `empty_migration_draft_has_a_complete_recoverable_index` verifies an empty
   collection still has a signed index and working new recovery wrapper.
 
-Authority handover, multi-recipient restore and physical power-loss/disk-full
-scenarios remain outside this coverage. No full T-series row is
+Authority handover, real-device restore and physical power-loss/disk-full
+scenarios remain outside this core-test coverage; shared CLI restore evidence is below. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 
 CLI migration evidence:
@@ -196,9 +196,10 @@ Full recovery evidence:
   `entries verify-backup` rejects missing ciphertext and wrong identity credentials
   without changing the pin. Restoring a pre-migration server cannot reset a newer
   client pin. The full drill runs in the Web UI/provisioning CI job.
-- This is authority-only, local filesystem evidence. Git-only reconstruction,
-  per-user entry backup exports, other recipient devices, post-backup write
-  reconciliation and production/off-site recovery objectives remain open.
+- This full-server drill is authority-only, local filesystem evidence. The Git/user
+  export and shared-recipient drills below add ciphertext recovery coverage. Real-device
+  readiness, post-backup write reconciliation and production/off-site recovery
+  objectives remain open.
 
 ## Test harness and evidence
 
@@ -310,3 +311,27 @@ ciphertexts, and verifies the retained pin remains byte-identical. Both Standard
 experimental Hybrid profiles are exercised. Server migration tests check separate
 owner/editor packages and rejection after group access is removed. These checks do
 not establish multi-device readiness or reconciliation of newer writes.
+
+### Shared-recipient recovery evidence
+
+`scripts/test_entry_shared_recovery.py` uses real native API/CLI binaries with an owner
+and read-only group member in both profiles. It checks:
+
+- Mutual contact verification and recipient checkpoint confirmation against values
+  retained by the authority; no pin is created without explicit confirmation.
+- Owner/recipient exports select their own packages. Fresh-cache recovery authenticates
+  every entry, including a fixture containing TOTP, without printing secret contents.
+- Read-only recipients review an adjacent rotation without changing their pin, then
+  explicitly accept it. A second simulated device restores the retained identity/pin
+  without an API session, authority key, recovery wrapper or old cache.
+- Cross-user exports and older exports against newer pins fail without output or pin
+  changes. Membership removal removes the group from the backup index and rejects
+  exports. Subsequent rotation contains only the remaining owner's recipient package.
+- A removed identity cannot unlock the owner's new package even with a separately
+  confirmed new checkpoint. Historical retained exports remain decryptable, as expected.
+- Final owner and recipient historical recovery works with the server stopped and
+  original client directories deleted.
+
+CI runs this alongside the full-server drill. Simulated device directories share one
+user's enrolled identity; independently enrolled device keys, hardware/biometric paths,
+identity replacement, cross-platform restore and production custody are not covered.
