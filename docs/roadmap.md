@@ -174,8 +174,10 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
 
 The core migration preservation verifier now covers exact legacy names/fields,
 fresh epoch context and explicit profile continuity, with Standard/Hybrid fixtures.
-It is a pre-cutover gate only; source CAS, recipient recovery checks and atomic
-format switching remain unimplemented.
+The core now also stages signed encrypted migration drafts bound to exact source
+ciphertext, revision, epoch and membership, with explicit recovery policy and new
+recipient wrappers. It is pre-cutover only; CLI/API submission, server source CAS,
+all-recipient restore checks and atomic format switching remain unimplemented.
 
 The gated implementation now covers the journal/CAS, authenticated HTTP history,
 native CLI sync and drafts, server-only Git replication, recipient unlock, and

@@ -309,6 +309,22 @@ impl UnlockedIdentity {
         );
         Ok(checkpoint)
     }
+    /// Sign a migration candidate after caller review. This signature binds the
+    /// source preconditions and full ciphertext bundle, not server authorization.
+    pub fn sign_entry_migration(
+        &self,
+        draft: &mut crate::entry_format::migration_draft::MigrationDraft,
+    ) -> Result<()> {
+        if draft.state.checkpoint.authority != self.public {
+            return Err(Error::Authentication);
+        }
+        draft.signature = STANDARD.encode(
+            SigningKey::from_bytes(&self.private.signing_seed)
+                .sign(&draft.message()?)
+                .to_bytes(),
+        );
+        Ok(())
+    }
     /// Requires the old designated authority; the new checkpoint is also signed
     /// by its own authority, making explicit authority handover a two-signature act.
     pub fn authorize_entry_transition(

@@ -279,6 +279,60 @@ recipient deliverability or successful recovery through every wrapper. Those che
 full backup/restore evidence and an atomic format switch are still required before
 cutover can be offered. Passing it changes no files, API state or client pins.
 
+### Encrypted migration draft contract
+
+The opt-in core `migration_draft::MigrationDraft` now stages a complete candidate
+in memory and strictly parses serialized drafts. No CLI migration command, HTTP
+submission route or atomic cutover is exposed yet. A draft contains:
+
+- A random operation ID and source binding: deployment/collection IDs, snapshot
+  revision, membership generation, old key epoch (0 for unbound), and SHA-256 of
+  the exact original encrypted envelope bytes.
+- Those original encrypted bytes, retained for unlocked comparison and recovery.
+- A sorted, unique roster of intended recipient public identities and an explicit
+  `replace` or `omit` recovery policy.
+- A fresh epoch root represented only by new recipient/recovery wrappers, signed
+  initial checkpoint, encrypted index and every live entry ciphertext.
+- An authority signature over the complete versioned draft message, including all
+  source preconditions, roster, policy and exact ciphertext strings. The domain is
+  `petika:entry-migration-draft:v1`, distinct from rotations and ordinary edits.
+
+`SourceBinding::capture` validates envelope framing/context and computes its hash;
+it does not authenticate the supplied API counters or determine freshness. Callers
+must obtain those counters from a consistent authenticated source read. Existing
+legacy package-delivery updates advance snapshot revision, so source CAS must check
+revision as well as ciphertext digest, key epoch and membership generation. Future
+submission must also recheck current enrolled identities and the entire allowed
+recipient roster while holding the account and writer locks.
+
+Staging requires the source recovery passphrase and the unlocked designated
+authority identity. Recipient-only source unlock is not implemented in this core
+entry point. It never adopts unverified contacts. Every recipient gets a new
+profile-bound package; old snapshot packages are not reused. The authority must be
+included and its package must successfully reopen the new root. `replace` adds one
+new passphrase wrapper and verifies recovery; `omit` adds none. Other recipients
+still need independent restore checks. Contact suspension can modify the unlocked
+identity even on failure: native callers must lock and reseal it on both outcomes.
+
+Public verification requires an externally supplied expected source binding and
+trusted authority identity. It authenticates the signature, checkpoint, profiles,
+recipient coverage, recovery policy and envelope framing. It cannot prove encrypted
+entry completeness or plaintext equality. Full verification separately opens the
+original snapshot and candidate, then runs `VerifiedMigration`; an authority-signed
+draft with omitted payloads still fails that check. Candidate checkpoint verification
+does not initialize or replace a local trust pin.
+
+Serialized drafts are capped at 16 MiB total, 256 live entries and 1,000 wrappers.
+Source ciphertext is included in that byte budget; no chunked or partial migration
+is implied. Staging keeps new root material in memory only and returns no usable
+root key. Native consumers must save the resulting bytes with protected,
+no-overwrite storage. Passphrases and decrypted names/entry values are not serialized.
+Retaining a source envelope is not a full account/grant/history backup. Atomic source
+CAS, operation receipts, client-pin publication and matched backup restore remain
+required before a draft can be submitted.
+
+### Cutover requirements
+
 1. Inventory client capabilities and *all* active wrappers/recovery paths. Produce a
    verified full backup and retain exact original snapshots/history. Require an
    unlocked authorized editor; the server cannot migrate plaintext independently.

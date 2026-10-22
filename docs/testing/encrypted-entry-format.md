@@ -123,6 +123,23 @@ Local migration preservation evidence (partial M01/M02/M05 only):
 - `migration_cannot_invent_folders_tombstones_or_history` rejects authenticated
   candidates that introduce a folder tree, deleted-record history or later revisions.
 
+Encrypted migration staging evidence (still no cutover):
+
+- `migration_drafts_restore_from_disk_in_both_profiles_and_recovery_policies`
+  serializes real drafts to protected no-overwrite files, reopens recipient and
+  recovery wrappers, verifies content in Standard/Hybrid and bound/unbound cases,
+  and scans serialized bytes for fixture plaintext/passwords. Original encrypted
+  source bytes remain exact.
+- `migration_draft_binds_source_roster_policy_and_every_ciphertext` rejects stale
+  external bindings, altered source/operation/roster/policy/entries, wrong credentials
+  or authority, and omitted wrappers. A re-signed incomplete draft passes public
+  framing checks but fails full unlocked verification, as required.
+- `migration_staging_rejects_unverified_recipients_wrong_source_and_ambiguous_wire`
+  rejects unverified/duplicate recipients, wrong source credentials/digest,
+  unknown/duplicate/missing fields and oversized serialized input.
+- `empty_migration_draft_has_a_complete_recoverable_index` verifies an empty
+  collection still has a signed index and working new recovery wrapper.
+
 Atomic migration/cutover, authority handover, complete server/recipient restore and physical
 power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.

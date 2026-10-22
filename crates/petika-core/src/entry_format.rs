@@ -7,6 +7,7 @@ pub mod epoch_transaction;
 pub mod history;
 pub mod index;
 pub mod migration;
+pub mod migration_draft;
 pub mod rotation;
 pub mod transaction;
 pub mod transport;
