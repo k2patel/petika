@@ -178,29 +178,28 @@ The core now also stages signed encrypted migration drafts bound to exact source
 ciphertext, revision, epoch and membership, with explicit recovery policy and new
 recipient wrappers. CLI `entries migrate-stage` and `migrate-review` now capture
 personal/group API sources and preserve encrypted drafts on review conflicts.
-It is pre-cutover only; CLI/API submission, server source CAS,
-all-recipient restore checks and atomic format switching remain unimplemented.
+The opt-in server now accepts signed migration drafts with locked source/roster CAS
+and publishes the complete journal through one root pointer, retaining the legacy
+snapshot. Personal owners or enrolled shared-vault administrators with edit access
+may select the initial authority. Exact retries and process-exit boundaries are tested.
+CLI submission, all-recipient restore checks and safe client acceptance remain unfinished.
 
 ### Remaining entry-format work, in order
 
-1. **Atomic server cutover:** authorize the initial migration authority; recheck
-   source revision/hash/epoch, membership and current recipient identities under
-   writer/account locks; publish one complete anchored journal; retain original
-   snapshots/history; reject old-client writes only after the committed switch.
-2. **CLI submission and reconciliation:** exact operation receipts, lost-response
+1. **CLI submission and reconciliation:** exact operation receipts, lost-response
    retries, crash-safe cache/pin publication, source recipient unlock and explicit
    recovery/recipient readiness checks. No automatic rebase or trust reset.
-3. **Complete disaster restore:** entry journal, wrappers, accounts/configuration,
+2. **Complete disaster restore:** entry journal, wrappers, accounts/configuration,
    identity bundles and client pins; isolated Git/full-backup restore, rotated
    epochs and pre-migration backup reconciliation after newer writes.
-4. **Client coverage and simple UI:** web/extension entry-format integration,
+3. **Client coverage and simple UI:** web/extension entry-format integration,
    trusted handoff and recovery UX, authority handover, native/WASM compatibility
    and explicit old-client upgrade behavior. Current core/CLI work is not full
    browser/mobile support.
-5. **Release evidence:** remaining E/T/K/M matrix scenarios, disk-full/permission
+4. **Release evidence:** remaining E/T/K/M matrix scenarios, disk-full/permission
    and physical durability tests, independent cryptographic/security review,
    accessibility and platform QA. Default enablement stays off until reviewed.
-6. **Deployment and operational QA:** opt-in rollout only after these gates, real
+5. **Deployment and operational QA:** opt-in rollout only after these gates, real
    independent off-site destinations, measured restore objectives and monitoring.
 
 The broader backlog above also remains: reviewed device/ML-KEM delivery and

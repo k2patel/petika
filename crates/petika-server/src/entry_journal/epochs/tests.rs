@@ -839,3 +839,348 @@ fn epoch_git_tree_contains_exact_wrappers_and_signed_transition() {
         );
     }
 }
+
+fn migration_draft(
+    authority: &mut UnlockedIdentity,
+    collection: &str,
+    recipients: &[PublicIdentity],
+    generation: u64,
+) -> petika_core::entry_format::migration_draft::MigrationDraft {
+    use petika_core::entry_format::migration_draft::*;
+    let mut source = petika_core::UnlockedStore::create(PASSWORD).unwrap();
+    source
+        .put(
+            "literal/path".into(),
+            petika_core::Entry {
+                username: "test".into(),
+                password: "synthetic migration secret".into(),
+                url: String::new(),
+                notes: String::new(),
+                otp: Some("JBSWY3DPEHPK3PXP".into()),
+            },
+            false,
+        )
+        .unwrap();
+    let encrypted = source.seal().unwrap();
+    let binding = SourceBinding::capture(
+        authority.public_identity().deployment_id.clone(),
+        collection.into(),
+        1,
+        generation,
+        &encrypted,
+    )
+    .unwrap();
+    MigrationDraft::stage(
+        binding,
+        &encrypted,
+        PASSWORD,
+        authority,
+        recipients,
+        Recovery::Omit,
+    )
+    .unwrap()
+}
+
+#[test]
+fn migration_api_cas_authority_retained_source_and_exact_retry() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut accounts = Accounts::new(dir.path().join("accounts.json"));
+    accounts.migrate().unwrap();
+    let owner = accounts
+        .create_user("owner", "Owner", PASSWORD.into(), true, true)
+        .unwrap();
+    let editor = accounts
+        .create_user("editor", "Editor", PASSWORD.into(), false, false)
+        .unwrap();
+    let (owner_token, _) = accounts.login("owner", PASSWORD.into()).unwrap();
+    let (editor_token, _) = accounts.login("editor", PASSWORD.into()).unwrap();
+    let deployment = accounts
+        .key_operation(&owner_token, KeyOperation::Deployment, b"")
+        .unwrap()["deployment_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let mut authority = enroll(&mut accounts, &owner_token, &deployment, &owner.id);
+    let mut editor_identity = enroll(&mut accounts, &editor_token, &deployment, &editor.id);
+    let group = accounts
+        .save_group(
+            None,
+            "Team",
+            vec![
+                Membership {
+                    user_id: owner.id.clone(),
+                    edit: true,
+                },
+                Membership {
+                    user_id: editor.id.clone(),
+                    edit: true,
+                },
+            ],
+        )
+        .unwrap();
+    let recipients = vec![
+        authority.public_identity().clone(),
+        editor_identity.public_identity().clone(),
+    ];
+    authority
+        .verify_contact(
+            &editor.id,
+            editor_identity.public_identity(),
+            &editor_identity.public_identity().fingerprint,
+            None,
+        )
+        .unwrap();
+    // Personal owner and shared administrator both use the same publication path.
+    for collection in [&owner.id, &group.id] {
+        let roster = if collection == &owner.id {
+            &recipients[..1]
+        } else {
+            &recipients[..]
+        };
+        let generation = if collection == &owner.id {
+            1
+        } else {
+            group.membership_generation
+        };
+        let draft = migration_draft(&mut authority, collection, roster, generation);
+        let path = dir.path().join("collections").join(collection);
+        let source = crate::Snapshot {
+            schema_version: 1,
+            revision: 1,
+            encrypted: draft.source_encrypted.clone(),
+            delivery: None,
+        };
+        let original = serde_json::to_vec(&source).unwrap();
+        StoreFile::lock(path.join("snapshot.json"))
+            .unwrap()
+            .write(&original, true)
+            .unwrap();
+        let body = serde_json::to_vec(&draft).unwrap();
+        let submit = |accounts: &mut Accounts, token: &str, body: &[u8]| {
+            dispatch(
+                accounts,
+                dir.path(),
+                token,
+                collection,
+                "entry-migrations",
+                body,
+            )
+        };
+        assert!(submit(&mut accounts, "invalid", &body).is_err());
+        if collection == &group.id {
+            assert!(submit(&mut accounts, &editor_token, &body).is_err());
+        }
+        // Snapshot revision, ciphertext and recipient enrollment are all CAS inputs.
+        let mut changed: crate::Snapshot = serde_json::from_slice(&original).unwrap();
+        changed.revision += 1;
+        StoreFile::lock(path.join("snapshot.json"))
+            .unwrap()
+            .write(&serde_json::to_vec(&changed).unwrap(), false)
+            .unwrap();
+        assert!(submit(&mut accounts, &owner_token, &body).is_err());
+        assert!(!path.join("entries/committed-root").exists());
+        StoreFile::lock(path.join("snapshot.json"))
+            .unwrap()
+            .write(&original, false)
+            .unwrap();
+        let mut wrong_source: crate::Snapshot = serde_json::from_slice(&original).unwrap();
+        wrong_source.encrypted.push('\n'); // valid framing, different exact ciphertext digest
+        StoreFile::lock(path.join("snapshot.json"))
+            .unwrap()
+            .write(&serde_json::to_vec(&wrong_source).unwrap(), false)
+            .unwrap();
+        assert!(submit(&mut accounts, &owner_token, &body).is_err());
+        StoreFile::lock(path.join("snapshot.json"))
+            .unwrap()
+            .write(&original, false)
+            .unwrap();
+        let mut stale = draft.clone();
+        stale.source.membership_generation += 1;
+        authority.sign_entry_migration(&mut stale).unwrap();
+        assert!(
+            submit(
+                &mut accounts,
+                &owner_token,
+                &serde_json::to_vec(&stale).unwrap()
+            )
+            .is_err()
+        );
+        if collection == &group.id {
+            let mut wrong_roster = draft.clone();
+            wrong_roster.recipients.retain(|r| r.user_id == owner.id);
+            authority.sign_entry_migration(&mut wrong_roster).unwrap();
+            assert!(
+                submit(
+                    &mut accounts,
+                    &owner_token,
+                    &serde_json::to_vec(&wrong_roster).unwrap()
+                )
+                .is_err()
+            );
+        }
+        assert!(!path.join("entries/committed-root").exists());
+        assert!(
+            accounts
+                .backup_owner_export(&owner.id, Some(collection))
+                .is_ok()
+        );
+        let first = submit(&mut accounts, &owner_token, &body).unwrap();
+        assert_eq!(first, submit(&mut accounts, &owner_token, &body).unwrap());
+        assert!(
+            accounts
+                .backup_owner_export(&owner.id, Some(collection))
+                .is_err()
+        );
+        assert_eq!(std::fs::read(path.join("snapshot.json")).unwrap(), original);
+        let journal = Journal::open(path.join("entries")).unwrap();
+        let root = journal.current().unwrap();
+        assert_eq!(
+            journal.epoch_state(&root).unwrap().unwrap().checkpoint,
+            draft.state.checkpoint
+        );
+        assert_eq!(journal.committed_tree(1).unwrap().1.len(), 1);
+        drop(journal);
+        // Direct legacy storage is protected as well as HTTP routing.
+        assert!(
+            crate::Repository::new(path.join("snapshot.json"))
+                .update(1, draft.source_encrypted.clone())
+                .is_err()
+        );
+        let mut other = draft.clone();
+        other.operation = "0".repeat(64);
+        authority.sign_entry_migration(&mut other).unwrap();
+        assert!(
+            submit(
+                &mut accounts,
+                &owner_token,
+                &serde_json::to_vec(&other).unwrap()
+            )
+            .is_err()
+        );
+        other.operation = draft.operation.clone();
+        other.entries.clear();
+        authority.sign_entry_migration(&mut other).unwrap();
+        assert!(
+            submit(
+                &mut accounts,
+                &owner_token,
+                &serde_json::to_vec(&other).unwrap()
+            )
+            .is_err()
+        );
+    }
+    // A non-admin editor may migrate their own personal vault.
+    let own = editor_identity.public_identity().clone();
+    let draft = migration_draft(&mut editor_identity, &editor.id, &[own], 1);
+    let path = dir
+        .path()
+        .join("collections")
+        .join(&editor.id)
+        .join("snapshot.json");
+    StoreFile::lock(&path)
+        .unwrap()
+        .write(
+            &serde_json::to_vec(&crate::Snapshot {
+                schema_version: 1,
+                revision: 1,
+                encrypted: draft.source_encrypted.clone(),
+                delivery: None,
+            })
+            .unwrap(),
+            true,
+        )
+        .unwrap();
+    dispatch(
+        &mut accounts,
+        dir.path(),
+        &editor_token,
+        &editor.id,
+        "entry-migrations",
+        serde_json::to_vec(&draft).unwrap().as_slice(),
+    )
+    .unwrap();
+}
+
+#[test]
+fn migration_termination_worker() {
+    let Ok(directory) = std::env::var("PETIKA_MIGRATION_CRASH_DIR") else {
+        return;
+    };
+    let stage: u8 = std::env::var("PETIKA_MIGRATION_CRASH_STAGE")
+        .unwrap()
+        .parse()
+        .unwrap();
+    let path = std::path::PathBuf::from(directory);
+    let draft = petika_core::entry_format::migration_draft::MigrationDraft::parse(
+        &std::fs::read(path.join("candidate.json")).unwrap(),
+    )
+    .unwrap();
+    let authority = draft.state.checkpoint.authority.clone();
+    let trusted = draft.verify_public(&draft.source, &authority).unwrap();
+    let mut journal = Journal::open(path.join("entries")).unwrap();
+    journal
+        .migrate_observed(&authority.user_id, draft, &trusted, |at| {
+            if at == stage {
+                std::process::exit(73);
+            }
+            Ok(())
+        })
+        .unwrap();
+    panic!("crash boundary not reached");
+}
+
+#[test]
+fn migration_process_exit_exposes_only_complete_format_switch() {
+    let mut authority = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 1).unwrap();
+    let public = authority.public_identity().clone();
+    let draft = migration_draft(
+        &mut authority,
+        &"b".repeat(64),
+        std::slice::from_ref(&public),
+        1,
+    );
+    let trusted = draft.verify_public(&draft.source, &public).unwrap();
+    for stage in 1..=8 {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("snapshot.json"),
+            draft.source_encrypted.as_bytes(),
+        )
+        .unwrap();
+        StoreFile::lock(dir.path().join("candidate.json"))
+            .unwrap()
+            .write(&serde_json::to_vec(&draft).unwrap(), true)
+            .unwrap();
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "entry_journal::epochs::tests::migration_termination_worker",
+            ])
+            .env("PETIKA_MIGRATION_CRASH_DIR", dir.path())
+            .env("PETIKA_MIGRATION_CRASH_STAGE", stage.to_string())
+            .status()
+            .unwrap();
+        assert_eq!(status.code(), Some(73));
+        assert_eq!(
+            std::fs::read(dir.path().join("snapshot.json")).unwrap(),
+            draft.source_encrypted.as_bytes()
+        );
+        let mut journal = Journal::open(dir.path().join("entries")).unwrap();
+        assert_eq!(journal.current().is_some(), stage >= 7);
+        if let Some(root) = journal.current() {
+            assert_eq!(
+                journal.epoch_state(&root).unwrap().unwrap().checkpoint,
+                draft.state.checkpoint
+            );
+            assert_eq!(
+                journal.committed_tree(1).unwrap().1.len(),
+                draft.entries.len()
+            );
+            assert!(journal.receipt(&public.user_id, &draft.operation).is_some());
+        }
+        journal
+            .migrate(&public.user_id, draft.clone(), &trusted)
+            .unwrap();
+        assert_eq!(journal.current().unwrap().revision, 1);
+    }
+}

@@ -99,6 +99,13 @@ impl Repository {
             );
         }
         let file = StoreFile::lock(&self.path)?;
+        if self
+            .path
+            .parent()
+            .is_some_and(|p| p.join("entries/committed-root").exists())
+        {
+            return Err("Collection uses entry-v1; upgrade client".into());
+        }
         let current = if file.exists() {
             let saved = serde_json::from_slice::<Snapshot>(&file.read()?)?;
             if saved.delivery.is_some()

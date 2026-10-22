@@ -212,7 +212,10 @@ fn run() -> Result<()> {
                 if let Ok(entries) = std::fs::read_dir(&collection_root) {
                     for entry in entries.flatten() {
                         let id = entry.file_name().to_string_lossy().into_owned();
-                        if id.len() == 64 && id.bytes().all(|b| b.is_ascii_hexdigit()) {
+                        if id.len() == 64
+                            && id.bytes().all(|b| b.is_ascii_hexdigit())
+                            && !entry.path().join("entries/committed-root").exists()
+                        {
                             let collection = Repository::new(entry.path().join("snapshot.json"));
                             let _ = mirror_once(&collection, &directory.join(&id));
                         }
@@ -365,6 +368,7 @@ fn run() -> Result<()> {
                     | "entry-receipt"
                     | "entry-transactions"
                     | "entry-rotations"
+                    | "entry-migrations"
                     | "entry-epoch"
                     | "entry-roster"
             ) {
@@ -387,7 +391,10 @@ fn run() -> Result<()> {
                     .with_entry_access(
                         &session,
                         id,
-                        matches!(action, "entry-transactions" | "entry-rotations"),
+                        matches!(
+                            action,
+                            "entry-transactions" | "entry-rotations" | "entry-migrations"
+                        ),
                         |_| Ok(()),
                     )
                     .is_err()
@@ -410,8 +417,10 @@ fn run() -> Result<()> {
                 );
                 match result {
                     Ok(mut bytes) => {
-                        if matches!(action, "entry-transactions" | "entry-rotations")
-                            && mirror.is_some()
+                        if matches!(
+                            action,
+                            "entry-transactions" | "entry-rotations" | "entry-migrations"
+                        ) && mirror.is_some()
                             && let Ok(mut value) =
                                 serde_json::from_slice::<serde_json::Value>(&bytes)
                         {
@@ -502,7 +511,7 @@ fn run() -> Result<()> {
                         "experimental": true,
                         "entry_api_enabled": cfg!(feature = "experimental-entry-format") && env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1"),
                         "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions", "anchored-epoch-rotation", "adjacent-epoch-read", "recipient-roster"],
-                        "migration": "unavailable",
+                        "migration": "already-active",
                         "replication": replication
                     }).to_string(), None);
                     continue;

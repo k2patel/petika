@@ -96,7 +96,8 @@ Server epoch evidence:
 - `epoch_git_tree_contains_exact_wrappers_and_signed_transition` checks exact active
   wrappers/checkpoints and transition bytes in ordered local Git history.
 - The real HTTP test also checks rotation/transition runtime gates, authentication
-  and same-origin request headers. No initializer or migration route is exposed.
+  and same-origin request headers. Explicit migration coverage is listed below;
+  there is no general-purpose unauthenticated journal initializer.
 
 - `rotation_drafts_reconcile_lost_ack_and_clients_verify_before_advancing` runs
   actual CLI subprocesses against a mock API for both explicit recovery policies.
@@ -123,7 +124,7 @@ Local migration preservation evidence (partial M01/M02/M05 only):
 - `migration_cannot_invent_folders_tombstones_or_history` rejects authenticated
   candidates that introduce a folder tree, deleted-record history or later revisions.
 
-Encrypted migration staging evidence (still no cutover):
+Encrypted migration staging evidence:
 
 - `migration_drafts_restore_from_disk_in_both_profiles_and_recovery_policies`
   serializes real drafts to protected no-overwrite files, reopens recipient and
@@ -140,8 +141,8 @@ Encrypted migration staging evidence (still no cutover):
 - `empty_migration_draft_has_a_complete_recoverable_index` verifies an empty
   collection still has a signed index and working new recovery wrapper.
 
-Atomic migration/cutover, authority handover, complete server/recipient restore and physical
-power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
+End-to-end CLI cutover/acceptance, authority handover, complete server/recipient restore
+and physical power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 
 CLI migration evidence:
@@ -155,6 +156,22 @@ CLI migration evidence:
 - `personal_migration_uses_own_enrollment_without_group_access_endpoint` confirms
   personal stage/review uses the enrolled owner and generation 1, without requesting
   the group-only key-access endpoint. These are synthetic HTTP tests, not live cutover.
+
+Server migration evidence:
+
+- `migration_api_cas_authority_retained_source_and_exact_retry` covers personal
+  owners (including non-admins), shared admin/edit authority, wrong sessions,
+  changed source revision/hash, membership mismatch and incomplete recipient rosters.
+  It verifies exact receipt retry, refusal to replace active journals or reuse an
+  operation with changed content, retained source bytes and direct legacy-write refusal.
+- `migration_process_exit_exposes_only_complete_format_switch` terminates a child
+  process at each of eight immutable-record/root publication boundaries, reopens the
+  journal, checks complete checkpoint/wrapper/entry/receipt visibility and retries
+  the exact operation. Source ciphertext remains unchanged at every boundary.
+- Existing real HTTP route tests include migration runtime gating, authenticated
+  request headers, malformed bodies, a successful shared-vault cutover and exact
+  retry, retained snapshot bytes, post-cutover history reads and legacy GET/PUT
+  rejection. Full CLI submission/acceptance remains unimplemented.
 
 ## Test harness and evidence
 

@@ -56,6 +56,7 @@ const MAX_COUNTER: u64 = (1 << 53) - 1;
 
 #[cfg(feature = "experimental-entry-format")]
 pub struct EntryAuthorization {
+    pub may_migrate: bool,
     pub writer: String,
     pub deployment_id: String,
     pub membership_generation: u64,
@@ -229,6 +230,7 @@ impl Accounts {
             })
             .collect();
         run(EntryAuthorization {
+            may_migrate: user.id == id || db.users.iter().any(|u| u.id == user.id && u.admin),
             writer: user.id,
             deployment_id: db.deployment_id,
             membership_generation,

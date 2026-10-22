@@ -76,6 +76,12 @@ impl Accounts {
             .join(collection)
             .join("snapshot.json");
         let file = StoreFile::lock(&path).map_err(|_| KeyError::Unavailable)?;
+        if path
+            .parent()
+            .is_some_and(|p| p.join("entries/committed-root").exists())
+        {
+            return Err(KeyError::Forbidden);
+        }
         if !file.exists() {
             return Err(KeyError::NotFound);
         }

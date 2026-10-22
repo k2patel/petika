@@ -6,7 +6,8 @@ Existing vaults and deployments are not automatically converted or enabled.
 Acceptance criteria are in [the validation plan](../testing/encrypted-entry-format.md).
 An [opt-in core primitive prototype](entry-format-prototype.md) now implements
 strict object headers, entry/index AEAD and an explicit recovery wrapper. The full
-format is not release-ready and migration remains unavailable; its encoding is experimental.
+format is not release-ready; explicit server migration is opt-in, CLI submission
+is unfinished, and its encoding remains experimental.
 An [identity-authorized checkpoint/recipient extension](entry-checkpoints.md) now
 implements explicit epoch proofs. The [index extension](entry-index.md) adds
 index semantics, adjacent-head continuity and native persisted pins. Client/API
@@ -258,7 +259,7 @@ candidate and verifies every live object. It does not initialize a server or per
 
 The candidate starts a distinct entry history at revision 1 with no parent,
 tombstones or named folders; each entry starts at revision 1. The source snapshot
-revision must remain a separate future cutover CAS precondition, never be used as
+revision must remain a separate cutover CAS precondition, never be used as
 an entry-history parent. Literal legacy names stay at the implicit root, including
 slashes, case variants and distinct Unicode encodings. Every username, password,
 URL, note and optional OTP value must match. Unknown target payload fields,
@@ -283,7 +284,9 @@ cutover can be offered. Passing it changes no files, API state or client pins.
 The opt-in core `migration_draft::MigrationDraft` now stages a complete candidate
 in memory and strictly parses serialized drafts. The [experimental CLI](../cli-accounts.md#experimental-migration-staging)
 now captures live source metadata, stages protected drafts and reviews them against
-current API state. No submission route or atomic cutover is exposed yet. A draft contains:
+current API state. The opt-in server now exposes explicit source-CAS cutover through
+[`entry-migrations`](entry-history-transport.md#explicit-migration-cutover); CLI submission
+and safe client acceptance remain unfinished. A draft contains:
 
 - A random operation ID and source binding: deployment/collection IDs, snapshot
   revision, membership generation, old key epoch (0 for unbound), and SHA-256 of

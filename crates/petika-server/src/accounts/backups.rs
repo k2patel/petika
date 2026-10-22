@@ -491,6 +491,14 @@ impl Accounts {
                 .join("collections")
                 .join(id)
                 .join("snapshot.json");
+            // Legacy per-user exports cannot represent an active entry journal.
+            // Never return the retained pre-migration snapshot as a current backup.
+            if path
+                .parent()
+                .is_some_and(|p| p.join("entries/committed-root").exists())
+            {
+                return Err(KeyError::Unavailable);
+            }
             let saved = Repository::new(path)
                 .read()
                 .map_err(|_| KeyError::Unavailable)?;

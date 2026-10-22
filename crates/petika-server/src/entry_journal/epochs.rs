@@ -14,6 +14,9 @@ pub use petika_core::entry_format::epoch_transaction::EpochState;
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "lowercase", deny_unknown_fields)]
 pub(super) enum EpochRecord {
+    Migration {
+        draft: Box<petika_core::entry_format::migration_draft::MigrationDraft>,
+    },
     Anchor {
         state: EpochState,
     },
@@ -139,6 +142,21 @@ pub(super) fn validate_record(
                 old.cloned(),
             )
         }
+        Some(EpochRecord::Migration { draft }) => {
+            if previous.is_some()
+                || old.is_some()
+                || record.receipt.writer != draft.state.checkpoint.authority.user_id
+                || record.receipt.operation != draft.operation
+                || serde_json::to_vec(&record.object)? != serde_json::to_vec(&draft.object)?
+                || serde_json::to_vec(&record.changes)?
+                    != serde_json::to_vec(&migration_changes(draft))?
+            {
+                return Err("invalid migration anchor".into());
+            }
+            let next = draft.verify_public(&draft.source, &draft.state.checkpoint.authority)?;
+            validate_anchor(&draft.state, &record.object)?;
+            (migration_digest(&record.receipt.writer, draft)?, Some(next))
+        }
         Some(EpochRecord::Anchor { state }) => {
             if previous.is_some() || old.is_some() {
                 return Err("anchor replacement forbidden".into());
@@ -182,7 +200,83 @@ pub(super) fn validate_record(
         next,
     ))
 }
+fn migration_changes(
+    draft: &petika_core::entry_format::migration_draft::MigrationDraft,
+) -> Vec<EntryChange> {
+    draft
+        .entries
+        .iter()
+        .map(|entry| EntryChange::Put {
+            id: entry.id.clone(),
+            expected: None,
+            revision: 1,
+            envelope: entry.envelope.clone(),
+        })
+        .collect()
+}
+fn migration_digest(
+    writer: &str,
+    draft: &petika_core::entry_format::migration_draft::MigrationDraft,
+) -> Result<String> {
+    Ok(hash(&serde_json::to_vec(&(
+        "petika:entry-migration-submission:v1",
+        writer,
+        draft,
+    ))?))
+}
 impl Journal {
+    /// The caller holds current account/source locks and checks the source CAS,
+    /// enrolled authority and complete recipient roster. This root publication
+    /// is also the format switch; never remove the retained legacy snapshot.
+    pub fn migrate(
+        &mut self,
+        writer: &str,
+        draft: petika_core::entry_format::migration_draft::MigrationDraft,
+        trusted: &TrustedCheckpoint,
+    ) -> Result<Receipt> {
+        self.migrate_observed(writer, draft, trusted, |_| Ok(()))
+    }
+    pub(super) fn migrate_observed(
+        &mut self,
+        writer: &str,
+        draft: petika_core::entry_format::migration_draft::MigrationDraft,
+        trusted: &TrustedCheckpoint,
+        boundary: impl FnMut(u8) -> petika_core::Result<()>,
+    ) -> Result<Receipt> {
+        if self.uncertain || !identifier(writer) || trusted.checkpoint() != &draft.state.checkpoint
+        {
+            return Err("invalid or uncertain migration".into());
+        }
+        draft.verify_public(&draft.source, &trusted.checkpoint().authority)?;
+        let request_digest = migration_digest(writer, &draft)?;
+        if let Some(receipt) = self.receipt(writer, &draft.operation) {
+            if receipt.request_digest != request_digest {
+                return Err("migration operation reused".into());
+            }
+            return Ok(receipt);
+        }
+        if !self.records.is_empty() {
+            return Err("migration cannot replace an active journal".into());
+        }
+        let record = Record {
+            version: 1,
+            parent: None,
+            receipt: Receipt {
+                writer: writer.into(),
+                operation: draft.operation.clone(),
+                request_digest,
+                accepted: Cursor::from_head(&draft.object.head)?,
+            },
+            object: draft.object.clone(),
+            changes: migration_changes(&draft),
+            epoch: Some(EpochRecord::Migration {
+                draft: Box::new(draft),
+            }),
+        };
+        let (entries, _) = validate_record(&record, None, None, &self.entries)?;
+        self.publish(record, entries, boundary)
+    }
+
     pub fn check_retained_context(
         &self,
         context: &petika_core::entry_format::Context,
@@ -286,6 +380,7 @@ impl Journal {
         for (_, (_, record)) in self.records.range(..=root.revision).rev() {
             match &record.epoch {
                 Some(EpochRecord::Anchor { state }) => return Ok(Some(state.clone())),
+                Some(EpochRecord::Migration { draft }) => return Ok(Some(draft.state.clone())),
                 Some(EpochRecord::Rotation {
                     transition,
                     wrappers,

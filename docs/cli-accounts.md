@@ -194,7 +194,10 @@ stage and review; sign in to the same account/server again without replacing the
 The local file is capped at 16 MiB including its origin/account envelope, so its
 effective candidate capacity is slightly below the core draft limit. Staging/review
 perform GET requests only and never change API ciphertext, format or trust pins.
-There is **no migration submit command or atomic server cutover yet**. Review is
+There is **no CLI migration submit command yet**. The opt-in server now has a
+source-CAS migration endpoint (personal owner, or enrolled administrator with group
+edit access), but client submission, recovery readiness and
+crash-safe cache/pin acceptance remain unfinished. Review is
 against a captured read, not a freshness guarantee; future submission must recheck
 the source atomically. Keep a verified full backup separately.
 

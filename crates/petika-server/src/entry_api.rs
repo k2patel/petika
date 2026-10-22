@@ -1,4 +1,4 @@
-//! Experimental account-only routing. No journal initialization or legacy cutover.
+//! Experimental account-only routing with explicit, authenticated migration cutover.
 use crate::{
     Result,
     accounts::Accounts,
@@ -47,10 +47,19 @@ pub fn dispatch(
     if !super::entry_journal::identifier(collection) {
         return Err("collection access denied".into());
     }
-    let write = matches!(action, "entry-transactions" | "entry-rotations");
+    let write = matches!(
+        action,
+        "entry-transactions" | "entry-rotations" | "entry-migrations"
+    );
     // Check access before observing even existence/lock state of the journal.
     accounts.with_entry_access(token, collection, write, |_| Ok(()))?;
-    let limit = if write { MAX_TRANSACTION_BYTES } else { 4096 };
+    let limit = if action == "entry-migrations" {
+        petika_core::entry_format::migration_draft::MAX_MIGRATION_BYTES
+    } else if write {
+        MAX_TRANSACTION_BYTES
+    } else {
+        4096
+    };
     let mut bytes = Vec::new();
     body.by_ref()
         .take(limit as u64 + 1)
@@ -60,8 +69,8 @@ pub fn dispatch(
     }
     let path = directory.join("collections").join(collection);
     // Explicit migration is required. Never serve two authoritative formats.
-    if path.join("snapshot.json").exists() || !path.join("entries/committed-root").is_file() {
-        return Err("entry format not active; migration is unavailable".into());
+    if action != "entry-migrations" && !path.join("entries/committed-root").is_file() {
+        return Err("entry format not active; explicit migration required".into());
     }
     let mut journal = Journal::open(path.join("entries"))?;
     accounts.with_entry_access(token, collection, write, |auth| {
@@ -72,6 +81,26 @@ pub fn dispatch(
             Ok(())
         };
         match action {
+            "entry-migrations" => {
+                use petika_core::entry_format::migration_draft::{MigrationDraft, SourceBinding};
+                if !auth.may_migrate { return Err("migration authority denied".into()); }
+                let draft = MigrationDraft::parse(&bytes)?;
+                let authority = auth.recipient_identities.get(&auth.writer)
+                    .and_then(Option::as_ref).ok_or("authority not enrolled")?;
+                let recipients = auth.recipient_identities.values().cloned()
+                    .collect::<Option<Vec<_>>>().ok_or("recipient not enrolled")?;
+                if draft.recipients != recipients { return Err("migration recipients changed".into()); }
+                // Journal -> accounts -> snapshot lock order. Keep all three
+                // through the single root publication; legacy bytes are retained.
+                let source_file = petika_core::StoreFile::lock(path.join("snapshot.json"))?;
+                let source: crate::Snapshot = serde_json::from_slice(&source_file.read()?)?;
+                let binding = SourceBinding::capture(auth.deployment_id.clone(), collection.into(),
+                    source.revision, auth.membership_generation, source.encrypted.as_bytes())?;
+                let trusted = draft.verify_public(&binding, authority)?;
+                if draft.source_encrypted != source.encrypted { return Err("migration source changed".into()); }
+                let receipt = journal.migrate(&auth.writer, draft, &trusted)?;
+                Ok(serde_json::to_vec(&serde_json::json!({"receipt":receipt,"replication":"unavailable"}))?)
+            }
             "entry-roster" => {
                 #[derive(Deserialize)]
                 #[serde(deny_unknown_fields)]

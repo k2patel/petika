@@ -114,18 +114,19 @@ duplicate IDs, expected previous entry revision/digest and permanent tombstones.
 `Journal::entry` resolves an ID and exact digest at a committed cursor, including old
 reader roots. It rejects deleted, absent, mismatched and mixed-root ciphertexts.
 It cannot validate encrypted names, index completeness or encrypted tombstones;
-unlocked clients must verify these. No snapshot is imported or converted.
+unlocked clients must verify these. Ordinary transactions never import snapshots.
 
 ## Account HTTP boundary
 
 All entry routes use POST JSON with the existing session/CLI authentication,
 `X-Petika-Request: 1` and same-origin request checks. There is no single-account
-bootstrap-bearer access. Routes require an already initialized journal at
-`collections/{id}/entries`; initialization and migration are not exposed.
-An existing `snapshot.json` rejects entry requests, preventing implicit cutover.
+bootstrap-bearer access. Reads and ordinary writes require an initialized journal at
+`collections/{id}/entries`. Only explicit `entry-migrations` can initialize a journal
+from a signed migration draft. Retained `snapshot.json` bytes are recovery evidence;
+the committed entry root is the single format selection point.
 Conversely, a committed entry root rejects legacy snapshot/delivery requests with
 426 after authorization, including in default server builds. Collection `status`
-advertises `entry-v1`, supported capabilities, runtime gate state and unavailable
+advertises `entry-v1`, supported capabilities, runtime gate state and already-active
 migration status, accepted cursor and separate local/remote replication cursors.
 Capability support does not grant write permission.
 
@@ -135,6 +136,7 @@ Capability support does not grant write permission.
 | `entry-object` | `{context,root,id,digest}` (4 KiB) | Exact encrypted envelope |
 | `entry-receipt` | `{context,operation}` (4 KiB) | `{receipt: Receipt or null}` for the current writer |
 | `entry-transactions` | `{version:1,operation,expected,object,changes}` (12 MiB) | `{receipt,replication:"unavailable" or "pending"}` |
+| `entry-migrations` | Complete signed `MigrationDraft` (16 MiB) | Same receipt/replication envelope |
 | `entry-rotations` | Complete `EpochTransaction` (12 MiB) | Same receipt/replication envelope |
 | `entry-epoch` | `{context,after}` (4 KiB) | `{transaction: EpochTransaction or null}` |
 | `entry-roster` | `{}` (4 KiB) | `{version:1,membership_generation,recipients}` (4 MiB) |
@@ -158,6 +160,50 @@ rollback or retry under a new operation ID is implied. The server caps request
 reads before buffering them in full. Nothing reports remote Git completion.
 Receipt absence is explicit null; missing/duplicate/unknown fields fail closed.
 The lookup envelope replaces the original experimental naked-receipt response.
+
+## Explicit migration cutover
+
+`POST /v1/collections/{id}/entry-migrations` is gated by the experimental build and
+runtime flag. It accepts the core `MigrationDraft`, not the CLI's saved-draft envelope.
+The personal owner may initialize their vault. A shared vault requires an enrolled
+administrator who is also a current editing member; ordinary editors and administrators
+without membership cannot select its initial authority. This is the initial policy,
+not delegated authority handover or a multi-party approval workflow.
+
+The server acquires journal, account and source-snapshot locks in that order and
+retains them through publication. It compares exact source ciphertext, revision,
+epoch, deployment/collection, membership generation and every current enrolled
+recipient identity. The signature must match the writer's current enrolled identity.
+All recipients must be enrolled. The server checks public framing and signatures;
+it cannot prove decrypted content preservation or successful recipient/recovery unlock.
+Those remain client and release requirements.
+
+A migration record retains the complete signed draft and its original ciphertext,
+initial checkpoint, wrappers and entries. Publishing `entries/committed-root` is the
+only format switch. Original `snapshot.json` and existing Git history remain intact;
+legacy writes and delivery routes are rejected, including by default builds. The
+legacy mirror skips active entry collections; entry replication includes them even
+when their retained snapshot exists. Legacy per-user collection backup exports fail
+closed for active entry collections, rather than exporting a stale snapshot as current.
+Complete entry-aware backup/restore remains a release blocker.
+
+The receipt's request digest is SHA-256 of canonical serde JSON for the tuple
+`["petika:entry-migration-submission:v1", writer, draft]`; it binds the full signed
+request. Exact retries return the existing receipt, subject to current authorization
+and source/roster checks. Reusing an operation ID with changed bytes or replacing an
+active journal fails. After later membership changes, use the writer-scoped receipt
+lookup to reconcile; do not create a new migration or reset trust. Receipt presence
+proves accepted storage, not remote Git completion or successful local pin installation.
+
+The request limit is 16 MiB. The serialized committed record also has the existing
+16 MiB storage limit, including retained draft and journal entry copies, so the
+maximum usable draft can be smaller. Oversized records fail before root publication.
+Process-exit tests cover all eight record/root write boundaries: reopening observes
+no committed root or the full initial journal. Orphan records are ignored. This does
+not establish physical power-loss guarantees or independent security review.
+
+CLI staging/review is available; CLI submission, readiness checks and crash-safe
+cache/pin acceptance are the next step. No deployment is enabled by this endpoint.
 
 ## CLI confirmation and resumable index sync
 

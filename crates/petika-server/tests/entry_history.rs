@@ -498,7 +498,7 @@ fn account_entry_api_binds_access_context_receipts_and_legacy_boundary() {
         )
         .is_err()
     );
-    // A legacy file prevents any dual-format serving or implicit cutover.
+    // Retained legacy bytes do not hide an already committed entry root.
     petika_core::StoreFile::lock(path.parent().unwrap().join("snapshot.json"))
         .unwrap()
         .write(b"legacy marker", true)
@@ -512,7 +512,7 @@ fn account_entry_api_binds_access_context_receipts_and_legacy_boundary() {
             "entry-history",
             bytes.as_slice()
         )
-        .is_err()
+        .is_ok()
     );
     accounts.logout(&owner_token);
     assert!(
@@ -576,6 +576,69 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
         .as_str()
         .unwrap()
         .to_owned();
+    // A second collection starts in legacy format and migrates through real HTTP.
+    let group = accounts
+        .save_group(
+            None,
+            "Migration HTTP",
+            vec![petika_server::accounts::Membership {
+                user_id: user.id.clone(),
+                edit: true,
+            }],
+        )
+        .unwrap();
+    let mut identity = UnlockedIdentity::generate(&deployment, &user.id, 1).unwrap();
+    let bundle: serde_json::Value =
+        serde_json::from_slice(&identity.seal(password).unwrap()).unwrap();
+    accounts.key_operation(&token, KeyOperation::Enroll, &serde_json::to_vec(&serde_json::json!({
+        "expected_bundle_revision":0, "current_password":password,
+        "public_identity":bundle["public_identity"], "encrypted_bundle":bundle["encrypted_bundle"]
+    })).unwrap()).unwrap();
+    // Enrollment changes a shared collection's membership generation.
+    let group = accounts
+        .groups()
+        .unwrap()
+        .into_iter()
+        .find(|g| g.id == group.id)
+        .unwrap();
+    let public = identity.public_identity().clone();
+    let source = petika_core::UnlockedStore::create(password)
+        .unwrap()
+        .seal()
+        .unwrap();
+    let draft = migration_draft::MigrationDraft::stage(
+        migration_draft::SourceBinding::capture(
+            deployment.clone(),
+            group.id.clone(),
+            1,
+            group.membership_generation,
+            &source,
+        )
+        .unwrap(),
+        &source,
+        password,
+        &mut identity,
+        &[public],
+        migration_draft::Recovery::Omit,
+    )
+    .unwrap();
+    let snapshot_path = dir
+        .path()
+        .join("collections")
+        .join(&group.id)
+        .join("snapshot.json");
+    let original = serde_json::to_vec(&petika_server::Snapshot {
+        schema_version: 1,
+        revision: 1,
+        encrypted: String::from_utf8(source).unwrap(),
+        delivery: None,
+    })
+    .unwrap();
+    petika_core::StoreFile::lock(&snapshot_path)
+        .unwrap()
+        .write(&original, true)
+        .unwrap();
+    let migration_body = serde_json::to_string(&draft).unwrap();
     let root = RootKey::generate(deployment, user.id.clone(), 1).unwrap();
     let first = record(&root, 1, String::new());
     let cursor = Journal::open(
@@ -650,6 +713,74 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
         let headers = format!(
             "Cookie: {cookie}\r\nContent-Type: application/json\r\nX-Petika-Request: 1\r\n"
         );
+        let migration_prefix = format!("/v1/collections/{}", group.id);
+        let before = request(
+            address,
+            "GET",
+            &format!("{migration_prefix}/snapshot"),
+            &headers,
+            "",
+        );
+        assert!(before.starts_with("HTTP/1.1 200"));
+        let migrated = request(
+            address,
+            "POST",
+            &format!("{migration_prefix}/entry-migrations"),
+            &headers,
+            &migration_body,
+        );
+        assert!(
+            migrated.starts_with(if enabled {
+                "HTTP/1.1 200"
+            } else {
+                "HTTP/1.1 404"
+            }),
+            "{migrated}"
+        );
+        assert_eq!(std::fs::read(&snapshot_path).unwrap(), original);
+        if enabled {
+            let retried = request(
+                address,
+                "POST",
+                &format!("{migration_prefix}/entry-migrations"),
+                &headers,
+                &migration_body,
+            );
+            assert!(retried.starts_with("HTTP/1.1 200"));
+            assert_eq!(
+                migrated.split("\r\n\r\n").nth(1),
+                retried.split("\r\n\r\n").nth(1)
+            );
+            for method in ["GET", "PUT"] {
+                assert!(
+                    request(
+                        address,
+                        method,
+                        &format!("{migration_prefix}/snapshot"),
+                        &headers,
+                        ""
+                    )
+                    .starts_with("HTTP/1.1 426")
+                );
+            }
+            let page_request = HistoryRequest {
+                version: 1,
+                context: draft.object.head.context.clone(),
+                after: Cursor::from_head(&draft.object.head).unwrap(),
+                target: None,
+                limit: 32,
+            };
+            assert!(
+                request(
+                    address,
+                    "POST",
+                    &format!("{migration_prefix}/entry-history"),
+                    &headers,
+                    &serde_json::to_string(&page_request).unwrap()
+                )
+                .starts_with("HTTP/1.1 200")
+            );
+        }
         let prefix = format!("/v1/collections/{}", user.id);
         let response = request(
             address,
@@ -666,7 +797,12 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
             }),
             "{response}"
         );
-        for action in ["entry-rotations", "entry-epoch", "entry-roster"] {
+        for action in [
+            "entry-rotations",
+            "entry-epoch",
+            "entry-roster",
+            "entry-migrations",
+        ] {
             let response = request(
                 address,
                 "POST",
@@ -675,7 +811,9 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
                 "{}",
             );
             assert!(
-                response.starts_with(if enabled {
+                response.starts_with(if enabled && action == "entry-roster" {
+                    "HTTP/1.1 200"
+                } else if enabled {
                     "HTTP/1.1 409"
                 } else {
                     "HTTP/1.1 404"
@@ -701,7 +839,12 @@ fn real_http_entry_routes_require_runtime_gate_session_and_request_headers() {
                 format!("Cookie: {cookie}\r\nContent-Type: application/json\r\n"),
                 format!("{headers}Sec-Fetch-Site: cross-site\r\n"),
             ] {
-                for action in ["entry-rotations", "entry-epoch", "entry-roster"] {
+                for action in [
+                    "entry-rotations",
+                    "entry-epoch",
+                    "entry-roster",
+                    "entry-migrations",
+                ] {
                     assert!(
                         request(
                             address,

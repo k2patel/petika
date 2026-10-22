@@ -416,7 +416,6 @@ pub fn start_worker(
                     let id = entry.file_name().to_string_lossy().into_owned();
                     if !super::entry_journal::identifier(&id)
                         || !entry.path().join("entries/committed-root").is_file()
-                        || entry.path().join("snapshot.json").exists()
                     {
                         continue;
                     }

@@ -1,4 +1,4 @@
-//! Isolated, single-writer committed index/entry history. No legacy snapshot import.
+//! Single-writer committed entry history with explicit signed migration anchors.
 //! Authorization belongs to the account API layer; encrypted semantics to clients.
 use crate::Result;
 use crate::entry_transaction::{self, Entries, EntryChange, Transaction};
