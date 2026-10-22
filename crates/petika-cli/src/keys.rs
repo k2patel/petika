@@ -205,7 +205,7 @@ fn open_local_with_identity(
     let context = context.ok_or("Not a recipient collection")?;
     Ok(identity.open_key_package(&package, &issuer, encrypted, &context, mode)?)
 }
-fn access_state(client: &account::Client, prefix: &str) -> Result<Value> {
+pub(crate) fn access_state(client: &account::Client, prefix: &str) -> Result<Value> {
     let mut state = client.json("GET", &format!("{prefix}/key-access"), Value::Null)?;
     for _ in 0..100 {
         let cursor = state["next_cursor"].as_str().ok_or("Invalid cursor")?;

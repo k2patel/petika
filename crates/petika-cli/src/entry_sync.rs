@@ -29,6 +29,10 @@ pub struct UnlockArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Stage an encrypted migration from a live legacy snapshot; no cutover.
+    MigrateStage(crate::entry_migrate::StageArgs),
+    /// Review a migration against the current API source; no cutover.
+    MigrateReview(crate::entry_migrate::ReviewArgs),
     /// Stage a complete encrypted key rotation; nothing is submitted.
     Rotate(crate::entry_rotate::StageArgs),
     /// Verify and review the recipients and recovery policy of a rotation draft.
@@ -212,6 +216,8 @@ pub(crate) fn open_recipient(
 }
 pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
     match command {
+        Command::MigrateStage(args) => return crate::entry_migrate::stage(session, args, stdin),
+        Command::MigrateReview(args) => return crate::entry_migrate::review(session, args, stdin),
         Command::Rotate(args) => return crate::entry_rotate::stage(session, args, stdin),
         Command::RotateReview(args) => return crate::entry_rotate::review(session, args, stdin),
         Command::RotateSubmit(args) => return crate::entry_rotate::submit(session, args, stdin),

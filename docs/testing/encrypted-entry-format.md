@@ -144,6 +144,18 @@ Atomic migration/cutover, authority handover, complete server/recipient restore 
 power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 
+CLI migration evidence:
+
+- `migration_cli_captures_live_source_and_retains_stale_drafts_without_writes`
+  exercises actual CLI subprocesses with Standard/Hybrid snapshots and both recovery
+  policies. The mock API asserts GET-only traffic and paginated roster use; tests
+  reject read-only access, capture races, identity mismatch, wrong credentials,
+  changed source revision/membership and foreign origin. Drafts remain unchanged
+  after failures and re-review; neither the legacy local store nor a pin is created.
+- `personal_migration_uses_own_enrollment_without_group_access_endpoint` confirms
+  personal stage/review uses the enrolled owner and generation 1, without requesting
+  the group-only key-access endpoint. These are synthetic HTTP tests, not live cutover.
+
 ## Test harness and evidence
 
 Use synthetic secrets only. Build deterministic fixtures with fixed test-only

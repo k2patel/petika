@@ -14,6 +14,9 @@ use std::{
 const PASSWORD: &str = "synthetic collection passphrase";
 
 #[cfg(feature = "experimental-entry-format")]
+#[path = "managed/migration.rs"]
+mod migration;
+#[cfg(feature = "experimental-entry-format")]
 #[path = "managed/rotation.rs"]
 mod rotation;
 

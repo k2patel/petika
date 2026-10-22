@@ -254,8 +254,7 @@ to anyone who already had old keys. Rotation does not erase disclosed secrets.
 
 The opt-in core `migration::VerifiedMigration` now provides a local preservation
 gate. It compares an unlocked legacy store with a decrypted, checkpoint-bound
-candidate and verifies every live object. This is not an implemented migration
-command, server initializer, or cutover endpoint.
+candidate and verifies every live object. It does not initialize a server or perform cutover.
 
 The candidate starts a distinct entry history at revision 1 with no parent,
 tombstones or named folders; each entry starts at revision 1. The source snapshot
@@ -282,8 +281,9 @@ cutover can be offered. Passing it changes no files, API state or client pins.
 ### Encrypted migration draft contract
 
 The opt-in core `migration_draft::MigrationDraft` now stages a complete candidate
-in memory and strictly parses serialized drafts. No CLI migration command, HTTP
-submission route or atomic cutover is exposed yet. A draft contains:
+in memory and strictly parses serialized drafts. The [experimental CLI](../cli-accounts.md#experimental-migration-staging)
+now captures live source metadata, stages protected drafts and reviews them against
+current API state. No submission route or atomic cutover is exposed yet. A draft contains:
 
 - A random operation ID and source binding: deployment/collection IDs, snapshot
   revision, membership generation, old key epoch (0 for unbound), and SHA-256 of

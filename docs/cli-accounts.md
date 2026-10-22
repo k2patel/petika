@@ -158,6 +158,46 @@ credentials, or TOTP keys here. On Windows the optional rc is read from
 `%USERPROFILE%/.petikarc`; existing default data paths remain unchanged when no rc
 is present. Restrict its ACLs on Windows.
 
+## Experimental migration staging
+
+With a CLI compiled using `experimental-entry-format`, enrolled users can stage
+and review a migration from a live legacy personal or group snapshot:
+
+```sh
+petika entries migrate-stage --authority-identity identity.json \
+  --recovery-policy replace --draft migration.json
+petika entries migrate-review --authority-identity identity.json --draft migration.json
+```
+
+Both commands default to `--collection personal`; pass `--collection GROUP_ID` for
+a group. The session needs edit access. Every enabled recipient must be enrolled,
+and the staging identity must match the authenticated user's current enrollment.
+Other recipients must already be independently verified contacts. Personal capture
+uses the owner's enrollment and snapshot; group capture verifies the entire paginated
+roster and rechecks source revision/membership before accepting the read.
+
+Staging prompts for the source recovery passphrase, local identity passphrase, and
+then a new recovery passphrase twice for `replace`. Choose `omit` explicitly to
+create no new recovery wrapper. Review prompts for source recovery and identity
+passphrases only. `--passphrase-stdin` reads those values as successive lines;
+never put passphrases in arguments or configuration. Recipient-only source unlock
+is not supported by these commands yet.
+
+The protected draft contains the original ciphertext and signed new candidate,
+plus the API origin/account binding. It never overwrites an existing draft. Review
+fetches current API state and rejects changed source revisions, membership,
+recipients, account or server while retaining the file. Its summary shows opaque
+recipient IDs/fingerprints, source counters, recovery policy and checkpoint digest;
+it hides entry names, passwords and TOTP values. Account sessions can expire between
+stage and review; sign in to the same account/server again without replacing the draft.
+
+The local file is capped at 16 MiB including its origin/account envelope, so its
+effective candidate capacity is slightly below the core draft limit. Staging/review
+perform GET requests only and never change API ciphertext, format or trust pins.
+There is **no migration submit command or atomic server cutover yet**. Review is
+against a captured read, not a freshness guarantee; future submission must recheck
+the source atomically. Keep a verified full backup separately.
+
 ## Managed accounts and sync
 
 The opt-in per-entry format has a separate [experimental CLI rotation workflow](research/entry-history-transport.md#cli-rotation-and-adjacent-epoch-acceptance).
