@@ -49,6 +49,29 @@ fn empty_migration_draft_has_a_complete_recoverable_index() {
     let index = draft.verify(&expected, &public, OLD, &root).unwrap();
     assert!(index.index().entries.is_empty());
     assert!(draft.entries.is_empty());
+    let writer = &public.user_id;
+    let receipt = transaction::Receipt {
+        writer: writer.clone(),
+        operation: draft.operation.clone(),
+        request_digest: draft.submission_digest(writer).unwrap(),
+        accepted: transport::Cursor::from_head(&draft.object.head).unwrap(),
+    };
+    let bytes =
+        serde_json::to_vec(&("petika:entry-migration-submission:v1", writer, &draft)).unwrap();
+    let expected: String = digest(&bytes).iter().map(|b| format!("{b:02x}")).collect();
+    assert_eq!(receipt.request_digest, expected);
+    draft.verify_receipt(writer, &receipt).unwrap();
+    for field in 0..4 {
+        let mut changed = receipt.clone();
+        match field {
+            0 => changed.writer = "0".repeat(64),
+            1 => changed.operation = "0".repeat(64),
+            2 => changed.request_digest = "0".repeat(64),
+            _ => changed.accepted.revision += 1,
+        }
+        assert!(draft.verify_receipt(writer, &changed).is_err());
+    }
+
     assert_eq!(draft.source_encrypted.as_bytes(), encrypted);
 }
 struct Fixture {

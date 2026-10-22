@@ -104,6 +104,27 @@ fn header(root: &RootKey, kind: Kind, id: String) -> Header {
     }
 }
 impl MigrationDraft {
+    /// Exact signed submission identity shared by client and server receipts.
+    pub fn submission_digest(&self, writer: &str) -> Result<String> {
+        self.limits()?;
+        if !id(writer) {
+            return Err(Error::Format);
+        }
+        let bytes = serde_json::to_vec(&("petika:entry-migration-submission:v1", writer, self))
+            .map_err(|_| Error::Format)?;
+        Ok(hex(&digest(&bytes)))
+    }
+    pub fn verify_receipt(&self, writer: &str, receipt: &transaction::Receipt) -> Result<()> {
+        if receipt.writer != writer
+            || receipt.operation != self.operation
+            || receipt.request_digest != self.submission_digest(writer)?
+            || receipt.accepted != transport::Cursor::from_head(&self.object.head)?
+        {
+            return Err(Error::Authentication);
+        }
+        Ok(())
+    }
+
     pub fn parse(bytes: &[u8]) -> Result<Self> {
         if bytes.len() > MAX_MIGRATION_BYTES {
             return Err(Error::Format);

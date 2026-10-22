@@ -182,20 +182,24 @@ The opt-in server now accepts signed migration drafts with locked source/roster 
 and publishes the complete journal through one root pointer, retaining the legacy
 snapshot. Personal owners or enrolled shared-vault administrators with edit access
 may select the initial authority. Exact retries and process-exit boundaries are tested.
-CLI submission, all-recipient restore checks and safe client acceptance remain unfinished.
+CLI `migrate-submit --confirm` now verifies full contents and replacement recovery,
+reconciles exact receipts after interrupted submission, and caches artifacts/receipt
+before initializing a new pin. Existing different/advanced pins are never reset.
+All-recipient restore checks and source recipient-only unlock remain unfinished.
 
 ### Remaining entry-format work, in order
 
-1. **CLI submission and reconciliation:** exact operation receipts, lost-response
-   retries, crash-safe cache/pin publication, source recipient unlock and explicit
-   recovery/recipient readiness checks. No automatic rebase or trust reset.
-2. **Complete disaster restore:** entry journal, wrappers, accounts/configuration,
+1. **Complete disaster restore:** entry journal, wrappers, accounts/configuration,
    identity bundles and client pins; isolated Git/full-backup restore, rotated
    epochs and pre-migration backup reconciliation after newer writes.
-3. **Client coverage and simple UI:** web/extension entry-format integration,
+2. **Client coverage and simple UI:** web/extension entry-format integration,
    trusted handoff and recovery UX, authority handover, native/WASM compatibility
    and explicit old-client upgrade behavior. Current core/CLI work is not full
    browser/mobile support.
+3. **Migration access/readiness:** recipient-only legacy source unlock, working
+   recipient-device/recovery evidence and a full real-server CLI migration drill.
+   The new replacement recovery wrapper is checked locally, but that does not
+   establish every recipient’s ability to restore.
 4. **Release evidence:** remaining E/T/K/M matrix scenarios, disk-full/permission
    and physical durability tests, independent cryptographic/security review,
    accessibility and platform QA. Default enablement stays off until reviewed.

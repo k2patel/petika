@@ -218,11 +218,7 @@ fn migration_digest(
     writer: &str,
     draft: &petika_core::entry_format::migration_draft::MigrationDraft,
 ) -> Result<String> {
-    Ok(hash(&serde_json::to_vec(&(
-        "petika:entry-migration-submission:v1",
-        writer,
-        draft,
-    ))?))
+    Ok(draft.submission_digest(writer)?)
 }
 impl Journal {
     /// The caller holds current account/source locks and checks the source CAS,

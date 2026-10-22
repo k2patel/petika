@@ -65,6 +65,7 @@ impl Client {
                 | "entry-receipt"
                 | "entry-transactions"
                 | "entry-rotations"
+                | "entry-migrations"
                 | "entry-epoch"
                 | "entry-roster"
         ) || collection.len() != 64

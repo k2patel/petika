@@ -202,8 +202,12 @@ Process-exit tests cover all eight record/root write boundaries: reopening obser
 no committed root or the full initial journal. Orphan records are ignored. This does
 not establish physical power-loss guarantees or independent security review.
 
-CLI staging/review is available; CLI submission, readiness checks and crash-safe
-cache/pin acceptance are the next step. No deployment is enabled by this endpoint.
+CLI staging/review and explicit `migrate-submit --confirm` are available. Submission
+verifies decrypted content and the replacement recovery wrapper, reconciles the exact
+receipt, and saves artifacts before initializing a new local pin. See the
+[CLI workflow](../cli-accounts.md#experimental-migration-staging). Complete recipient
+readiness, source recipient-only unlock and disaster recovery remain open. No
+deployment is enabled by this endpoint.
 
 ## CLI confirmation and resumable index sync
 

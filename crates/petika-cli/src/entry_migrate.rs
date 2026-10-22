@@ -1,4 +1,4 @@
-//! Live-source migration staging and review. No publication or pin mutation.
+//! Explicit migration staging, review and receipt-confirmed local acceptance.
 use crate::{
     Result, account,
     entry_rotate::RecoveryPolicy,
@@ -242,7 +242,7 @@ pub fn stage(session: &Path, args: &StageArgs, stdin: bool) -> Result<()> {
     file.write(&serde_json::to_vec(&saved)?, true)?;
     summary(&saved)?;
     println!(
-        "Encrypted draft saved. Run migrate-review against the API before proceeding. Submission is not implemented."
+        "Encrypted draft saved. Run migrate-review against the API before proceeding. Submission requires migrate-submit --confirm."
     );
     Ok(())
 }
@@ -281,5 +281,222 @@ pub fn review(session: &Path, args: &ReviewArgs, stdin: bool) -> Result<()> {
     println!(
         "Verified against the captured API state. A later change still requires cutover CAS; this is not proof of global freshness."
     );
+    Ok(())
+}
+
+#[derive(Args)]
+pub struct SubmitArgs {
+    #[command(flatten)]
+    pub review: ReviewArgs,
+    /// New local trust file; an existing different pin is never replaced.
+    #[arg(long)]
+    pub pin: PathBuf,
+    #[arg(long)]
+    pub cache: PathBuf,
+    /// Authorize this exact reviewed migration and initial local trust acceptance.
+    #[arg(long)]
+    pub confirm: bool,
+}
+fn immutable(path: &Path, bytes: &[u8]) -> Result<()> {
+    let file = StoreFile::lock(path)?;
+    if file.exists() {
+        if file.read()? != bytes {
+            return Err("Migration artifact differs; preserve evidence".into());
+        }
+    } else {
+        file.write(bytes, true)?;
+    }
+    Ok(())
+}
+fn cache_migration(
+    cache: &Path,
+    draft: &MigrationDraft,
+    trusted: &petika_core::entry_format::checkpoint::TrustedCheckpoint,
+) -> Result<()> {
+    use petika_core::entry_format::{digest, epoch_transaction::EpochWrapper};
+    crate::entry_sync::cache_object(cache, &draft.object)?;
+    immutable(
+        &cache.join(format!("epoch-{}.json", draft.state.checkpoint.digest()?)),
+        &serde_json::to_vec(&draft.state)?,
+    )?;
+    immutable(
+        &cache.join(format!("migration-{}.json", draft.operation)),
+        &serde_json::to_vec(draft)?,
+    )?;
+    for entry in &draft.entries {
+        let digest: String = digest(entry.envelope.as_bytes())
+            .iter()
+            .map(|b| format!("{b:02x}"))
+            .collect();
+        immutable(
+            &cache.join(format!("entry-{digest}.json")),
+            entry.envelope.as_bytes(),
+        )?;
+    }
+    for wrapper in &draft.state.wrappers {
+        if let EpochWrapper::Recovery(envelope) = wrapper {
+            immutable(
+                &cache.join(format!(
+                    "recovery-{}.json",
+                    wrapper.reference(trusted)?.wrapper_id
+                )),
+                envelope.as_bytes(),
+            )?;
+        }
+    }
+    Ok(())
+}
+pub fn submit(session: &Path, args: &SubmitArgs, stdin: bool) -> Result<()> {
+    use petika_core::entry_format::{
+        checkpoint_store::CheckpointStore,
+        epoch_transaction::EpochWrapper,
+        index::VerifiedIndex,
+        transaction::{CommitResponse, ReceiptLookup},
+    };
+    if !args.confirm {
+        return Err("Review the migration and supply --confirm; draft retained".into());
+    }
+    let file = StoreFile::lock(&args.review.draft)?;
+    let saved: Saved = serde_json::from_slice(&file.read()?)?;
+    let draft = MigrationDraft::parse(&serde_json::to_vec(&saved.draft)?)?;
+    let client = account::client(session)?;
+    let collection = account::collection(&client, &args.review.collection, false)?;
+    let user = client.json("GET", "/v1/auth/status", Value::Null)?;
+    if saved.version != 1
+        || saved.server != client.server
+        || user["user"]["id"].as_str() != Some(saved.writer.as_str())
+        || collection != draft.source.collection_id
+    {
+        return Err("Migration server/account/collection mismatch; draft retained".into());
+    }
+    let status = client.json(
+        "GET",
+        &format!("/v1/collections/{collection}/status"),
+        Value::Null,
+    )?;
+    let active = status["format"].as_str() == Some("entry-v1");
+    let store = CheckpointStore::lock(&args.pin)?;
+    let existing = args.pin.exists();
+    if existing
+        && (store.head(&draft.object.head.context)? != draft.object.head
+            || store.trusted(&draft.object.head.context)?.checkpoint() != &draft.state.checkpoint)
+    {
+        return Err("Local pin changed; no migration reset or rebase".into());
+    }
+    // A missing pin always requires full source/candidate content verification,
+    // even when the server already accepted the migration before a lost response.
+    let source_passphrase = if existing {
+        None
+    } else {
+        Some(crate::secret(
+            "Source recovery passphrase (local only): ",
+            stdin,
+        )?)
+    };
+    let (trusted, index) = with_identity(&args.review.authority_identity, stdin, |identity| {
+        if identity.public_identity().user_id != saved.writer {
+            return Err("Authority account mismatch".into());
+        }
+        if !active {
+            for recipient in &draft.recipients {
+                if recipient != identity.public_identity() {
+                    identity.require_verified_contact(&recipient.user_id, recipient)?;
+                }
+            }
+        }
+        let trusted = draft.verify_public(&draft.source, identity.public_identity())?;
+        let root = open_recipient(identity, &draft.state, &trusted)?;
+        let index = if let Some(passphrase) = &source_passphrase {
+            let verified =
+                draft.verify(&draft.source, identity.public_identity(), passphrase, &root)?;
+            // Prove the newly selected recovery path is usable before first local
+            // acceptance. No alternate wrapper or password is tried automatically.
+            for wrapper in &draft.state.wrappers {
+                if let EpochWrapper::Recovery(envelope) = wrapper {
+                    let passphrase =
+                        crate::secret("New recovery passphrase (local only): ", stdin)?;
+                    let recovered = trusted.open_recovery(
+                        envelope.as_bytes(),
+                        &passphrase,
+                        &draft.state.references(&trusted)?,
+                    )?;
+                    VerifiedIndex::open(
+                        &recovered,
+                        draft.object.head.clone(),
+                        draft.object.envelope.as_bytes(),
+                    )?
+                    .matches_checkpoint(&trusted)?;
+                }
+            }
+            verified
+        } else {
+            let verified = VerifiedIndex::open(
+                &root,
+                draft.object.head.clone(),
+                draft.object.envelope.as_bytes(),
+            )?;
+            verified.matches_checkpoint(&trusted)?;
+            verified
+        };
+        Ok((trusted, index))
+    })?;
+    let receipt = if active {
+        let lookup: ReceiptLookup = serde_json::from_slice(&client.entry_call(&collection, "entry-receipt",
+            &serde_json::to_vec(&serde_json::json!({"context":draft.object.head.context,"operation":draft.operation}))?, 4096)?)?;
+        lookup.receipt.ok_or(
+            "Active server has no matching migration receipt; draft retained, no resubmission",
+        )?
+    } else {
+        if existing {
+            return Err("Server no longer reports the accepted format; do not reset trust".into());
+        }
+        if !status["format"].is_null() {
+            return Err("Unsupported server format".into());
+        }
+        let captured = capture(session, &args.review.collection)?;
+        if captured.source != draft.source
+            || captured.recipients != draft.recipients
+            || captured.encrypted != draft.source_encrypted
+            || captured.writer != saved.writer
+            || captured.server != saved.server
+        {
+            return Err("Migration source or recipients changed; draft retained, no rebase".into());
+        }
+        if collection != saved.writer && user["user"]["admin"].as_bool() != Some(true) {
+            return Err("Shared migration requires an administrator with edit access".into());
+        }
+        // Catch local cache conflicts before asking the server to switch formats.
+        cache_migration(&args.cache, &draft, &trusted)?;
+        let response: CommitResponse = serde_json::from_slice(&client.entry_call(
+            &collection,
+            "entry-migrations",
+            &serde_json::to_vec(&draft)?,
+            4096,
+        )?)?;
+        if !matches!(response.replication.as_str(), "pending" | "unavailable") {
+            return Err("Unexpected replication acknowledgement".into());
+        }
+        response.receipt
+    };
+    draft.verify_receipt(&saved.writer, &receipt)?;
+    cache_migration(&args.cache, &draft, &trusted)?;
+    immutable(
+        &args.review.draft.with_extension("accepted.json"),
+        &serde_json::to_vec(&receipt)?,
+    )?;
+    if !existing {
+        store.initialize(&trusted, &index)?;
+    }
+    println!(
+        "Migration accepted at revision {}. Verified ciphertexts, wrappers and receipt saved before local trust acceptance. Draft retained.",
+        receipt.accepted.revision
+    );
+    println!(
+        "Anchor: {}",
+        args.cache
+            .join(format!("{}.json", draft.object.head.digest()?))
+            .display()
+    );
+    println!("Use --recipient-identity with this cache. Remote Git completion is not confirmed.");
     Ok(())
 }

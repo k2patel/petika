@@ -194,12 +194,49 @@ stage and review; sign in to the same account/server again without replacing the
 The local file is capped at 16 MiB including its origin/account envelope, so its
 effective candidate capacity is slightly below the core draft limit. Staging/review
 perform GET requests only and never change API ciphertext, format or trust pins.
-There is **no CLI migration submit command yet**. The opt-in server now has a
-source-CAS migration endpoint (personal owner, or enrolled administrator with group
-edit access), but client submission, recovery readiness and
-crash-safe cache/pin acceptance remain unfinished. Review is
-against a captured read, not a freshness guarantee; future submission must recheck
-the source atomically. Keep a verified full backup separately.
+Review is against a captured read, not a freshness guarantee; the server rechecks
+source and recipient state atomically during submission. Keep a verified full backup
+separately. Initial shared-vault authority requires an enrolled administrator with
+edit access; the personal owner can migrate their own vault without administrator rights.
+
+After reviewing the recipients, recovery policy and backup readiness:
+
+```sh
+petika entries migrate-submit --collection personal \
+  --authority-identity identity.json --draft migration.json \
+  --pin entry-pin.json --cache entry-cache --confirm
+```
+
+`--confirm` authorizes this exact migration and initial local trust acceptance.
+For a new pin, prompts are source recovery passphrase, identity passphrase, then
+**new** recovery passphrase if the draft uses `replace`. The CLI verifies every
+source/target field and opens the new recovery wrapper locally. It cannot prove
+that every other recipient has retained a working device/identity; confirm those
+recovery arrangements separately. Source recipient-only unlock is still pending.
+
+The command rechecks API origin/account/collection, current local contact trust
+and live source metadata before a new submission. It never rebases stale drafts
+or replaces another local pin.
+Ciphertexts, wrappers and the original signed draft are durably cached; an exact
+writer/operation/digest/cursor receipt is required before publishing a new pin.
+The receipt is retained beside the draft as `migration.accepted.json`. The command
+prints the cached anchor path for subsequent `entries list`, `sync`, or editing
+with `--recipient-identity`, `--pin` and `--cache`.
+
+If the response is lost or the CLI is interrupted, repeat the **same command and
+draft**. An active entry vault is queried for the original receipt; missing or
+mismatched receipts stop acceptance without resubmission. A new pin still requires
+full local source/candidate verification from the retained draft, so no post-cutover
+legacy snapshot read is needed. Once that exact pin exists, retries ask only for
+the identity passphrase and require current read access. An advanced/different pin
+is preserved and rejected by this migration command; use normal history/epoch sync.
+`migrate-review` is a pre-cutover live-source check, not the reconciliation command.
+
+Conflicting cache or receipt files stop local acceptance; preserve and investigate
+them instead of deleting trust state. A pin is created only after artifacts and
+receipt are saved. Remote Git replication is reported separately and is not proven
+by the migration receipt. This remains an experimental workflow with incomplete
+full-server/recipient recovery evidence; it does not enable a deployment.
 
 ## Managed accounts and sync
 

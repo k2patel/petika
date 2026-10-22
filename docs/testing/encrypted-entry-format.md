@@ -151,11 +151,22 @@ CLI migration evidence:
   exercises actual CLI subprocesses with Standard/Hybrid snapshots and both recovery
   policies. The mock API asserts GET-only traffic and paginated roster use; tests
   reject read-only access, capture races, identity mismatch, wrong credentials,
-  changed source revision/membership and foreign origin. Drafts remain unchanged
+  changed source revision/membership and foreign origin. Submission also rejects
+  a recipient whose local contact pin was suspended after staging. Drafts remain unchanged
   after failures and re-review; neither the legacy local store nor a pin is created.
 - `personal_migration_uses_own_enrollment_without_group_access_endpoint` confirms
   personal stage/review uses the enrolled owner and generation 1, without requesting
   the group-only key-access endpoint. These are synthetic HTTP tests, not live cutover.
+
+- `migration_submit_reconciles_lost_ack_and_initializes_only_verified_pins` runs CLI
+  subprocesses in Standard/Hybrid modes with omitted/replaced recovery. It terminates
+  the CLI after API acceptance but before acknowledgement, then reconciles the same
+  operation without another migration POST. It rejects stale sources, wrong new
+  recovery passwords, absent/bad receipts and conflicting local artifacts without
+  creating a pin. Read-only receipt retry works; an accepted pin needs only identity
+  unlock, supports recipient-backed listing and is never replaced when corrupt.
+- The core empty-draft test verifies the migration receipt digest matches its
+  domain-separated wire tuple and rejects wrong writers, operations, digests and cursors.
 
 Server migration evidence:
 
@@ -171,7 +182,7 @@ Server migration evidence:
 - Existing real HTTP route tests include migration runtime gating, authenticated
   request headers, malformed bodies, a successful shared-vault cutover and exact
   retry, retained snapshot bytes, post-cutover history reads and legacy GET/PUT
-  rejection. Full CLI submission/acceptance remains unimplemented.
+  rejection. A full real-server CLI migration drill remains open.
 
 ## Test harness and evidence
 

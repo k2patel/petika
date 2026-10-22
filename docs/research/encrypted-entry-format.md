@@ -6,8 +6,8 @@ Existing vaults and deployments are not automatically converted or enabled.
 Acceptance criteria are in [the validation plan](../testing/encrypted-entry-format.md).
 An [opt-in core primitive prototype](entry-format-prototype.md) now implements
 strict object headers, entry/index AEAD and an explicit recovery wrapper. The full
-format is not release-ready; explicit server migration is opt-in, CLI submission
-is unfinished, and its encoding remains experimental.
+format is not release-ready; explicit server/CLI migration is opt-in and its encoding
+remains experimental.
 An [identity-authorized checkpoint/recipient extension](entry-checkpoints.md) now
 implements explicit epoch proofs. The [index extension](entry-index.md) adds
 index semantics, adjacent-head continuity and native persisted pins. Client/API
@@ -286,7 +286,8 @@ in memory and strictly parses serialized drafts. The [experimental CLI](../cli-a
 now captures live source metadata, stages protected drafts and reviews them against
 current API state. The opt-in server now exposes explicit source-CAS cutover through
 [`entry-migrations`](entry-history-transport.md#explicit-migration-cutover); CLI submission
-and safe client acceptance remain unfinished. A draft contains:
+and receipt-confirmed local acceptance are implemented; full recovery evidence
+remains unfinished. A draft contains:
 
 - A random operation ID and source binding: deployment/collection IDs, snapshot
   revision, membership generation, old key epoch (0 for unbound), and SHA-256 of
