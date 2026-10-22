@@ -298,3 +298,15 @@ PR; leave the plan's status unchanged until those tests actually exist and pass.
 4. Implement migration M cases and native/WASM/extension/CLI compatibility checks.
 5. Demonstrate restore and remote-outage/divergence behavior, then consider explicit
    opt-in deployment. Default rollout requires all release-blocking rows passing.
+
+### Exact-pin ciphertext recovery
+
+The real-server `scripts/test_entry_recovery.py` drill also recovers current Git trees
+using recipient identity and explicitly selected recovery wrapper, and version-2
+recipient-scoped API exports using the native CLI through `user_backup.py`. It checks
+all recovered caches offline, rejects an older Git commit, symbolic commit selector,
+wrong identity, existing output directory, changed export owner, missing and altered
+ciphertexts, and verifies the retained pin remains byte-identical. Both Standard and
+experimental Hybrid profiles are exercised. Server migration tests check separate
+owner/editor packages and rejection after group access is removed. These checks do
+not establish multi-device readiness or reconciliation of newer writes.

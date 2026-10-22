@@ -466,6 +466,69 @@ impl Accounts {
         self.backup_export_user(&accounts, user, collection)
     }
 
+    #[cfg(feature = "experimental-entry-format")]
+    fn entry_backup(
+        &self,
+        accounts: &Database,
+        user: &User,
+        id: &str,
+        path: &std::path::Path,
+    ) -> Result<Value> {
+        use petika_core::{
+            entry_format::{checkpoint::TrustedCheckpoint, epoch_transaction::EpochWrapper},
+            identity::{EntryHandoff, EntryKeyPackage},
+        };
+        let build = || -> crate::Result<Value> {
+            let journal = crate::entry_journal::Journal::open(
+                path.parent().ok_or("missing collection")?.join("entries"),
+            )?;
+            let cursor = journal.current().ok_or("missing journal root")?;
+            let state = journal.epoch_state(&cursor)?.ok_or("missing epoch state")?;
+            let cp = &state.checkpoint;
+            if cp.context.deployment_id != accounts.deployment_id || cp.context.collection_id != id
+            {
+                return Err("backup context mismatch".into());
+            }
+            // Structural validation only: recovering clients must use their own retained pin.
+            let trusted =
+                TrustedCheckpoint::bootstrap(cp.clone(), &cp.digest()?, &cp.authority.fingerprint)?;
+            let wrappers = state.references(&trusted)?;
+            let public = &accounts
+                .identities
+                .get(&user.id)
+                .ok_or("identity not enrolled")?
+                .public_identity;
+            let mut own = None;
+            for wrapper in &state.wrappers {
+                if let EpochWrapper::Recipient(envelope) = wrapper {
+                    let package = EntryKeyPackage::parse(envelope.as_bytes())?;
+                    if package.recipient_user_id == user.id
+                        && package.recipient_identity_version == public.identity_version
+                        && package.recipient_fingerprint == public.fingerprint
+                        && own.replace(envelope.clone()).is_some()
+                    {
+                        return Err("duplicate recipient delivery".into());
+                    }
+                }
+            }
+            let handoff = EntryHandoff {
+                handoff_version: 1,
+                checkpoint: cp.clone(),
+                package: own.ok_or("no current recipient delivery")?,
+                wrappers,
+            };
+            EntryHandoff::parse(&serde_json::to_vec(&handoff)?)?;
+            let (object, entries) = journal.committed_tree(cursor.revision)?;
+            let result = json!({"backup_version":2,"format":"entry-v1","deployment_id":accounts.deployment_id,
+                "owner_id":user.id,"collection_id":id,"object":object,"handoff":handoff,"entries":entries});
+            if serde_json::to_vec(&result)?.len() > 16 * 1024 * 1024 {
+                return Err("entry backup exceeds response limit".into());
+            }
+            Ok(result)
+        };
+        build().map_err(|_| KeyError::Unavailable)
+    }
+
     fn backup_export_user(
         &self,
         accounts: &Database,
@@ -497,6 +560,9 @@ impl Accounts {
                 .parent()
                 .is_some_and(|p| p.join("entries/committed-root").exists())
             {
+                #[cfg(feature = "experimental-entry-format")]
+                return self.entry_backup(accounts, user, id, &path);
+                #[cfg(not(feature = "experimental-entry-format"))]
                 return Err(KeyError::Unavailable);
             }
             let saved = Repository::new(path)

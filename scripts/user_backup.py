@@ -95,6 +95,29 @@ def verify_user_bundle(directory):
 
 
 def validate_collection(saved, index, collection_id):
+    if saved.get('backup_version') == 2:
+        if (set(saved) != {'backup_version', 'format', 'deployment_id', 'owner_id',
+                           'collection_id', 'object', 'handoff', 'entries'}
+                or saved['format'] != 'entry-v1' or saved['collection_id'] != collection_id
+                or saved['deployment_id'] != index['deployment_id']
+                or saved['owner_id'] != index['user']['id']):
+            raise ValueError('Invalid entry backup ownership or format')
+        context = saved['object']['head']['context']
+        handoff = saved['handoff']
+        package = json.loads(handoff['package'])
+        if (context['deployment_id'] != index['deployment_id']
+                or context['collection_id'] != collection_id
+                or package['recipient_user_id'] != index['user']['id']
+                or set(handoff) != {'handoff_version', 'checkpoint', 'package', 'wrappers'}
+                or handoff['handoff_version'] != 1
+                or not isinstance(saved['object']['envelope'], str)
+                or not isinstance(saved['entries'], dict)
+                or len(saved['entries']) > 4096
+                or any(not ID.fullmatch(k) or not isinstance(v, str)
+                       for k, v in saved['entries'].items())):
+            raise ValueError('Invalid entry backup or recipient grant')
+        # Cryptographic validation requires the native client and retained local pin.
+        return
     if saved.get('backup_version') != 1 or saved.get('collection_id') != collection_id or 'snapshot' not in saved:
         raise ValueError('Invalid collection backup')
     if saved['snapshot'] is None:
@@ -150,6 +173,19 @@ def recover(args):
     if not ID.fullmatch(args.collection or ''):
         raise ValueError('Choose an exact collection ID from index.json')
     saved = json.loads((args.recover_from / 'collections' / (args.collection + '.json')).read_text())
+    if saved.get('backup_version') == 2:
+        if not args.pin or not args.recipient_identity:
+            raise ValueError('Entry recovery requires --pin and --recipient-identity retained independently')
+        command = [str(args.cli), '--no-config']
+        if args.passphrase_stdin:
+            command.append('--passphrase-stdin')
+        command += ['entries', 'recover-backup', '--backup',
+                    str(args.recover_from / 'collections' / (args.collection + '.json')),
+                    '--pin', str(args.pin), '--recipient-identity', str(args.recipient_identity),
+                    '--output', str(args.output)]
+        if subprocess.run(command, check=False).returncode:
+            raise ValueError('Entry recovery failed; inspect the native client error')
+        return
     if saved['snapshot'] is None:
         raise ValueError('This collection has no saved snapshot')
     if args.output.exists() or args.output.is_symlink():
@@ -177,6 +213,8 @@ def main():
     parser.add_argument('--cli', type=Path, default=Path('target/debug/petika'))
     parser.add_argument('--passphrase-stdin', action='store_true')
     parser.add_argument('--ca-file', type=Path)
+    parser.add_argument('--pin', type=Path)
+    parser.add_argument('--recipient-identity', type=Path)
     parser.add_argument('--output', type=Path, required=True)
     args = parser.parse_args()
     try:

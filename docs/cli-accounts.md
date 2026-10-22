@@ -331,3 +331,13 @@ an OAuth or OpenID Connect implementation. Optional OIDC remains future work.
 The browser shows the privilege being granted before approval. Device-code phishing
 remains possible if someone persuades a user to approve their request. These controls
 are not a claim of phishing resistance. Deploy behind HTTPS and proxy rate limits.
+
+### Offline entry recovery
+
+Experimental `entries recover-git` reads a complete local Git clone at an explicit full
+commit ID; `entries recover-backup` reads one version-2 user collection export. Both
+require `--pin` with independently retained trust and `--output` pointing to a new cache
+directory. Select `--recipient-identity`; Git recovery also allows an explicit
+`--recovery-wrapper-id` instead. Every live entry must authenticate before publication.
+Neither command initializes or advances trust. See [recovery](recovery.md#recover-entry-ciphertexts-from-git-or-a-user-export)
+for commands, limits, completion markers and use of the recovered handoff.

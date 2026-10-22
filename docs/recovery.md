@@ -102,12 +102,55 @@ restore, recovery/identity unlock, receipt continuity, missing/corrupt data and 
 of a pre-migration server by a newer client pin. It uses local servers and synthetic
 secrets; it does not establish a production recovery time or physical power-loss guarantee.
 
-Entry Git trees retain ciphertexts, signed epoch state and wrappers, but not the account
-database, full API journal or writer receipts. Git-only reconstruction is **not** a full
-server restore and is not yet supported by the legacy `history`/`recover` commands below.
-Legacy per-user API backup exports still refuse migrated collections; entry-aware user
-exports and a verified Git-only recovery workflow remain pending. Use full-server backups
-plus separately retained client kits for this experimental workflow.
+### Recover entry ciphertexts from Git or a user export
+
+Opt-in entry-format builds support offline recovery into a **new encrypted cache**.
+Retain the client pin and identity (or recovery passphrase) independently. Recovery
+requires the backup head to equal that pin exactly: older and newer heads fail without
+rollback, advancement or trust reset. Preserve historical pins separately if you need
+historical recovery. These commands do not reconstruct accounts, API journals or receipts.
+
+For Git, obtain a complete local clone and choose a full lowercase commit hash:
+
+```sh
+petika --no-config entries recover-git --repository /private/backup.git \
+  --commit FULL_COMMIT_HASH --pin /private/client-kit/pin.json \
+  --recipient-identity /private/client-kit/identity.json --output /private/recovered-cache
+```
+
+Alternatively, replace `--recipient-identity` with `--recovery-wrapper-id WRAPPER_ID`
+and enter the explicitly selected epoch recovery passphrase. Shallow clones, unexpected
+files, missing objects and mismatched pins are rejected. Git is read locally; the command
+does not push, merge or resolve divergent history. Aggregate ciphertext recovery is
+currently limited to 16 MiB.
+
+User backup API exports now support migrated collections in entry-enabled builds. Each
+version-2 collection contains the encrypted index and live entries, signed checkpoint,
+**only that user's recipient package**, and authenticated wrapper IDs/digests. It excludes
+other users' packages, recovery wrappers, account databases and receipts. Current account,
+membership and identity checks still apply. The surrounding bundle stays version 1 and
+may contain both legacy and entry collections. Default builds still refuse entry exports.
+
+```sh
+python3 scripts/user_backup.py --recover-from /private/user-backup \
+  --collection COLLECTION_ID --pin /private/client-kit/pin.json \
+  --recipient-identity /private/client-kit/identity.json --output /private/recovered-cache
+```
+
+The script verifies the bundle manifest, then invokes `entries recover-backup` to verify
+local trust, unlock the user's package and decrypt/parse every live entry. A manifest
+alone provides no cryptographic trust. Both recovery commands publish ciphertext only,
+print the new anchor path and leave the pin/server unchanged. Use the printed anchor,
+retained pin, new cache and `--handoff /private/recovered-cache/handoff.json` with the
+recipient identity in `entries verify-backup` and subsequent offline entry commands.
+Recovery-key mode instead writes `recovery-WRAPPER_ID.json` for `--recovery`.
+
+`RECOVERY.json` is written last as a completion marker. Authentication failures publish
+no directory; storage failures can leave an incomplete directory without that marker.
+Keep the source backup and retry into a new directory. Existing destinations are never
+overwritten. Larger streaming exports, multi-device restore evidence and reconciliation
+of writes newer than a backup remain pending. Full-server restoration still requires a
+full-server backup and independently retained client trust.
 
 ## Full offline backup
 

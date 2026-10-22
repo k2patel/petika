@@ -5,6 +5,8 @@ mod entry_edit;
 #[cfg(feature = "experimental-entry-format")]
 mod entry_migrate;
 #[cfg(feature = "experimental-entry-format")]
+mod entry_recover;
+#[cfg(feature = "experimental-entry-format")]
 mod entry_rotate;
 #[cfg(feature = "experimental-entry-format")]
 mod entry_sync;

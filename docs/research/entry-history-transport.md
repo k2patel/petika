@@ -183,9 +183,12 @@ initial checkpoint, wrappers and entries. Publishing `entries/committed-root` is
 only format switch. Original `snapshot.json` and existing Git history remain intact;
 legacy writes and delivery routes are rejected, including by default builds. The
 legacy mirror skips active entry collections; entry replication includes them even
-when their retained snapshot exists. Legacy per-user collection backup exports fail
-closed for active entry collections, rather than exporting a stale snapshot as current.
-Complete entry-aware backup/restore remains a release blocker.
+when their retained snapshot exists. Entry-enabled builds export active collections in
+version-2 user backups with only the requesting user's recipient package; default builds
+still fail closed. Neither returns the stale retained snapshot as current. Offline Git
+and user-export recovery require an exact independently retained pin and verify every
+live ciphertext. Multi-recipient/device restore evidence and reconciliation of newer
+writes remain release blockers; see [recovery](../recovery.md).
 
 The receipt's request digest is SHA-256 of canonical serde JSON for the tuple
 `["petika:entry-migration-submission:v1", writer, draft]`; it binds the full signed

@@ -160,3 +160,9 @@ jobs) to preview 7 daily, 4 weekly, 12 monthly and at least 2 recent snapshots.
 The retention plan is a dry run. Approve deletion separately after validating
 independent copies and recovery. Provider transport tests require real endpoints;
 local adapter tests verify scheduling, credential isolation and encrypted recovery.
+
+Entry-enabled builds export migrated user collections as version-2 ciphertext bundles
+with only the requesting user's recipient package. Legacy collections remain version 1.
+Use the matching updated `user_backup.py`; entry recovery requires an independently
+retained exact client pin and identity. Exports are bounded to 16 MiB per collection and
+do not include server accounts or receipts. See [entry recovery](recovery.md#recover-entry-ciphertexts-from-git-or-a-user-export).

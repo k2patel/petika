@@ -24,6 +24,26 @@ class OffsiteTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 user.origin(value)
 
+    def test_entry_export_scope_validation(self):
+        index = {'deployment_id': 'a' * 64, 'user': {'id': 'b' * 64}}
+        saved = {'backup_version': 2, 'format': 'entry-v1',
+                 'deployment_id': index['deployment_id'], 'owner_id': index['user']['id'],
+                 'collection_id': 'c' * 64,
+                 'object': {'head': {'context': {'deployment_id': 'a' * 64,
+                                               'collection_id': 'c' * 64}}, 'envelope': '{}'},
+                 'handoff': {'handoff_version': 1, 'checkpoint': {}, 'wrappers': [],
+                             'package': json.dumps({'recipient_user_id': 'b' * 64})},
+                 'entries': {'d' * 64: '{}'}}
+        user.validate_collection(saved, index, 'c' * 64)
+        for field, value in [('owner_id', 'e' * 64), ('deployment_id', 'e' * 64),
+                             ('entries', {'invalid': '{}'}), ('format', 'unknown')]:
+            changed = {**saved, field: value}
+            with self.assertRaises(ValueError):
+                user.validate_collection(changed, index, 'c' * 64)
+        saved['handoff']['package'] = json.dumps({'recipient_user_id': 'e' * 64})
+        with self.assertRaises(ValueError):
+            user.validate_collection(saved, index, 'c' * 64)
+
     @unittest.skipUnless(os.environ.get('PETIKA_TEST_RESTIC'), 'Set PETIKA_TEST_RESTIC for real repository tests')
     def test_encrypted_roundtrip_and_repository_pin(self):
         with tempfile.TemporaryDirectory() as temporary:

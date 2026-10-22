@@ -29,6 +29,10 @@ pub struct UnlockArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Recover exact pinned ciphertexts from a local full Git clone; never resets trust.
+    RecoverGit(crate::entry_recover::GitArgs),
+    /// Recover a user-scoped API export against an independently retained pin.
+    RecoverBackup(crate::entry_recover::BackupArgs),
     /// Offline: authenticate and decrypt every live entry in a retained client cache.
     VerifyBackup(crate::entry_edit::StateArgs),
     /// Stage an encrypted migration from a live legacy snapshot; no cutover.
@@ -220,6 +224,8 @@ pub(crate) fn open_recipient(
 }
 pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
     match command {
+        Command::RecoverGit(args) => return crate::entry_recover::git(args, stdin),
+        Command::RecoverBackup(args) => return crate::entry_recover::backup(args, stdin),
         Command::VerifyBackup(args) => return crate::entry_edit::verify_backup(args, stdin),
         Command::MigrateSubmit(args) => return crate::entry_migrate::submit(session, args, stdin),
         Command::MigrateStage(args) => return crate::entry_migrate::stage(session, args, stdin),

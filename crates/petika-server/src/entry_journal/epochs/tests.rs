@@ -1026,11 +1026,25 @@ fn migration_api_cas_authority_retained_source_and_exact_retry() {
         );
         let first = submit(&mut accounts, &owner_token, &body).unwrap();
         assert_eq!(first, submit(&mut accounts, &owner_token, &body).unwrap());
-        assert!(
-            accounts
-                .backup_owner_export(&owner.id, Some(collection))
-                .is_err()
-        );
+        for recipient in if collection == &group.id {
+            vec![&owner.id, &editor.id]
+        } else {
+            vec![&owner.id]
+        } {
+            let exported = accounts
+                .backup_owner_export(recipient, Some(collection))
+                .unwrap();
+            assert_eq!(exported["backup_version"], 2);
+            assert_eq!(exported["owner_id"], *recipient);
+            assert_eq!(exported["entries"].as_object().unwrap().len(), 1);
+            let handoff: petika_core::identity::EntryHandoff =
+                serde_json::from_value(exported["handoff"].clone()).unwrap();
+            let package =
+                petika_core::identity::EntryKeyPackage::parse(handoff.package.as_bytes()).unwrap();
+            assert_eq!(package.recipient_user_id, *recipient);
+            assert!(exported.get("snapshot").is_none());
+            assert!(exported.get("wrappers").is_none());
+        }
         assert_eq!(std::fs::read(path.join("snapshot.json")).unwrap(), original);
         let journal = Journal::open(path.join("entries")).unwrap();
         let root = journal.current().unwrap();
@@ -1069,6 +1083,26 @@ fn migration_api_cas_authority_retained_source_and_exact_retry() {
             .is_err()
         );
     }
+    accounts
+        .save_group(
+            Some(&group.id),
+            "Team",
+            vec![Membership {
+                user_id: owner.id.clone(),
+                edit: true,
+            }],
+        )
+        .unwrap();
+    assert!(
+        accounts
+            .backup_owner_export(&editor.id, Some(&group.id))
+            .is_err()
+    );
+    assert!(
+        accounts
+            .backup_owner_export(&owner.id, Some(&group.id))
+            .is_ok()
+    );
     // A non-admin editor may migrate their own personal vault.
     let own = editor_identity.public_identity().clone();
     let draft = migration_draft(&mut editor_identity, &editor.id, &[own], 1);

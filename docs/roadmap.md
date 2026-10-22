@@ -193,10 +193,11 @@ full backup restore and separately retained client kits in Standard/Hybrid profi
 
 ### Remaining entry-format work, in order
 
-1. **Remaining recovery paths:** verified Git-only ciphertext recovery and entry-aware
-   per-user API exports; multi-recipient/device restore evidence and explicit
+1. **Remaining recovery paths:** multi-recipient/device restore evidence and explicit
    reconciliation of writes newer than a chosen backup. Full-server/client-kit
    restore and rejection of pre-migration server rollback now have a synthetic drill.
+   Exact-pin Git-only recovery and recipient-scoped entry API exports are implemented;
+   streaming/chunking beyond the current 16 MiB export/recovery limit remains pending.
 2. **Client coverage and simple UI:** web/extension entry-format integration,
    trusted handoff and recovery UX, authority handover, native/WASM compatibility
    and explicit old-client upgrade behavior. Current core/CLI work is not full

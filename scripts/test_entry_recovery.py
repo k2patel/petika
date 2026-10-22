@@ -9,6 +9,7 @@ import tempfile
 import time
 
 import backup_recovery as backup
+import user_backup
 from test_backup_recovery import Server, cli as native_cli, run, tool, ROOT, PASSWORD, PASSPHRASE, IDENTITY
 
 AUDIT = ROOT / 'target/debug/petika-entry-recovery'
@@ -109,6 +110,77 @@ def drill(mode):
             for item in json.loads(rotation.read_text())['transaction']['entries']:
                 assert backup.git(repo, 'show', 'HEAD:entries/' + item['id'] + '.json') == item['envelope'].encode()
 
+            # Recover directly from Git and from a scoped API export with no old cache.
+            commit = backup.git(repo, 'rev-parse', 'HEAD').decode().strip()
+            git_base = ['entries', 'recover-git', '--repository', repo, '--commit', commit,
+                        '--pin', client / 'pin.json']
+            recovered = root / 'git-recovered'
+            cli(client, [*git_base, '--recipient-identity', client / 'identity.json',
+                         '--output', recovered], [IDENTITY])
+            recovered_anchor = recovered / json.loads((recovered / 'RECOVERY.json').read_text())['anchor']
+            cli(client, ['entries', 'verify-backup', '--anchor', recovered_anchor,
+                         '--pin', client / 'pin.json', '--cache', recovered,
+                         '--handoff', recovered / 'handoff.json',
+                         '--recipient-identity', client / 'identity.json'], [IDENTITY])
+            cli(client, [*git_base, '--recipient-identity', client / 'identity.json',
+                         '--output', recovered], [], ok=False)
+            recovery_id = json.loads(recovery.read_text())['wrapper_id']
+            cli(client, [*git_base, '--recovery-wrapper-id', recovery_id,
+                         '--output', root / 'git-recovery-key'], [PASSPHRASE])
+            key_cache = root / 'git-recovery-key'
+            key_anchor = key_cache / json.loads((key_cache / 'RECOVERY.json').read_text())['anchor']
+            cli(client, ['entries', 'verify-backup', '--anchor', key_anchor,
+                         '--pin', client / 'pin.json', '--cache', key_cache,
+                         '--recovery', key_cache / ('recovery-' + recovery_id + '.json')], [PASSPHRASE])
+            for label, extra, passwords in [
+                    ('wrong-key', [], ['wrong identity']),
+                    ('symbolic', ['--commit', 'HEAD'], []),
+                    ('older', ['--commit', backup.git(repo, 'rev-parse', 'HEAD^').decode().strip()], [])]:
+                rejected = root / label
+                # Replace commit rather than supply a duplicate clap option.
+                command = git_base.copy()
+                if extra:
+                    command[command.index('--commit') + 1] = extra[1]
+                cli(client, [*command, '--recipient-identity', client / 'identity.json',
+                             '--output', rejected], passwords, ok=False)
+                assert not rejected.exists()
+            key = server.api('/v1/backup-settings/keys',
+                             {'name': 'recovery drill', 'expires_in_days': 1, 'current_password': PASSWORD})
+            keyfile = root / 'backup-key'
+            write(keyfile, key['token'].encode())
+            bundle = root / 'user-backup'
+            user_backup.fetch(user_backup.API(server.origin, keyfile), bundle)
+            saved_path = bundle / 'collections' / (user['id'] + '.json')
+            saved = json.loads(saved_path.read_text())
+            assert saved['backup_version'] == 2
+            user_output = root / 'user-recovered'
+            run(['python3', ROOT / 'scripts/user_backup.py', '--recover-from', bundle,
+                 '--collection', user['id'], '--pin', client / 'pin.json',
+                 '--recipient-identity', client / 'identity.json', '--output', user_output,
+                 '--passphrase-stdin'], [IDENTITY])
+            user_anchor = user_output / json.loads((user_output / 'RECOVERY.json').read_text())['anchor']
+            cli(client, ['entries', 'verify-backup', '--anchor', user_anchor,
+                         '--pin', client / 'pin.json', '--cache', user_output,
+                         '--handoff', user_output / 'handoff.json',
+                         '--recipient-identity', client / 'identity.json'], [IDENTITY])
+            for label in ['missing', 'tampered', 'owner']:
+                altered = json.loads(saved_path.read_text())
+                if label == 'missing':
+                    altered['entries'].clear()
+                elif label == 'tampered':
+                    entry_id = next(iter(altered['entries']))
+                    altered['entries'][entry_id] = '{}'
+                else:
+                    altered['owner_id'] = '0' * 64
+                bad = root / (label + '.json')
+                write(bad, json.dumps(altered).encode())
+                output = root / (label + '-output')
+                cli(client, ['entries', 'recover-backup', '--backup', bad,
+                             '--pin', client / 'pin.json', '--recipient-identity', client / 'identity.json',
+                             '--output', output], [IDENTITY], ok=False)
+                assert not output.exists()
+            assert (client / 'pin.json').read_bytes() == pin
+
             assert backup.git(repo, 'show', 'HEAD:index.json') == json.loads((client / 'cache' / (status['accepted']['digest'] + '.json')).read_text())['envelope'].encode()
         finally:
             server.stop()
@@ -189,7 +261,7 @@ def drill(mode):
             assert (client / 'pin.json').read_bytes() == pin
         finally:
             server.stop()
-    print(f'Entry recovery drill passed: {mode}, migration, rotation, full restore, retained client kit, receipts, corruption and rollback refusal.')
+    print(f'Entry recovery drill passed: {mode}, migration, rotation, full restore, Git/user exports, identity/recovery unlock, retained client kit, receipts, corruption and rollback refusal.')
 
 
 if __name__ == '__main__':
