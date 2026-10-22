@@ -176,6 +176,20 @@ fn label(value: &str) -> bool {
     !value.trim().is_empty() && value.len() <= 100 && !value.chars().any(char::is_control)
 }
 impl Accounts {
+    /// Offline recovery metadata only; never creates/migrates an account database.
+    #[cfg(feature = "experimental-entry-format")]
+    pub fn recovery_collections(&self) -> Result<(String, std::collections::BTreeSet<String>)> {
+        let file = StoreFile::lock(&self.path)?;
+        let db = Self::load(&file)?;
+        let ids = db
+            .users
+            .iter()
+            .map(|u| u.id.clone())
+            .chain(db.groups.iter().map(|g| g.id.clone()))
+            .collect();
+        Ok((db.deployment_id, ids))
+    }
+
     /// Acquire the journal first. Keep the account database locked through the
     /// callback so membership/disable changes cannot race publication.
     #[cfg(feature = "experimental-entry-format")]

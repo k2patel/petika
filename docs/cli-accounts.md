@@ -238,6 +238,16 @@ receipt are saved. Remote Git replication is reported separately and is not prov
 by the migration receipt. This remains an experimental workflow with incomplete
 full-server/recipient recovery evidence; it does not enable a deployment.
 
+### Offline client recovery check
+
+`petika entries verify-backup --anchor ANCHOR --pin PIN --cache CACHE
+--recipient-identity IDENTITY` verifies every live entry in a retained client kit
+without contacting the API or changing the pin. Use `--recovery WRAPPER` instead
+for an explicit recovery-passphrase check. It prints only counts, revision and epoch.
+A cache containing only an index fails if live ciphertexts are missing. See the
+[full recovery procedure](recovery.md#experimental-entry-format-recovery) for server
+journal verification and independent client-pin preservation.
+
 ## Managed accounts and sync
 
 The opt-in per-entry format has a separate [experimental CLI rotation workflow](research/entry-history-transport.md#cli-rotation-and-adjacent-epoch-acceptance).

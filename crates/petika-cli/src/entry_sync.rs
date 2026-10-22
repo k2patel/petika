@@ -29,6 +29,8 @@ pub struct UnlockArgs {
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Offline: authenticate and decrypt every live entry in a retained client cache.
+    VerifyBackup(crate::entry_edit::StateArgs),
     /// Stage an encrypted migration from a live legacy snapshot; no cutover.
     MigrateStage(crate::entry_migrate::StageArgs),
     /// Review a migration against the current API source; no cutover.
@@ -218,6 +220,7 @@ pub(crate) fn open_recipient(
 }
 pub fn run(session: &Path, command: &Command, stdin: bool) -> Result<()> {
     match command {
+        Command::VerifyBackup(args) => return crate::entry_edit::verify_backup(args, stdin),
         Command::MigrateSubmit(args) => return crate::entry_migrate::submit(session, args, stdin),
         Command::MigrateStage(args) => return crate::entry_migrate::stage(session, args, stdin),
         Command::MigrateReview(args) => return crate::entry_migrate::review(session, args, stdin),

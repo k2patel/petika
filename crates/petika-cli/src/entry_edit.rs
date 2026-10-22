@@ -477,3 +477,22 @@ pub fn submit(session: &Path, args: &SubmitArgs, stdin: bool) -> Result<()> {
     );
     Ok(())
 }
+
+/// No API access and no pin update. The protected pin is an independently retained
+/// trust anchor, not something reconstructed from the backup being checked.
+pub fn verify_backup(args: &StateArgs, stdin: bool) -> Result<()> {
+    let (_store, root, index) = load(args, stdin)?;
+    for entry in &index.index().entries {
+        let bytes =
+            StoreFile::lock(args.cache.join(format!("entry-{}.json", entry.digest)))?.read()?;
+        let plaintext = index.open_entry(&root, &entry.id, &bytes)?;
+        let _: Entry = serde_json::from_slice(&plaintext)?;
+    }
+    println!(
+        "Verified {} encrypted entries at revision {}, epoch {} against the retained local pin. No API request or trust update occurred.",
+        index.index().entries.len(),
+        index.head().revision,
+        index.head().context.key_epoch
+    );
+    Ok(())
+}

@@ -141,8 +141,8 @@ Encrypted migration staging evidence:
 - `empty_migration_draft_has_a_complete_recoverable_index` verifies an empty
   collection still has a signed index and working new recovery wrapper.
 
-End-to-end CLI cutover/acceptance, authority handover, complete server/recipient restore
-and physical power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
+Authority handover, multi-recipient restore and physical power-loss/disk-full
+scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 
 CLI migration evidence:
@@ -182,7 +182,23 @@ Server migration evidence:
 - Existing real HTTP route tests include migration runtime gating, authenticated
   request headers, malformed bodies, a successful shared-vault cutover and exact
   retry, retained snapshot bytes, post-cutover history reads and legacy GET/PUT
-  rejection. A full real-server CLI migration drill remains open.
+  rejection. The clean-directory drill below adds real CLI/server migration and restore.
+
+Full recovery evidence:
+
+- `scripts/test_entry_recovery.py` runs real experimental server/CLI binaries in both
+  Standard and Hybrid profiles, migrates and rotates a vault, captures the stopped
+  server and separate client kit, removes the original directories and restores on
+  a clean path. It checks account continuity, receipts, exact mirrored index/epoch
+  state, identity/recovery unlock and every cached live entry.
+- The offline `petika-entry-recovery` checker rejects running-server access, damaged
+  journal records and missing/older roots against independently retained reports.
+  `entries verify-backup` rejects missing ciphertext and wrong identity credentials
+  without changing the pin. Restoring a pre-migration server cannot reset a newer
+  client pin. The full drill runs in the Web UI/provisioning CI job.
+- This is authority-only, local filesystem evidence. Git-only reconstruction,
+  per-user entry backup exports, other recipient devices, post-backup write
+  reconciliation and production/off-site recovery objectives remain open.
 
 ## Test harness and evidence
 

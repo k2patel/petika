@@ -1,5 +1,6 @@
 [package]
 name = "petika-server"
+default-run = "petika-server"
 description = "Self-hosted Petika API server"
 version.workspace = true
 edition.workspace = true
@@ -32,3 +33,8 @@ tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[[bin]]
+name = "petika-entry-recovery"
+path = "src/bin/entry_recovery.rs"
+required-features = ["experimental-entry-format"]

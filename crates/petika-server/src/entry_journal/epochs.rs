@@ -221,6 +221,30 @@ fn migration_digest(
     Ok(draft.submission_digest(writer)?)
 }
 impl Journal {
+    /// Full restores retain the exact pre-cutover source; never infer it from Git.
+    pub fn verify_recovery_source(&self) -> Result<()> {
+        if self.uncertain {
+            return Err("uncertain recovery root".into());
+        }
+        if let Some((_, first)) = self.records.values().next()
+            && let Some(EpochRecord::Migration { draft }) = &first.epoch
+        {
+            let path = self
+                .directory
+                .parent()
+                .ok_or("missing collection directory")?
+                .join("snapshot.json");
+            let snapshot: crate::Snapshot =
+                serde_json::from_slice(&StoreFile::lock(path)?.read()?)?;
+            if snapshot.revision != draft.source.snapshot_revision
+                || snapshot.encrypted != draft.source_encrypted
+            {
+                return Err("retained migration source mismatch".into());
+            }
+        }
+        Ok(())
+    }
+
     /// The caller holds current account/source locks and checks the source CAS,
     /// enrolled authority and complete recipient roster. This root publication
     /// is also the format switch; never remove the retained legacy snapshot.

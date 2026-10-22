@@ -23,6 +23,92 @@ Keep client recovery material and independently recorded identity fingerprints s
 An encrypted identity without its passphrase is not recoverable. A v2 Git snapshot can be
 opened with that epoch's group recovery passphrase; the mirror has no recipient grants.
 
+## Experimental entry-format recovery
+
+Entry-format collections require the matching experimental build. Full backups already
+copy the entire journal, immutable records, committed root, epoch wrappers, migration
+source, account database and configuration. A valid inventory proves byte preservation;
+it does not prove that a client can unlock the collection or that the backup is current.
+Do not delete the retained legacy snapshot after migration.
+
+Build the matching operator checker separately if it is not present in the deployed
+image (the runtime image does not include this extra binary):
+
+```sh
+cargo build --locked -p petika -p petika-server --features experimental-entry-format
+```
+
+While the server is stopped, record its entry heads in a separately retained, protected
+file before creating the full backup:
+
+```sh
+umask 077
+target/debug/petika-entry-recovery /stopped/petika/data > /private/entry-heads.json
+```
+
+Use a new report filename and preserve older reports. Check the command's exit status
+before retaining that report. It acquires the server's
+instance lock, opens each committed journal, validates its complete ancestry, receipts,
+checkpoint/wrapper state and account/deployment/collection binding, and compares the
+retained migration snapshot with its signed source. It does not start a server, migrate
+accounts, decrypt entries or reconstruct missing state. Lock sidecars may be created.
+An empty report means no committed entry roots were found, not proof that none were lost.
+
+After the ordinary full restore and inventory verification below, compare against the
+independently retained report **before** starting the isolated instance:
+
+```sh
+target/debug/petika-entry-recovery /recovery/petika/data \
+  --expect /private/entry-heads.json
+```
+
+Missing/older roots, account/context mismatches, damaged records or changed retained
+migration sources stop verification. The report contains public IDs and cursors, not
+vault keys. Keep it independently: a replacement of both report and backup cannot be
+detected by this comparison. Never regenerate the expected report from the restore to
+make a mismatch pass.
+
+### Retain and verify each client kit
+
+Separately back up the protected local identity bundle (including verified contacts),
+its passphrase, the exact local pin, original anchor and complete cache. The cache needs
+all live entry ciphertexts, current epoch state and recipient/recovery wrappers, plus
+retained drafts/receipts needed for reconciliation. Keep recovery passphrases separately.
+A synchronized index alone does not guarantee every entry object is cached. Preserve
+newer client pins before inspecting an older server restore; never overwrite them with
+pins from that older backup. Account/API sessions are replaceable: sign in again when
+connecting to the restored server rather than relying on restored login credentials.
+
+Verify a copied client kit without an API connection:
+
+```sh
+petika --no-config entries verify-backup --anchor /private/client-kit/anchor.json \
+  --pin /private/client-kit/pin.json --cache /private/client-kit/cache \
+  --recipient-identity /private/client-kit/identity.json
+```
+
+Use the actual original anchor path printed by migration or handoff. Alternatively,
+replace `--recipient-identity` with `--recovery /private/client-kit/cache/recovery-WRAPPER_ID.json`
+and enter that epoch's recovery passphrase. Run the checks for every recovery route
+you intend to rely on. The command authenticates the pinned index and decrypts/parses
+**every live entry** without printing names, passwords or TOTP values. Missing, changed
+or wrong-context objects fail; the pin is never initialized or reset. Identity unlock
+may reseal contact state using the existing protected-bundle handling. Success proves
+that selected kit and unlock path work, not global freshness or other users' readiness.
+
+The disposable `python3 scripts/test_entry_recovery.py` drill covers both Standard and
+experimental Hybrid migration, rotation, full-server and separately retained client-kit
+restore, recovery/identity unlock, receipt continuity, missing/corrupt data and rejection
+of a pre-migration server by a newer client pin. It uses local servers and synthetic
+secrets; it does not establish a production recovery time or physical power-loss guarantee.
+
+Entry Git trees retain ciphertexts, signed epoch state and wrappers, but not the account
+database, full API journal or writer receipts. Git-only reconstruction is **not** a full
+server restore and is not yet supported by the legacy `history`/`recover` commands below.
+Legacy per-user API backup exports still refuse migrated collections; entry-aware user
+exports and a verified Git-only recovery workflow remain pending. Use full-server backups
+plus separately retained client kits for this experimental workflow.
+
 ## Full offline backup
 
 Stop **all** processes writing the data and mirror directories before copying, including

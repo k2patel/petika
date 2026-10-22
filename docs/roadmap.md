@@ -186,18 +186,23 @@ CLI `migrate-submit --confirm` now verifies full contents and replacement recove
 reconciles exact receipts after interrupted submission, and caches artifacts/receipt
 before initializing a new pin. Existing different/advanced pins are never reset.
 All-recipient restore checks and source recipient-only unlock remain unfinished.
+Full-server recovery now has an offline journal/account/source audit with independently
+retained head comparison. `entries verify-backup` verifies every cached live entry
+without API access. A real CLI/server clean-directory drill covers migration, rotation,
+full backup restore and separately retained client kits in Standard/Hybrid profiles.
 
 ### Remaining entry-format work, in order
 
-1. **Complete disaster restore:** entry journal, wrappers, accounts/configuration,
-   identity bundles and client pins; isolated Git/full-backup restore, rotated
-   epochs and pre-migration backup reconciliation after newer writes.
+1. **Remaining recovery paths:** verified Git-only ciphertext recovery and entry-aware
+   per-user API exports; multi-recipient/device restore evidence and explicit
+   reconciliation of writes newer than a chosen backup. Full-server/client-kit
+   restore and rejection of pre-migration server rollback now have a synthetic drill.
 2. **Client coverage and simple UI:** web/extension entry-format integration,
    trusted handoff and recovery UX, authority handover, native/WASM compatibility
    and explicit old-client upgrade behavior. Current core/CLI work is not full
    browser/mobile support.
 3. **Migration access/readiness:** recipient-only legacy source unlock, working
-   recipient-device/recovery evidence and a full real-server CLI migration drill.
+   recipient-device/recovery evidence beyond the authority-only real-server drill.
    The new replacement recovery wrapper is checked locally, but that does not
    establish every recipient’s ability to restore.
 4. **Release evidence:** remaining E/T/K/M matrix scenarios, disk-full/permission
