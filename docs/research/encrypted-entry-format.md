@@ -252,6 +252,33 @@ to anyone who already had old keys. Rotation does not erase disclosed secrets.
 
 ## Migration and rollback
 
+The opt-in core `migration::VerifiedMigration` now provides a local preservation
+gate. It compares an unlocked legacy store with a decrypted, checkpoint-bound
+candidate and verifies every live object. This is not an implemented migration
+command, server initializer, or cutover endpoint.
+
+The candidate starts a distinct entry history at revision 1 with no parent,
+tombstones or named folders; each entry starts at revision 1. The source snapshot
+revision must remain a separate future cutover CAS precondition, never be used as
+an entry-history parent. Literal legacy names stay at the implicit root, including
+slashes, case variants and distinct Unicode encodings. Every username, password,
+URL, note and optional OTP value must match. Unknown target payload fields,
+missing/extra objects or records, renames and folder splitting are rejected.
+
+The caller supplies the authenticated source deployment/collection selection;
+unbound snapshots cannot authenticate that selection themselves. Bound snapshots
+must match it and advance their key epoch by exactly one; unbound snapshots start
+at epoch 1. New root material cannot reuse the old access secret. Standard sources
+require the Standard delivery profile; Hybrid sources require the experimental
+X-Wing draft-06 profile. This preserves the explicit profile choice without claiming
+that Hybrid is reviewed or production-ready. The trusted target checkpoint must
+already have been independently confirmed; the verifier never creates a trust pin.
+
+This gate does not establish source freshness, account permissions, membership CAS,
+recipient deliverability or successful recovery through every wrapper. Those checks,
+full backup/restore evidence and an atomic format switch are still required before
+cutover can be offered. Passing it changes no files, API state or client pins.
+
 1. Inventory client capabilities and *all* active wrappers/recovery paths. Produce a
    verified full backup and retain exact original snapshots/history. Require an
    unlocked authorized editor; the server cannot migrate plaintext independently.

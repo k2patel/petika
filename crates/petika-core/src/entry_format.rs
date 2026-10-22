@@ -6,6 +6,7 @@ pub mod checkpoint_store;
 pub mod epoch_transaction;
 pub mod history;
 pub mod index;
+pub mod migration;
 pub mod rotation;
 pub mod transaction;
 pub mod transport;

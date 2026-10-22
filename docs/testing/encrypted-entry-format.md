@@ -109,7 +109,21 @@ Server epoch evidence:
   responses. Roster tests enforce current access and membership generation;
   the real HTTP route checks include roster authentication/runtime gates.
 
-Migration, authority handover, complete server/recipient restore and physical
+Local migration preservation evidence (partial M01/M02/M05 only):
+
+- `legacy_modes_preserve_empty_and_literal_named_records` opens real legacy
+  Standard/Hybrid ciphertext, with bound/unbound and empty/nonempty variants,
+  preserves slash names and distinct Unicode/case variants, and opens the candidate
+  recovery wrapper. This does not prove delivery to all recipients.
+- `validly_encrypted_content_changes_and_missing_objects_fail_migration` rejects
+  validly encrypted/signed changes to each field, lost OTP, removed/renamed records,
+  unknown payload fields and missing/substituted objects; the source remains intact.
+- `migration_rejects_epoch_reuse_skips_and_profile_changes` rejects nonadjacent
+  bound epochs and changes between Standard and experimental Hybrid profiles.
+- `migration_cannot_invent_folders_tombstones_or_history` rejects authenticated
+  candidates that introduce a folder tree, deleted-record history or later revisions.
+
+Atomic migration/cutover, authority handover, complete server/recipient restore and physical
 power-loss/disk-full scenarios remain outside this coverage. No full T-series row is
 marked complete solely from these partial synthetic scenarios.
 

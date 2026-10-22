@@ -172,6 +172,11 @@ remain open. See [requirements](requirements.md), [architecture](architecture.md
 
 ### Experimental entry implementation progress
 
+The core migration preservation verifier now covers exact legacy names/fields,
+fresh epoch context and explicit profile continuity, with Standard/Hybrid fixtures.
+It is a pre-cutover gate only; source CAS, recipient recovery checks and atomic
+format switching remain unimplemented.
+
 The gated implementation now covers the journal/CAS, authenticated HTTP history,
 native CLI sync and drafts, server-only Git replication, recipient unlock, and
 atomic epoch transactions. CLI rotation staging/review/submission and explicit
