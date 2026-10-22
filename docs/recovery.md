@@ -102,6 +102,48 @@ restore, recovery/identity unlock, receipt continuity, missing/corrupt data and 
 of a pre-migration server by a newer client pin. It uses local servers and synthetic
 secrets; it does not establish a production recovery time or physical power-loss guarantee.
 
+### Compare a restore with evidence of newer writes
+
+Keep the isolated server stopped. Preserve the original backup, later client kits,
+accepted drafts/receipts, and any newer complete server backups before investigating.
+With the matching experimental operator binary, compare the restored journal against
+a recovery report retained independently from the backup being evaluated:
+
+```sh
+petika-entry-recovery /private/restored/data \
+  --compare /private/retained/newer-entry-report.json > /private/comparison.json
+```
+
+`--compare` holds the server-instance lock throughout verification and comparison. It
+prints a public JSON assessment: no vault plaintext or usable keys. Exit **0** means
+all reported entry heads/checkpoints match; **2** means the comparison succeeded but
+requires reconciliation; **1** means invalid evidence or failed structural validation.
+A nonzero exit must not be treated as permission to start the server. Existing `--expect`
+continues to require an exact retained report. Neither mode authorizes deployment.
+
+| Collection status | Meaning and next step |
+| --- | --- |
+| `matches` | Same head, epoch and checkpoint. Still compare client pins and decrypt. |
+| `retained-head-in-local-history` | The validated local journal contains the exact retained head and checkpoint, followed by later records. Preserve those records; verify newer client evidence before cutover. |
+| `newer-retained-head` | Retained evidence names a later revision that this restore lacks. Obtain a newer complete journal with receipts and matching account/membership state; do not reset client pins. |
+| `conflicting-history` | The same revision or claimed historical checkpoint differs. Isolate both copies; do not merge encrypted files or force-push Git. |
+| `missing-collection` | A retained collection is absent from the restored entry roots. Locate its complete backup. |
+| `not-in-retained-report` | The restore contains a collection absent from the report. Obtain independent evidence for it. |
+
+A report is protected external evidence, not a signed client acceptance, global freshness
+proof or complete account-state comparison. A higher retained revision is an unresolved
+claim until its history is available. Even a structurally verified descendant must be
+decrypted against independently retained client trust. An empty matching report says
+nothing about vaults absent from both copies. Structural inspection may create lock
+sidecars; it does not rewrite journals, receipts, account records or client pins.
+
+This is **comparison and triage**, not automatic write replay. Prefer a complete newer
+backup and validate it separately. Client caches and Git trees alone do not restore
+server receipt continuity, membership changes or account state. Do not replay stale
+writes, re-run migration, drop history, or manufacture a replacement pin to make an old
+restore pass. Safe import/replay with account/access reconciliation remains unfinished;
+keep a restore with unresolved newer evidence isolated.
+
 ### Recover entry ciphertexts from Git or a user export
 
 Opt-in entry-format builds support offline recovery into a **new encrypted cache**.

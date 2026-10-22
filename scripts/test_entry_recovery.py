@@ -77,6 +77,19 @@ def drill(mode):
             digest = json.loads(draft.with_suffix('.accepted.json').read_text())['accepted']['digest']
             anchor = client / 'cache' / (digest + '.json')
             args = state_args(client, user['id'], anchor)
+            # Capture a real earlier entry backup before a same-epoch write and rotation.
+            server.stop()
+            baseline_report = root / 'before-new-writes-report.json'
+            write(baseline_report, run([AUDIT, original / 'data']).encode())
+            capture(original, root / 'before-new-writes')
+            server = Server(original, overrides=overrides)
+            later_session = root / 'later-session'
+            server.login(later_session)
+            write(client / 'session.json', (later_session / 'session.json').read_bytes())
+            edit = client / 'post-backup-edit.json'
+            cli(client, ['entries', 'put', *args, '--name', 'post-backup-entry',
+                         '--password-stdin', '--draft', edit], [IDENTITY, 'synthetic later password'])
+            cli(client, ['entries', 'submit', *args, '--draft', edit, '--confirm'], [IDENTITY])
             rotation = client / 'rotation.json'
             rotation_args = [*args, '--authority-identity', client / 'identity.json', '--draft', rotation]
             cli(client, ['entries', 'rotate', *rotation_args, '--recovery-policy', 'replace'],
@@ -97,6 +110,7 @@ def drill(mode):
             cli(client, ['entries', 'verify-backup', *state_args(client, user['id'], anchor, recovery=recovery)], [PASSPHRASE])
             # Do not claim a full backup while a server is still running.
             run([AUDIT, original / 'data'], ok=False)
+            run([AUDIT, original / 'data', '--compare', baseline_report], ok=False)
             for _ in range(200):
                 status = server.api(f'/v1/collections/{user["id"]}/status')
                 if status['replication'].get('local', {}).get('revision') == current['head']['revision']:
@@ -186,6 +200,23 @@ def drill(mode):
             server.stop()
         report = root / 'retained-entry-report.json'
         write(report, run([AUDIT, original / 'data']).encode())
+        before_compare = backup.inventory(original / 'data')
+        exact = json.loads(run([AUDIT, original / 'data', '--compare', report]))
+        assert exact['exact_match'] and not exact['requires_reconciliation']
+        newer = json.loads(run([AUDIT, original / 'data', '--compare', baseline_report], ok=False))
+        assert newer['collections'][0]['status'] == 'retained-head-in-local-history'
+        conflicting = json.loads(baseline_report.read_text())
+        conflicting['collections'][0]['accepted']['digest'] = '0' * 64
+        conflict_report = root / 'conflict-report.json'
+        write(conflict_report, json.dumps(conflicting).encode())
+        conflict = json.loads(run([AUDIT, original / 'data', '--compare', conflict_report], ok=False))
+        assert conflict['collections'][0]['status'] == 'conflicting-history'
+        assert backup.inventory(original / 'data') == before_compare
+        old_entry_server = root / 'old-entry-server'
+        tool('restore', root / 'before-new-writes', '--release', 'entry-drill-release', '--output', old_entry_server)
+        older = json.loads(run([AUDIT, old_entry_server / 'data', '--compare', report], ok=False))
+        assert older['collections'][0]['status'] == 'newer-retained-head'
+        assert older['requires_reconciliation'] and not older['exact_match']
         capture(original, root / 'full')
         backup.private_copy(client, root / 'client-kit')
         # Old client caches/identity are gone; only separately retained kit survives.
@@ -212,6 +243,8 @@ def drill(mode):
         pointer = journal / 'committed-root'
         pointer_bytes = pointer.read_bytes()
         pointer.unlink()
+        missing = json.loads(run([AUDIT, restored / 'data', '--compare', report], ok=False))
+        assert missing['collections'][0]['status'] == 'missing-collection'
         run([AUDIT, restored / 'data', '--expect', report], ok=False)
         write(pointer, pointer_bytes)
         record = journal / (json.loads(pointer_bytes)['record'] + '.json')

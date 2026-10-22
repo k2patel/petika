@@ -2,11 +2,12 @@
 use petika_core::StoreFile;
 use petika_server::{Result, accounts::Accounts, entry_journal::Journal};
 use std::{path::Path, process::ExitCode};
+#[path = "entry_recovery/compare.rs"]
+mod compare;
 fn verify(data: &Path) -> Result<serde_json::Value> {
     if !data.is_dir() || data.is_symlink() || !data.join("accounts.json").is_file() {
         return Err("missing recovery data/account database".into());
     }
-    let _instance = StoreFile::lock(data.join("server-instance"))?;
     let (deployment, known) = Accounts::new(data.join("accounts.json")).recovery_collections()?;
     let mut result = Vec::new();
     let collections = data.join("collections");
@@ -56,27 +57,40 @@ fn verify(data: &Path) -> Result<serde_json::Value> {
 }
 fn main() -> ExitCode {
     let args: Vec<_> = std::env::args_os().skip(1).collect();
-    if args.len() != 1 && !(args.len() == 3 && args[1] == "--expect") {
+    if args.len() != 1 && !(args.len() == 3 && (args[1] == "--expect" || args[1] == "--compare")) {
         eprintln!(
-            "Usage: petika-entry-recovery /stopped/restored/data [--expect retained-report.json]"
+            "Usage: petika-entry-recovery /stopped/restored/data [--expect retained-report.json | --compare retained-report.json]"
         );
         return ExitCode::FAILURE;
     }
-    let result = (|| -> Result<serde_json::Value> {
-        let report = verify(Path::new(&args[0]))?;
+    let result = (|| -> Result<(serde_json::Value, bool)> {
+        let data = Path::new(&args[0]);
+        if !data.is_dir() || data.is_symlink() {
+            return Err("missing recovery directory".into());
+        }
+        // Keep the instance lock through verification and all historical comparisons.
+        let _instance = StoreFile::lock(data.join("server-instance"))?;
+        let report = verify(data)?;
         if args.len() == 3 {
             let expected: serde_json::Value =
                 serde_json::from_slice(&StoreFile::lock(Path::new(&args[2]))?.read()?)?;
+            if args[1] == "--compare" {
+                return compare::compare(data, report, expected);
+            }
             if expected != report {
                 return Err("restored entry heads differ from retained recovery report".into());
             }
         }
-        Ok(report)
+        Ok((report, true))
     })();
     match result {
-        Ok(report) => {
+        Ok((report, exact)) => {
             println!("{report}");
-            ExitCode::SUCCESS
+            if exact {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(2)
+            }
         }
         Err(_) => {
             eprintln!(

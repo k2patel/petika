@@ -335,3 +335,19 @@ and read-only group member in both profiles. It checks:
 CI runs this alongside the full-server drill. Simulated device directories share one
 user's enrolled identity; independently enrolled device keys, hardware/biometric paths,
 identity replacement, cross-platform restore and production custody are not covered.
+
+### Newer-write reconciliation assessment
+
+The full recovery drill now captures a stopped-server backup after migration, submits
+another same-epoch entry write, then rotates. `petika-entry-recovery --compare` checks
+an exact retained report, an older report whose head/checkpoint is in the newer journal,
+a conflicting historical digest, an older restore faced with newer retained evidence,
+and a missing collection. The drill compares the data inventory before/after successful
+and conflicting assessments and rejects comparison against a running server. Both
+Standard and experimental Hybrid profiles run this path.
+
+Operator comparison unit tests reject duplicate collection IDs, foreign deployments,
+unknown report fields, invalid/path-like collection IDs and zero epochs, and distinguish
+same-revision conflicts from missing later history. A successful structural comparison
+is not a decryption/freshness proof. This does not implement journal replay, account-state
+reconciliation or recovery from a client cache alone.
