@@ -469,3 +469,11 @@ data. It records source/target architectures, target release/digest, per-profile
 sizes, decrypted counts, pin preservation and wrong-passphrase rejection. This demonstrates
 software-key restore between hosts/platforms, not hardware enrollment, biometrics or recovery
 of production data. Review recorded results before marking R07 complete.
+
+Recorded October 22 results: both profiles recovered 65 entries and 17,106,914 ciphertext
+bytes locally, then on a separate Linux AMD64 host from Mac ARM64 kits. The final image
+revision was `6d84aea2c96bacb472976be073d52b100579e853`. Wrong passphrases and unexpected
+chunks failed without publishing output; pins and source bundles remained unchanged.
+[Machine-readable cross-platform evidence](cross-platform-recovery-2026-10-22.json)
+closes R07; the two-profile large export drill closes R08. Hardware enrollment remains
+outside this milestone.

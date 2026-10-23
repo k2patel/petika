@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "created_utc": "2026-10-23T03:16:51.146211+00:00",
+  "source_system": "Darwin",
+  "source_architecture": "arm64",
+  "target_image_digest": "sha256:ee285ef76ef1348b16bffbd12519d5ff13b3d4103bcc418037015a1ec2855052",
+  "verification": {
+    "system": "Linux",
+    "architecture": "x86_64",
+    "release": "6d84aea2c96bacb472976be073d52b100579e853",
+    "results": [
+      {
+        "mode": "standard",
+        "collection": "44fc2a104d108131d2e7df39a50ab2dc2820e3c77cf32cecaa960c7635769467",
+        "entries": 65,
+        "ciphertext_bytes": 17106914,
+        "pin_sha256": "9cc0a1c39e906af06af3c6aae35a6e5bc65342e6a64f4016600b1968115903b5",
+        "recovered_entries": 65,
+        "pin_unchanged": true,
+        "wrong_key_rejected": true,
+        "extra_chunk_rejected": true,
+        "source_bundle_verified": true
+      },
+      {
+        "mode": "hybrid-post-quantum",
+        "collection": "16d6a9d4184c439824596998b7214a8b12baee3e3b4fe92e627f4179a0d7a86a",
+        "entries": 65,
+        "ciphertext_bytes": 17106914,
+        "pin_sha256": "6884a34c1d49c0bf82700b1a59bccdf4055263cbde9a541e8448d5a517e57767",
+        "recovered_entries": 65,
+        "pin_unchanged": true,
+        "wrong_key_rejected": true,
+        "extra_chunk_rejected": true,
+        "source_bundle_verified": true
+      }
+    ]
+  },
+  "scope": "synthetic independently retained software identity/pin kits; no hardware/biometric enrollment or production-data restore"
+}

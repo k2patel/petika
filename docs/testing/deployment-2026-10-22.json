@@ -1,0 +1,19 @@
+{
+  "release": "6d84aea2c96bacb472976be073d52b100579e853",
+  "image_digest": "sha256:48cb7b7e1aa27725e75e931321a6c78d49c87b927d6afd04ee64024804faf649",
+  "https_health": 200,
+  "experimental_runtime_flags": {},
+  "rollback_archive_retained": true,
+  "containers_ready": "3/3",
+  "permission_repair": "Temporary preflight fsGroup changed regular data-file modes; restored 0600 and verified startup. Preflight corrected to OnRootMismatch.",
+  "rollback_caveat": "Retained predeployment archive captured group-readable modes; restore regular data files to 0600 before startup.",
+  "github_ci": {
+    "run": 39892232439,
+    "status": "in_progress_at_rollout"
+  },
+  "gitea_image_builds": {
+    "standard": 381,
+    "qa": 382,
+    "conclusion": "success"
+  }
+}

@@ -605,3 +605,15 @@ not a production recovery-time commitment.
 
 See [off-site backups](offsite-backups.md) for separate user/operator S3 and SSH
 profiles, read-only user backup keys, encrypted transfer and download verification.
+
+### Kubernetes helper pod permissions
+
+A helper mounting existing data must preserve its owner-only file permissions. Match the
+application's `fsGroupChangePolicy: OnRootMismatch` when using `fsGroup`; the default
+recursive ownership adjustment can add group permissions even when the helper mounts the
+volume read-only. Petika rejects such store and lock files. For a temporary helper with a
+secret mounted at `/run/secrets`, set `automountServiceAccountToken: false` if it does not
+need Kubernetes API access, preventing an overlapping automatic service-account mount.
+If a retained archive contains group-readable data-file modes, restore regular data files
+to `0600` under the application UID before starting Petika. Keep the original archive and
+its integrity evidence; do not weaken Petika's permission checks.
