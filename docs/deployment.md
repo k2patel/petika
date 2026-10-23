@@ -133,7 +133,9 @@ Use its actual clone URL, for example:
 | Your Git server | Use the HTTPS or SSH clone URL supplied by your server |
 
 Replace the account/namespace and repository name with your own. Configure the
-operator-managed push job with that remote and repository-scoped write credentials.
+[administrator Git settings](administrator-guide.md#configure-encrypted-git-copies-in-the-web-ui)
+in the push-runtime web UI, or an operator-managed push job, with that remote and
+repository-scoped write credentials.
 The optional [mirror sidecar](../deploy/homelab/README.md) uses `PETIKA_BACKUP_URL`
 and an HTTPS credential helper; customize its username/token handling for your
 provider. A separate SSH push job needs its own protected key and verified host

@@ -44,6 +44,7 @@ and does not overwrite an account preference. Failed saves restore the prior cho
 | Enable biometric unlock | Check capability → explain allowed fallback → verify → confirm | Bind verification to key use; show why unsupported devices cannot enable it |
 | Set up recovery | Choose method → retain/verify recovery material → confirm scope | Explicitly name recovery holders and warn before removing the last working path |
 | S3/SSH backup | Choose provider → destination fields → credentials → schedule → verify | Show only relevant provider fields; separate save, connection success, backup success and restore verification |
+| Git copies | Private repository → HTTPS token or SSH key → save → test → sync → schedule | Admin-only; encrypted credentials, no secret readback, separate connection and verified-push status, fast-forward only |
 | API pull backup | Name external client → expiry → generate → copy once | Clear download-only scope, expiry and revoke action; no storage credentials required |
 
 Use ordinary storage labels such as endpoint, bucket and folder where possible;

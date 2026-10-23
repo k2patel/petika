@@ -57,3 +57,6 @@ dialog{border:1px solid var(--line);border-radius:16px;padding:0;background:var(
 .petika-inline button:disabled{cursor:default;opacity:.7}
 @media(prefers-color-scheme:dark){.petika-inline button+button{background:#142a33;color:#eef7f7;border-color:#718f9c}}
 /* PETIKA_INLINE_END */
+
+/* Shared grouped settings controls. */
+.settings-fields{border:0;padding:0;margin:20px 0 0;min-width:0}.settings-fields legend{font-weight:600;margin-bottom:12px}.settings-fields>.small{margin-bottom:14px}.settings-fields textarea{resize:vertical}.settings-fields>div{margin-top:14px}

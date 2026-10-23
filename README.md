@@ -1,15 +1,17 @@
-# Petika · पेटिका
+# Petika · पेटिका — self-hosted password manager
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/brand/petika-icon-dark.png">
   <img src="assets/brand/petika-icon-light.png" alt="Petika — Indian-patterned open chest with rising Devanagari binary digits" width="140">
 </picture>
 
-**Your secrets. Your infrastructure.**
+**An open-source password manager for your own server.**
 
 Petika is an open-source, self-hosted password manager built in Rust. Its name means
-“small box” in Sanskrit. Keep passwords, website verification codes, and shared
-collections on infrastructure you control, with encryption performed on your device.
+“small box” in Sanskrit. Manage passwords, TOTP two-factor authentication codes,
+and shared vaults through a web app, Rust CLI, and experimental Chromium browser
+extension with password and TOTP autofill. Vault encryption happens on your device;
+optional encrypted Git backups use GitHub, GitLab, Codeberg, or your own Git server.
 
 **Experimental and unaudited. Use synthetic data only for now.**
 Petika is not yet published to crates.io, and no public prebuilt container image is published.
@@ -44,7 +46,9 @@ Codeberg, or a Git server you operate; see [Git hosting choices](docs/deployment
 - **Off-site backups:** user/operator S3 and SSH server push, plus user-scoped API pull keys.
 - **Encryption choices:** standard or experimental hybrid post-quantum encryption at
   collection creation. Neither mode is a guarantee against all future attacks.
-- **Encrypted Git mirror:** durable API revision checks and a one-way ciphertext mirror.
+- **Encrypted Git mirror:** administrator web settings for HTTPS/SSH authentication,
+  connection tests, manual or automatic sync, and verified outbound copies.
+  Durable API revision checks and a one-way ciphertext mirror.
   Entry names, secrets, and folder hierarchy stay inside the encrypted snapshot.
 - **Deployment:** source builds, non-root distroless containers, Kubernetes manifests,
   and Podman kube play configuration.

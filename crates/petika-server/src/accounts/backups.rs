@@ -1,4 +1,4 @@
-mod push;
+pub(super) mod push;
 use push::{PushSettings, Secrets};
 // Read-only user backup credentials and encrypted server push destinations.
 // Full-server archives are operator jobs, never available through user backup keys.

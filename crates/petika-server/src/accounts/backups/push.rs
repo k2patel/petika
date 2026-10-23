@@ -112,7 +112,7 @@ impl Secrets {
     }
 }
 impl Accounts {
-    fn backup_master_key(&self) -> Result<Zeroizing<Vec<u8>>> {
+    pub(in crate::accounts) fn backup_master_key(&self) -> Result<Zeroizing<Vec<u8>>> {
         let bytes = if let Some(path) = env::var_os("PETIKA_BACKUP_MASTER_KEY_FILE") {
             fs::read(path).map_err(|_| KeyError::Unavailable)?
         } else {
@@ -361,7 +361,12 @@ fn write_private(path: &Path, value: &Value) -> crate::Result<()> {
     file.sync_all()?;
     Ok(())
 }
-fn run_script(script: &Path, action: &str, root: &Path, value: &Value) -> crate::Result<()> {
+pub(in crate::accounts) fn run_script(
+    script: &Path,
+    action: &str,
+    root: &Path,
+    value: &Value,
+) -> crate::Result<()> {
     let mut command =
         Command::new(env::var_os("PETIKA_BACKUP_PYTHON").unwrap_or_else(|| "python3".into()));
     command

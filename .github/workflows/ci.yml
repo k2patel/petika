@@ -180,6 +180,10 @@ jobs:
           /tmp/petika-browser-tests/bin/python scripts/test_extension.py --generic
       - name: Backup Settings workflows
         run: /tmp/petika-browser-tests/bin/python scripts/test_backup_settings.py
+      - name: Git settings and outbound replication
+        run: |
+          python3 scripts/test_git_settings.py
+          /tmp/petika-browser-tests/bin/python scripts/test_git_settings_ui.py
       - name: HTTP demo without secure-context-only APIs
         run: /tmp/petika-browser-tests/bin/python scripts/test_http_demo.py
       - name: Configured public endpoint and login cookies

@@ -5,8 +5,11 @@ export HOME=/tmp
 export GIT_TERMINAL_PROMPT=0
 export GIT_ASKPASS=/scripts/askpass.sh
 while :; do
+  # UI-managed transfers take over after the first settings save.
+  if [ -f /mirror/ui-managed ]; then sleep 60; continue; fi
   failed=0
   for repository in /mirror/repository.git /mirror/*/repository.git; do
+    [ -f /mirror/ui-managed ] && break
     [ -f "$repository/HEAD" ] || continue
     collection=$(basename "$(dirname "$repository")")
     if [ "$collection" = mirror ]; then

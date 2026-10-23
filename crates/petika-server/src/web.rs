@@ -175,6 +175,16 @@ pub fn account_route(
             return Ok(serde_json::Value::Null);
         }
         let user = user.as_ref().ok_or("Sign in to continue")?;
+        if path == "/v1/admin/git" || path.starts_with("/v1/admin/git/") {
+            return accounts.git_manage(
+                user,
+                method.as_str(),
+                path.strip_prefix("/v1/admin/git")
+                    .unwrap_or("")
+                    .trim_start_matches('/'),
+                payload.clone(),
+            );
+        }
         match (method.as_str(), path.as_str()) {
             ("GET", "/v1/collections") => Ok(serde_json::json!(accounts.collections(user)?)),
             ("POST", "/v1/auth/password") => {

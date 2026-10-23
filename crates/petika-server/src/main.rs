@@ -290,6 +290,11 @@ fn run() -> Result<()> {
         mirror.clone(),
         Arc::clone(&backup_gate),
     );
+    petika_server::accounts::Accounts::start_git_worker(
+        data.clone(),
+        mirror.clone(),
+        Arc::clone(&backup_gate),
+    );
     for request in server.incoming_requests() {
         let path = request.url().to_owned();
         if path == "/healthz" && request.method() == &Method::Get {

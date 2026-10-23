@@ -300,3 +300,57 @@ Do not print mounted secret files or full Secret manifests into support tickets.
 | Destination cannot be edited | Wait for its running job to finish. |
 | API client stopped after restart/password change | Reconnect the account session or issue a new backup key as applicable. |
 | Restore fails compatibility checks | Use the recorded release and preserve the backup; do not bypass format validation. |
+
+## Configure encrypted Git copies in the web UI
+
+In **Settings → Git repository** (also under **Sync & backup**), an administrator can:
+
+1. Create an empty **private** repository on GitHub, GitLab, Codeberg, or a Git server
+   of your choice, then paste its HTTPS or SSH clone URL.
+2. Choose HTTPS with a repository-scoped write token (recommended for first-time setup),
+   or SSH with a dedicated OpenSSH private key and independently verified known-hosts entry.
+   Set the Git username required by your provider. Keep secrets out of repository URLs.
+3. Choose after-change sync (checks every minute), a periodic interval, or manual sync.
+   Leave automatic sync off while testing. Enter your current Petika account password
+   and select **Save Git settings**.
+4. Select **Test connection**, then **Refresh status**. This verifies repository read
+   access only. Select **Sync now** to verify write access and the resulting remote refs.
+5. Enable automatic sync if desired. The last verified push remains visible after errors.
+
+Credentials are encrypted on the server using the backup credential master key. They
+are never returned to the browser; blank secret fields preserve saved credentials.
+Changing the destination or username requires fresh credentials. Settings affect this
+server’s encrypted collection histories, not a single user's vault. This does not grant
+administrators vault-decryption access. Git history exposes sizes and commit times;
+full-server backups are still required for accounts, permissions, and configuration.
+
+The `push-runtime` image includes Git, SSH, and the worker. Source installations need
+Python 3, Git, SSH, `PETIKA_GIT_MIRROR`, and
+`PETIKA_GIT_SYNC_SCRIPT=/absolute/path/to/scripts/git_sync.py`. Minimal distroless
+images show the settings as unavailable. `PETIKA_GIT_EXTERNAL_PUSH=1` deliberately
+keeps configuration read-only while an independently managed push job owns transfers.
+
+For the bundled legacy sidecar, deploy the updated `mirror.sh` **before** using the UI.
+It stops scheduling pushes when `/mirror/ui-managed` exists; an already-running push
+may finish. Optionally set `PETIKA_GIT_LEGACY_REMOTE` and
+`PETIKA_GIT_LEGACY_USERNAME` on the application to prefill the existing URL/username.
+Legacy tokens are not silently imported; enter new credentials to complete takeover.
+Retire any other external push jobs explicitly. Disabling automatic sync does not
+reactivate the legacy sidecar. To return to external management, stop the UI worker
+and deliberately remove its marker only after reconciling the destination.
+
+Git pushes are fast-forward only: no force push, fetch, merge, or automatic conflict
+repair. HTTPS requires valid TLS and refuses redirects. SSH requires verified host keys
+and a noninteractive dedicated key; encrypted private keys needing a passphrase or agent
+are unsupported. A failed push retains API data and local history. Check permissions,
+network access, and remote history before retrying; never reset a trusted history blindly.
+The worker checks outbound copies against captured local commit IDs; writes arriving
+during a push are handled by the next run. After-change mode checks local changes, not
+continuous remote availability; select **Sync now** for a fresh remote verification.
+
+Remote branches are `legacy`, `collections/<opaque-id>` for snapshot histories and
+`entries/<opaque-id>` for experimental entry histories. Existing independent per-entry
+remote jobs remain separately configured; retire them when adopting this server-wide
+worker. Preserve the complete data directory (including `git-sync.json` and the backup
+credential master key) for recovery. No credential or branch deletion is implied by a
+schedule or destination change.

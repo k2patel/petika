@@ -225,7 +225,7 @@ function closeDialog() {
 function authScreen(initialized = true) {
   try { applyTheme(localStorage.getItem('petika-theme')); } catch { applyTheme('system'); }
   clearInterval(otpInterval);
-  $('#app').innerHTML = `<div class="auth-layout"><section class="auth-story">${brand()}<div class="auth-art"><div class="chest-tile">${mark()}</div><h1>A private place.<br>For your digital life.</h1><p>Keep passwords, verification codes, and shared secrets together. On infrastructure you control.</p><div class="actions"><span class="pill">${icon('lock')}Encrypted on your device</span></div></div><div class="trust-line">${icon('shield')}Open source. Self-hosted. Yours.</div></section><main id="main" class="auth-panel"><div class="theme-top">${themeSelect()}</div><div class="auth-form"><h2>${initialized?'Welcome back':'Make Petika yours'}</h2><p>${initialized?'Sign in to your private workspace.':'Create the first administrator for this instance.'}</p><form id="auth-form">${!initialized?field('Setup token','token','password','','required autocomplete="off"')+field('Your name','name','text','','required maxlength="100" autocomplete="name"'):''}${field('Username','username','text','','required autocomplete="username" maxlength="100"')}${field(initialized?'Account password':'Create an account password','password','password','','required minlength="12" maxlength="1024" autocomplete="'+(initialized?'current-password':'new-password')+'"')}${!initialized?'<p class="small muted">Use at least 12 characters. Your collection unlock passphrase is set separately.</p>':''}<div class="form-error" role="alert"></div><button class="btn primary full" type="submit">${initialized?'Sign in':'Create administrator'}</button></form><div class="separator">Just looking around?</div>${button('Explore the demo','demo','arrow','full')}<p class="auth-footer">Experimental release • Use test data only</p></div></main></div>`;
+  $('#app').innerHTML = `<div class="auth-layout"><section class="auth-story">${brand()}<div class="auth-art"><div class="chest-tile">${mark()}</div><h1>A private place.<br>For your digital life.</h1><p>Petika is a self-hosted password manager. Keep passwords, verification codes, and shared secrets on infrastructure you control.</p><div class="actions"><span class="pill">${icon('lock')}Encrypted on your device</span></div></div><div class="trust-line">${icon('shield')}Open source. Self-hosted. Yours.</div></section><main id="main" class="auth-panel"><div class="theme-top">${themeSelect()}</div><div class="auth-form"><h2>${initialized?'Welcome back':'Make Petika yours'}</h2><p>${initialized?'Sign in to your private workspace.':'Create the first administrator for this instance.'}</p><form id="auth-form">${!initialized?field('Setup token','token','password','','required autocomplete="off"')+field('Your name','name','text','','required maxlength="100" autocomplete="name"'):''}${field('Username','username','text','','required autocomplete="username" maxlength="100"')}${field(initialized?'Account password':'Create an account password','password','password','','required minlength="12" maxlength="1024" autocomplete="'+(initialized?'current-password':'new-password')+'"')}${!initialized?'<p class="small muted">Use at least 12 characters. Your collection unlock passphrase is set separately.</p>':''}<div class="form-error" role="alert"></div><button class="btn primary full" type="submit">${initialized?'Sign in':'Create administrator'}</button></form><div class="separator">Just looking around?</div>${button('Explore the demo','demo','arrow','full')}<p class="auth-footer">Experimental release • Use test data only</p></div></main></div>`;
   bind();
   form('#auth-form', async (data, el) => {
     const body = Object.fromEntries(data);
@@ -361,7 +361,7 @@ function securitySettings() {
     <div class="settings-row"><div><h3>Vault protection</h3><p>Your saved passwords are encrypted on your device before they sync.</p></div><span class="pill neutral">${protection}</span></div>
     <div class="settings-row"><div><h3>Recovery & sharing</h3><p>Manage your encrypted recipient identity${state.collection.group?' and this group’s access':''}. Keep recovery material somewhere safe.</p></div><div class="actions">${button('Recipient identity','identity','key')}${state.collection.group?button('Group access','sharing','users'):''}</div></div>
     <div class="settings-row"><div><h3>Off-site backups</h3><p>Send encrypted copies to S3 or SSH storage, or create a download key for your backup software.</p></div>${button('Off-site backups','backups','download')}</div>
-    <div class="settings-row"><div><h3>Account access</h3><p>Changing your sign-in password does not change your vault passphrase.</p></div><div class="actions">${button('Connected clients','clients','browser')}${button('Change account password','account-password','key')}</div></div>
+    ${state.user.admin?`<div class="settings-row"><div><h3>Git repository</h3><p>Manage this server’s encrypted Git copies, connection, and sync schedule.</p></div>${button('Git repository','git-settings','refresh')}</div>`:''}<div class="settings-row"><div><h3>Account access</h3><p>Changing your sign-in password does not change your vault passphrase.</p></div><div class="actions">${button('Connected clients','clients','browser')}${button('Change account password','account-password','key')}</div></div>
     <details class="settings-details"><summary>Encryption details & upcoming options</summary><div class="settings-details-body">
       <p>${!state.unlocked?'Unlock this collection to see which protection it uses.':state.mode==='standard'?'This collection uses XChaCha20-Poly1305 with Argon2id passphrase protection.':'This collection uses experimental X-Wing key protection and XChaCha20-Poly1305 encryption.'}</p>
       <p>GPG is an import tool, not a vault protection setting. ${button('Open import tools','transfer','upload','ghost')}</p>
@@ -427,7 +427,7 @@ async function renderPage() {
       status = await api(`/v1/collections/${state.collection.id}/status`)
     } catch {}
     state.status = status;
-    main.innerHTML = title('Sync & backup', 'Know where your encrypted data lives.') + `<section class="panel readable"><div class="panel-header"><h2>${esc(state.collection.name)}</h2><span class="pill ${state.dirty?'neutral':''}">${state.demo?'Demo only':state.conflict?'Conflict needs review':state.dirty?'Changes on this device':status?'Connected':'Connection unavailable'}</span></div><div class="settings-row"><div><h3>API revision</h3><p>Only encrypted snapshots are sent to the server.</p></div><strong>${status?.revision??'—'}</strong></div><div class="settings-row"><div><h3>Encrypted Git mirror</h3><p>Item names, websites, and folder structure are encrypted. Size and commit timing remain visible.</p></div><span>${status?.mirror_enabled?`Revision ${status.mirror_revision}`:'Not available'}</span></div><div class="settings-row"><div><h3>Encryption</h3><p>${state.mode==='standard'?'XChaCha20-Poly1305 with Argon2id key protection.':'Experimental X-Wing hybrid key protection and XChaCha20-Poly1305.'}</p></div><span class="pill">${state.unlocked?state.mode:'Locked'}</span></div><div class="actions">${button('Retry sync','sync-now','refresh','primary')}${button('Download backup','export','download')}${state.conflict?button('Load server version','reload-server','download'):''}</div></section>`;
+    main.innerHTML = title('Sync & backup', 'Know where your encrypted data lives.') + `<section class="panel readable"><div class="panel-header"><h2>${esc(state.collection.name)}</h2><span class="pill ${state.dirty?'neutral':''}">${state.demo?'Demo only':state.conflict?'Conflict needs review':state.dirty?'Changes on this device':status?'Connected':'Connection unavailable'}</span></div><div class="settings-row"><div><h3>API revision</h3><p>Only encrypted snapshots are sent to the server.</p></div><strong>${status?.revision??'—'}</strong></div><div class="settings-row"><div><h3>Encrypted Git mirror</h3><p>Item names, websites, and folder structure are encrypted. Size and commit timing remain visible.</p></div><span>${status?.mirror_enabled?`Revision ${status.mirror_revision}`:'Not available'}</span></div><div class="settings-row"><div><h3>Encryption</h3><p>${state.mode==='standard'?'XChaCha20-Poly1305 with Argon2id key protection.':'Experimental X-Wing hybrid key protection and XChaCha20-Poly1305.'}</p></div><span class="pill">${state.unlocked?state.mode:'Locked'}</span></div><div class="actions">${button('Retry sync','sync-now','refresh','primary')}${button('Download backup','export','download')}${state.user.admin?button('Git repository','git-settings','refresh'):''}${state.conflict?button('Load server version','reload-server','download'):''}</div></section>`;
   }
   if (state.view === 'users') await renderUsers();
   if (state.view === 'groups') await renderGroups();
@@ -716,6 +716,75 @@ function downloadBackupProfile(value) {
   const link = document.createElement('a'); link.href = url; link.download = 'petika-backup-destination.json'; link.click(); URL.revokeObjectURL(url);
 }
 
+async function gitSettingsDialog() {
+  if (state.demo) { toast('Sign in as an administrator to configure Git sync.'); return; }
+  const saved = await api('/v1/admin/git');
+  const messages = {
+    not_configured:'No Git repository configured.', saved:'Settings saved. Test the connection, then sync.',
+    interrupted:'The previous operation was interrupted. Test the connection or sync again.',
+    queued:'Operation queued. Refresh in a few seconds.', running:'Git operation in progress. Refresh for the result.',
+    tested:'Connection tested: repository is readable. Sync now to verify write access.',
+    synced:'Encrypted history pushed and remote branches verified.', unchanged:'No new local commits since the last verified push.',
+    empty:'No encrypted Git history yet. Save an item to a collection first.',
+    connection_failed:'Connection failed. Check the repository URL, token or SSH key, host keys, and server network access.',
+    push_rejected:'Push failed or was rejected. Check write permission and remote history. Petika will not overwrite conflicting history.',
+    failed:'Transfer could not complete. Ask your administrator to check server storage and Git worker configuration.'
+  };
+  const busy = ['running','queued'].includes(saved.status);
+  const stamp = value => value ? esc(new Date(value*1000).toLocaleString()) : 'Not yet';
+  dialog('Git repository', `
+    <p>Keep an encrypted copy of this server’s collections in a private Git repository. Everyone continues to use the Petika API; Git receives copies only.</p>
+    <section aria-label="Git sync status"><p class="notice" role="status">${esc(messages[saved.status] || messages.failed)}</p>
+    <p class="small">Last connection test: ${stamp(saved.last_test)}<br>Last verified push: ${stamp(saved.last_success)}${saved.last_success?` (${saved.repositories} repositories)`:''}</p>
+    <div class="actions"><button class="btn" id="git-test" ${!saved.available||!saved.credentials_configured||busy?'disabled':''}>Test connection</button><button class="btn" id="git-sync" ${!saved.available||!saved.credentials_configured||busy?'disabled':''}>Sync now</button><button class="btn" id="git-refresh">Refresh status</button></div>
+    <p class="small" id="git-unsaved" hidden>Save your changes before testing or syncing.</p><div id="git-operation-error" class="form-error" role="alert"></div></section>
+    ${saved.available?'':`<p class="notice warning">${saved.external_push?'An external Git push job manages this deployment. The operator must retire it before enabling UI-managed transfers.':'This deployment needs the Git transfer worker. Ask the operator to use the push-runtime image and enable the Git worker. Settings are read-only until it is available.'}</p>`}
+    ${saved.legacy_push?'<p class="notice">An existing Git push job is active. Saving these settings transfers control to Petika. Enter a repository token or SSH key to complete the setup.</p>':''}
+    <form id="git-settings-form"><fieldset class="settings-fields" ${!saved.available||busy?'disabled':''}>
+    <legend>Repository and authentication</legend>
+    <p class="small">Create an empty private repository on GitHub, GitLab, Codeberg, or your own Git server. Do not initialize it with a README. Paste its clone URL below.</p>
+    <div class="field"><label for="git-protocol">Connection type</label><select id="git-protocol" name="protocol"><option value="https" ${!saved.remote.startsWith('ssh:')?'selected':''}>HTTPS with access token (recommended)</option><option value="ssh" ${saved.remote.startsWith('ssh:')?'selected':''}>SSH with a dedicated key</option></select></div>
+    ${field('Repository URL','git_remote','text',saved.remote,'required maxlength="2048" placeholder="https://github.com/your-account/petika-vault-backup.git" autocomplete="off"')}
+    <p class="small" id="git-url-hint"></p>
+    ${field('Git username','git_username','text',saved.username,'required maxlength="100" autocomplete="off"')}
+    <p class="small">${saved.credentials_configured?'Credentials are saved securely on the server and are never displayed. Leave the secret fields blank to keep them. Changing the URL or username requires fresh credentials.':'Use credentials limited to this backup repository, with read and write access.'}</p>
+    <div id="git-https-fields">${field('Git access token','git_token','password','','maxlength="4096" autocomplete="new-password"')}<p class="small">Use your Git provider’s repository-scoped token. Never put a token in the repository URL.</p></div>
+    <div id="git-ssh-fields"><div class="field"><label for="git-private-key">SSH private key</label><textarea id="git-private-key" name="git_private_key" rows="4" maxlength="16384" autocomplete="off" spellcheck="false"></textarea></div><div class="field"><label for="git-known-hosts">Verified SSH host keys (known_hosts)</label><textarea id="git-known-hosts" name="git_known_hosts" rows="3" maxlength="16384" autocomplete="off" spellcheck="false"></textarea></div><p class="small">Use a dedicated unencrypted OpenSSH key with write access to this repository. Obtain and verify the server’s host key through your Git provider or administrator. Unknown or changed host keys are rejected.</p></div>
+    <div class="field"><label for="git-schedule">Sync schedule</label><select id="git-schedule" name="schedule"><option value="change" ${saved.schedule==='change'?'selected':''}>After changes (checks every minute)</option><option value="periodic" ${saved.schedule==='periodic'?'selected':''}>At a regular interval</option><option value="manual" ${saved.schedule==='manual'?'selected':''}>Only when I select Sync now</option></select></div>
+    <div id="git-interval-field">${field('Interval in minutes','git_interval','number',saved.interval_minutes||60,'min="1" max="1440" required')}</div>
+    <label class="check"><input type="checkbox" name="enabled" ${saved.enabled?'checked':''}> Enable automatic sync</label>
+    <p class="small">Keep automatic sync off until you have tested the connection. Sync now remains available for manual transfers.</p>
+    ${field('Current account password','git_current_password','password','','required autocomplete="current-password"')}
+    </fieldset><div class="form-error" role="alert"></div><div class="dialog-footer"><button class="btn primary" type="submit" ${!saved.available||busy?'disabled':''}>Save Git settings</button></div></form>
+    <p class="small">Git history contains ciphertext, but sizes and commit times are visible. This is not a full-server backup: keep accounts, server configuration, and recovery keys backed up separately.</p>`);
+  const update = () => {
+    const ssh = $('#git-protocol').value === 'ssh';
+    $('#git-https-fields').hidden=ssh; $('#git-ssh-fields').hidden=!ssh;
+    $('#git-url-hint').textContent=ssh?'Use ssh://git@host/account/repository.git. A git@host:account/repository.git clone URL is also accepted and converted.':'Use an https:// URL without a username, password, or token.';
+    $('#git-interval-field').hidden=$('#git-schedule').value!=='periodic';
+  };
+  update(); $('#git-protocol').onchange=update; $('#git-schedule').onchange=update;
+  $('#git-settings-form').addEventListener('input',()=>{ $('#git-test').disabled=true; $('#git-sync').disabled=true; $('#git-unsaved').hidden=false; });
+  const operation = action => async () => {
+    $('#git-operation-error').textContent=''; $('#git-test').disabled=true; $('#git-sync').disabled=true;
+    try { await api('/v1/admin/git/'+action,{method:'POST',body:{}}); await gitSettingsDialog(); }
+    catch(e) { $('#git-operation-error').textContent=errorText(e); }
+  };
+  $('#git-test').onclick=operation('test'); $('#git-sync').onclick=operation('sync');
+  $('#git-refresh').onclick=()=>gitSettingsDialog().catch(e=>toast(errorText(e)));
+  form('#git-settings-form',async data=>{
+    let remote=String(data.get('git_remote')).trim();
+    const ssh=data.get('protocol')==='ssh';
+    if (ssh && /^[A-Za-z0-9_.-]+@[A-Za-z0-9.-]+:[^/]/.test(remote)) remote='ssh://'+remote.replace(':','/');
+    if (!remote.startsWith(ssh?'ssh://':'https://')) throw new Error('The repository URL must match the selected connection type.');
+    const body={remote,username:String(data.get('git_username')).trim(),enabled:data.has('enabled'),schedule:data.get('schedule'),interval_minutes:Number(data.get('git_interval')),current_password:data.get('git_current_password')};
+    if (ssh && (data.get('git_private_key') || data.get('git_known_hosts'))) body.credentials={ssh_private_key:data.get('git_private_key'),ssh_known_hosts:data.get('git_known_hosts')};
+    if (!ssh && data.get('git_token')) body.credentials={token:data.get('git_token')};
+    await api('/v1/admin/git',{method:'POST',body});
+    await gitSettingsDialog(); toast('Git settings saved');
+  });
+}
+
 async function backupDialog(operator = false) {
   if (state.demo) { toast('Sign in to configure off-site backups.'); return; }
   const base = '/v1/backup-settings/' + (operator ? 'operator/' : '');
@@ -840,6 +909,7 @@ function destinationDialog(operator, existing = null) {
 
 async function action(name, el) {
   if (name === 'backups') return backupDialog();
+  if (name === 'git-settings') return gitSettingsDialog();
   if (name === 'identity-backup') {
     const blob = new Blob([localStorage.getItem(identityStorageKey())], {type:'application/json'});
     const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = 'petika-identity-backup.json'; link.click(); URL.revokeObjectURL(url); return;
