@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 import backup_recovery
@@ -51,6 +52,25 @@ class API:
 
 
 class ChunkBackup(unittest.TestCase):
+    def test_chunk_response_is_bounded_before_json_parsing(self):
+        class Response:
+            status = 200
+            headers = SimpleNamespace(get_content_type=lambda: 'application/json')
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+            def read(self, count):
+                self.limit = count
+                return b' ' * count
+        response = Response()
+        api = object.__new__(user_backup.API)
+        api.server, api.key = 'https://example.invalid', 'synthetic'
+        api.opener = SimpleNamespace(open=lambda *args, **kwargs: response)
+        with self.assertRaises(ValueError):
+            api.get('/v1/backup/collections/id/entries/head/id/digest')
+        self.assertEqual(response.limit, 512 * 1024 + 1)
+
     def test_complete_bundle_and_modified_chunk(self):
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / 'bundle'

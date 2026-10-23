@@ -153,7 +153,7 @@ fn publish(
     Ok(())
 }
 pub fn backup(args: &BackupArgs, stdin: bool) -> Result<()> {
-    let bytes = chunks::read_chunk(&args.backup)?;
+    let bytes = chunks::read_chunk(&args.backup, LIMIT)?;
     if serde_json::from_slice::<serde_json::Value>(&bytes)?["backup_version"] == 3 {
         return chunks::recover(args, &bytes, stdin);
     }

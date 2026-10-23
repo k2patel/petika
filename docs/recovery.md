@@ -288,7 +288,8 @@ The API rechecks current credentials, membership and identity on each chunk. Eve
 is bound to the captured current head; a concurrent vault change aborts capture and requires
 a fresh attempt. The downloader checks the manifest again after the chunks. It does not
 claim a globally atomic snapshot across separate collections. Responses remain bounded to
-16 MiB, and the existing 4096-entry and server journal quotas still apply. This supports
+16 MiB for metadata and 512 KiB per entry chunk, and the existing 4096-entry and server
+journal quotas still apply. This supports
 aggregate exports larger than 16 MiB without treating the collection as an unbounded JSON
 response. Legacy snapshots and the existing single-file/Git recovery formats retain their
 own limits. Scheduled server-side user push jobs currently retain the single-file format;

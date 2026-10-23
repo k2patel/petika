@@ -89,6 +89,11 @@ for mode in ['standard', 'hybrid-post-quantum']:
     output = Path('/work/recovered-' + mode)
     base = ['petika', '--no-config', '--passphrase-stdin', 'entries', 'recover-backup',
             '--backup', str(saved), '--pin', str(pin), '--recipient-identity', str(identity)]
+    extra = saved.with_suffix('.entries') / 'unexpected.json'
+    extra.write_text('{}')
+    rejected = subprocess.run(base + ['--output', str(output)], input='synthetic identity passphrase\n', text=True, capture_output=True)
+    assert rejected.returncode and not output.exists() and pin.read_bytes() == before
+    extra.unlink()
     wrong = subprocess.run(base + ['--output', str(output)], input='wrong synthetic passphrase\n', text=True, capture_output=True)
     assert wrong.returncode and not output.exists() and pin.read_bytes() == before
     result = subprocess.run(base + ['--output', str(output)], input='synthetic identity passphrase\n', text=True, capture_output=True)
@@ -102,7 +107,7 @@ for mode in ['standard', 'hybrid-post-quantum']:
     if verified.returncode: raise RuntimeError(verified.stderr)
     user_backup.verify_user_bundle(root / 'bundle')
     results.append({**evidence, 'recovered_entries':marker['entries'], 'pin_unchanged':True,
-                    'wrong_key_rejected':True,'source_bundle_verified':True})
+                    'wrong_key_rejected':True,'extra_chunk_rejected':True,'source_bundle_verified':True})
 print(json.dumps({'system':platform.system(),'architecture':platform.machine(),
                   'release':os.environ.get('PETIKA_BACKUP_RELEASE'),'results':results}))
 '''

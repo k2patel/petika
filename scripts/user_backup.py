@@ -48,15 +48,16 @@ class API:
         self.opener = build_opener(NoRedirect(), HTTPSHandler(context=ssl.create_default_context(cafile=ca_file)))
 
     def get(self, path):
+        limit = 512 * 1024 if '/entries/' in path else 16 * 1024 * 1024
         request = Request(self.server + path, headers={'Authorization': 'Bearer ' + self.key})
         try:
             with self.opener.open(request, timeout=60) as response:
                 if response.status != 200 or response.headers.get_content_type() != 'application/json':
                     raise ValueError('Unexpected backup API response')
-                content = response.read(16 * 1024 * 1024 + 1)
+                content = response.read(limit + 1)
         except HTTPError as error:
             raise ValueError(f'Backup API returned HTTP {error.code}; check the key and current permissions') from None
-        if len(content) > 16 * 1024 * 1024:
+        if len(content) > limit:
             raise ValueError('Backup API response exceeds size limit')
         return json.loads(content)
 
@@ -97,7 +98,8 @@ def verify_user_bundle(directory):
             for entry, reference in saved['entries'].items():
                 name = folder + '/' + entry + '.json'
                 expected.add(name)
-                if actual.get(name, {}).get('sha256') != reference['digest']:
+                if (actual.get(name, {}).get('sha256') != reference['digest']
+                        or actual[name]['size'] > 512 * 1024):
                     raise ValueError('Chunk missing or digest mismatch')
     if set(actual) != expected:
         raise ValueError('User backup is missing collections or contains unexpected files')

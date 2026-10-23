@@ -16,15 +16,15 @@ struct Manifest {
     entries: BTreeMap<String, EntryVersion>,
 }
 
-pub(super) fn read_chunk(path: &Path) -> Result<Vec<u8>> {
+pub(super) fn read_chunk(path: &Path, limit: usize) -> Result<Vec<u8>> {
     if !path.symlink_metadata()?.file_type().is_file() {
         return Err("Chunk must be a regular file".into());
     }
     let mut bytes = Vec::new();
     std::fs::File::open(path)?
-        .take(LIMIT as u64 + 1)
+        .take(limit as u64 + 1)
         .read_to_end(&mut bytes)?;
-    if bytes.len() > LIMIT {
+    if bytes.len() > limit {
         return Err("Chunk exceeds per-object limit".into());
     }
     Ok(bytes)
@@ -108,7 +108,7 @@ pub(super) fn recover(args: &BackupArgs, bytes: &[u8], stdin: bool) -> Result<()
             if reference.revision != entry.revision || reference.digest != entry.digest {
                 return Err("Chunk reference differs from authenticated index".into());
             }
-            let value = read_chunk(&folder.join(format!("{}.json", entry.id)))?;
+            let value = read_chunk(&folder.join(format!("{}.json", entry.id)), 512 * 1024)?;
             let plaintext = index.open_entry(&root, &entry.id, &value)?;
             let _: Entry = serde_json::from_slice(&plaintext)?;
             let name = format!("entry-{}.json", entry.digest);
@@ -130,7 +130,7 @@ pub(super) fn recover(args: &BackupArgs, bytes: &[u8], stdin: bool) -> Result<()
     crate::entry_sync::cache_object(&args.output.output, &saved.object)?;
     for name in files {
         StoreFile::lock(args.output.output.join(&name))?
-            .write(&read_chunk(&stage.path().join(name))?, true)?;
+            .write(&read_chunk(&stage.path().join(name), 512 * 1024)?, true)?;
     }
     StoreFile::lock(args.output.output.join("handoff.json"))?
         .write(&serde_json::to_vec(&handoff)?, true)?;
