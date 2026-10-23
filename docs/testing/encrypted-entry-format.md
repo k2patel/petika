@@ -361,5 +361,22 @@ pin preservation, and rejection of login for an account disabled after the basel
 Wrong hashes/releases, conflicting baseline reports, stale candidates, wrong expected
 heads and existing outputs fail. Backup safety tests inject publication failure and
 verify no completion marker is left and the source stays unchanged. These tests do not
-establish partial replay, per-group/identity-change reconciliation, power-loss durability
+establish partial replay, identity-change reconciliation, power-loss durability
 or real-device restore readiness.
+
+### Group revocation across complete-server reconciliation
+
+The shared-recipient drill now captures a complete baseline before membership removal,
+removes the read-only member and rotates, captures a complete successor, and reconciles
+against both independently retained reports and the successor manifest hash. It verifies
+source inventory and exact account bytes, deletes the original server/client directories,
+and starts the reconciled server on an isolated loopback port in both profiles.
+
+The remaining owner receives the same scoped export and rotation receipt and can decrypt.
+The removed member's old CLI grant is invalid after restart. A freshly approved CLI
+session authenticates their account, but collection listing and roster/epoch/receipt
+reads enforce removal. Their existing user backup key still
+identifies them, but excludes the group and rejects its export. Fresh account login also
+cannot list/read the group. Retained client pins remain unchanged. This covers membership
+removal followed by rotation; identity replacement, role downgrade, independently enrolled
+devices and production cutover remain separate scenarios.

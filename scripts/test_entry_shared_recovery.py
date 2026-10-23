@@ -5,14 +5,16 @@ Synthetic device directories reuse an enrolled identity; this does not test hard
 keys, biometrics, independently enrolled device keys or production key custody.
 """
 import json
+import hashlib
 from pathlib import Path
 import secrets
 import shutil
 import tempfile
 
-from test_backup_recovery import Server, PASSWORD, PASSPHRASE, IDENTITY
-from test_entry_recovery import cli, write, state_args
+from test_backup_recovery import Server, PASSWORD, PASSPHRASE, IDENTITY, run, tool
+from test_entry_recovery import cli, write, state_args, capture, AUDIT
 import user_backup
+import backup_recovery
 
 
 def save(path, value):
@@ -67,6 +69,7 @@ def drill(mode):
         root = Path(temporary)
         home = root / 'server'
         (home / 'config').mkdir(parents=True)
+        (home / 'mirror').mkdir()
         write(home / 'config/token', secrets.token_hex(32).encode())
         write(home / 'config/password', PASSWORD.encode())
         server = Server(home, provision=True, mirror=False,
@@ -145,6 +148,7 @@ def drill(mode):
             owner_device, second_device = root / 'owner-restored', root / 'recipient-second-device'
             retained_device(owner, owner_device)
             retained_device(recipient, second_device)
+            recipient_pin = (second_device / 'pin.json').read_bytes()
             # Destroy the reader cache. Recovery has only the exported ciphertext and retained trust/key.
             shutil.rmtree(recipient / 'cache')
             recover(owner_device, owner_export, root / 'owner-recovered')
@@ -152,6 +156,18 @@ def drill(mode):
             recover(second_device, owner_export, root / 'cross-user-rejected', ok=False)
             recover(second_device, old_export, root / 'rollback-rejected', ok=False)
 
+            # Retain a complete pre-revocation baseline with Bob still in the group.
+            server.stop()
+            baseline_report = root / 'pre-revocation-report.json'
+            write(baseline_report, run([AUDIT, home / 'data']).encode())
+            baseline_cursor = json.loads(baseline_report.read_text())['collections'][0]['accepted']
+            capture(home, root / 'pre-revocation-backup')
+            server = Server(home, mirror=False, overrides={'PETIKA_EXPERIMENTAL_ENTRIES': '1'})
+            owner_session = root / 'owner-restarted'
+            server.login(owner_session)
+            write(owner / 'session.json', (owner_session / 'session.json').read_bytes())
+            owner_api = user_backup.API(server.origin, root / 'owner-backup-key')
+            recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
             # Revoke API access and rotate to a new root that has no package for Bob.
             server.api('/v1/auth/login', {'username': 'alice', 'password': PASSWORD})
             server.api('/v1/admin/groups', {'id': collection, 'name': 'Shared recovery',
@@ -190,16 +206,83 @@ def drill(mode):
                                 '--confirm'], [IDENTITY], ok=False)
             assert not (second_device / 'rejected-pin.json').exists()
             retained_device(owner, root / 'owner-latest')
+            accepted = json.loads((owner / 'revoked-rotation.accepted.json').read_text())
+            # Retain the exact post-revocation access state for comparison after restore.
+            live_group = next(g for g in server.api('/v1/admin/groups') if g['id'] == collection)
+            capture_session = root / 'bob-before-capture'
+            assert server.login(capture_session, 'bob')['id'] == bob['id']
+            old_bob_token = json.loads((capture_session / 'session.json').read_text())['token']
+            assert server.api('/v1/auth/status', headers={'Authorization': 'Bearer ' + old_bob_token})['user']['id'] == bob['id']
             server.stop()
+            expected_report = root / 'post-revocation-report.json'
+            write(expected_report, run([AUDIT, home / 'data']).encode())
+            full = root / 'post-revocation-backup'
+            capture(home, full)
+            manifest_hash = hashlib.sha256((full / 'manifest.json').read_bytes()).hexdigest()
+            source_inventory = backup_recovery.inventory(full)
+            restored = root / 'reconciled-server'
+            tool('reconcile', full, '--release', 'entry-drill-release',
+                 '--baseline-report', baseline_report, '--expected-report', expected_report,
+                 '--expected-manifest-sha256', manifest_hash, '--recovery-tool', AUDIT,
+                 '--output', restored)
+            assert (restored / 'RECONCILIATION.json').is_file()
+            assert (restored / 'data/accounts.json').read_bytes() == (full / 'data/accounts.json').read_bytes()
+            assert backup_recovery.inventory(full) == source_inventory
+            # Destruction here affects only disposable fixtures. All subsequent access uses the restore.
+            shutil.rmtree(home)
             shutil.rmtree(owner)
             shutil.rmtree(recipient)
             recover(root / 'owner-latest', new_export, root / 'owner-latest-recovered')
             # Revocation cannot erase an already retained key and ciphertext from an older epoch.
             recover(historical, old_export, root / 'historical-after-revocation')
             recover(second_device, current_export, root / 'retained-after-revocation')
+            server = Server(restored, mirror=False, overrides={'PETIKA_EXPERIMENTAL_ENTRIES': '1'})
+            restored_owner = root / 'restored-owner-session'
+            assert server.login(restored_owner)['id'] == alice['id']
+            restored_group = next(g for g in server.api('/v1/admin/groups') if g['id'] == collection)
+            assert restored_group == live_group
+            assert [m['user_id'] for m in restored_group['members']] == [alice['id']]
+            owner_api = user_backup.API(server.origin, root / 'owner-backup-key')
+            after = export(owner_api, collection, root / 'restored-owner-export.json', alice['id'])
+            assert after == newest
+            lookup = server.api(f'/v1/collections/{collection}/entry-receipt',
+                                {'context': newest['object']['head']['context'], 'operation': accepted['operation']})
+            assert lookup['receipt'] == accepted
+            recover(root / 'owner-latest', root / 'restored-owner-export.json', root / 'restored-owner-verified')
+            # Sessions are memory-only: a restored server must not resurrect an old CLI grant.
+            old_headers = {'Authorization': 'Bearer ' + old_bob_token}
+            assert server.api('/v1/auth/status', headers=old_headers)['user'] is None
+            server.api('/v1/collections', headers=old_headers, expected=401)
+            # Fresh, valid CLI/browser credentials must still enforce the removed membership.
+            restored_bob = root / 'restored-bob-session'
+            assert server.login(restored_bob, 'bob')['id'] == bob['id']
+            new_bob_token = json.loads((restored_bob / 'session.json').read_text())['token']
+            headers = {'Authorization': 'Bearer ' + new_bob_token}
+            assert server.api('/v1/auth/status', headers=headers)['user']['id'] == bob['id']
+            assert collection not in {c['id'] for c in server.api('/v1/collections', headers=headers)}
+            for action, body in [
+                    ('entry-roster', {}),
+                    ('entry-epoch', {'context': current['object']['head']['context'],
+                                     'after': baseline_cursor}),
+                    ('entry-receipt', {'context': newest['object']['head']['context'], 'operation': accepted['operation']})]:
+                server.api(f'/v1/collections/{collection}/{action}', body, headers=headers, expected=403)
+            recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
+            assert recipient_api.get('/v1/backup/index')['user']['id'] == bob['id']
+            assert collection not in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
+            try:
+                recipient_api.get('/v1/backup/collections/' + collection)
+            except ValueError as error:
+                assert 'HTTP 403' in str(error)
+            else:
+                raise AssertionError('Restored backup resurrected revoked group access')
+            # Browser cookies from the fresh login enforce the same membership as the CLI.
+            assert collection not in {c['id'] for c in server.api('/v1/collections')}
+            server.api(f'/v1/collections/{collection}/entry-roster', {}, expected=403)
+            assert (second_device / 'pin.json').read_bytes() == recipient_pin
+
         finally:
             server.stop()
-    print(f'Shared recovery passed: {mode}; scoped exports, independent trust, restored identities, rotation and revocation.', flush=True)
+    print(f'Shared recovery passed: {mode}; scoped exports, independent trust, restored identities, rotation, revocation and complete-server reconciliation.', flush=True)
 
 
 if __name__ == '__main__':

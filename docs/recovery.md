@@ -189,9 +189,15 @@ Before cutover, verify retained client pins and decrypt using the recovery workf
 start the candidate in isolation, test permitted and revoked access, and reconcile known
 write/rotation receipts. The synthetic Standard/Hybrid drill verifies both receipts and
 that an account disabled after the baseline remains disabled after this staged restore.
-Per-group revocation and identity replacement across full-server reconciliation still
-need dedicated validation. If no complete successor backup survives, safe partial-journal
-import/replay with account/access reconciliation remains unsupported.
+The shared-vault drill additionally reconciles a pre-revocation baseline with a complete
+post-revocation backup, deletes the original server/client directories, and starts the
+isolated restored server. It verifies exact group/account state, owner exports and the
+rotation receipt. Old CLI sessions are not restored. The removed member's persisted
+backup key still identifies their account but cannot list/export the group; fresh browser and CLI
+sessions also cannot list/read the group. Historical copies remain decryptable. Identity
+replacement across full-server reconciliation still needs dedicated validation. If no
+complete successor backup survives, safe partial-journal import/replay with account/access
+reconciliation remains unsupported.
 
 ### Recover entry ciphertexts from Git or a user export
 
@@ -251,7 +257,8 @@ experimental Hybrid profiles: mutual contact verification, independent checkpoin
 confirmation, scoped exports, explicit rotation acceptance and fresh-cache recovery.
 A second simulated recipient device receives only a retained encrypted identity and
 pin; it receives no account session, authority key, recovery wrapper or old entry cache.
-Final recovery runs after stopping the server and deleting the original client directories.
+Offline recovery checks run after stopping the original server and deleting the original
+client directories. A reconciled server is then started separately for access validation.
 
 Removing a recipient blocks further group exports. Rotate the vault root afterward to
 exclude them from future key delivery. The drill checks both controls and verifies that

@@ -199,9 +199,10 @@ keys and actual cross-device readiness remain unverified.
 ### Remaining entry-format work, in order
 
 1. **Remaining recovery paths:** partial-journal import/replay when no complete newer
-   backup survives, group/identity access reconciliation and real-device/cross-platform
-   restore evidence. `backup_recovery.py reconcile` now stages an independently identified
-   complete successor backup with its accounts and receipts together; it requires exact
+   backup survives, identity-replacement/role-downgrade access reconciliation, and
+   real-device/cross-platform restore evidence. `backup_recovery.py reconcile` now stages an independently identified
+   complete successor backup with its accounts and receipts together; disabled-account
+   and removed-group-member checks now cover the restored API. It requires exact
    newer-head evidence and verified baseline ancestry. It does not replay fragments.
    Offline `petika-entry-recovery --compare` now classifies retained-head discrepancies
    and verifies older retained heads against the complete local journal without replay.
