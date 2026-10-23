@@ -143,6 +143,31 @@ impl Journal {
             .last_key_value()
             .map(|(_, (_, r))| r.receipt.accepted.clone())
     }
+    /// Current immutable head and live entry references, without copying ciphertext bodies.
+    pub fn backup_index(
+        &self,
+    ) -> Result<(
+        HistoryObject,
+        BTreeMap<String, entry_transaction::EntryVersion>,
+    )> {
+        if self.uncertain {
+            return Err("uncertain journal root".into());
+        }
+        let object = self
+            .records
+            .last_key_value()
+            .ok_or("missing entry root")?
+            .1
+            .1
+            .object
+            .clone();
+        let entries = self
+            .entries
+            .iter()
+            .filter_map(|(id, value)| value.as_ref().map(|value| (id.clone(), value.clone())))
+            .collect();
+        Ok((object, entries))
+    }
     /// Materialize only one committed logical tree for the server Git writer.
     pub fn committed_tree(
         &self,

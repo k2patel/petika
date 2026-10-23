@@ -79,6 +79,12 @@ fn backup_keys_are_read_only_user_scoped_durable_and_revocable() {
             accounts.backup_export(token, Some(id)),
             Err(KeyError::Forbidden)
         ));
+        for part in [vec!["manifest"], vec!["entries", "head", "id", "digest"]] {
+            assert!(matches!(
+                accounts.backup_part(token, id, &part),
+                Err(KeyError::Forbidden)
+            ));
+        }
     }
     assert!(matches!(
         accounts.backup_export(token, Some("../accounts.json")),
@@ -97,6 +103,12 @@ fn backup_keys_are_read_only_user_scoped_durable_and_revocable() {
         let revision = repository.read().unwrap().map_or(0, |s| s.revision);
         repository.update(revision, encrypted).unwrap();
         let backup = accounts.backup_export(token, Some(&shared.id)).unwrap();
+        assert_eq!(
+            accounts
+                .backup_part(token, &shared.id, &["manifest"])
+                .unwrap(),
+            backup
+        );
         UnlockedStore::open(
             backup["snapshot"]["encrypted"].as_str().unwrap().as_bytes(),
             "synthetic vault passphrase",
@@ -120,6 +132,10 @@ fn backup_keys_are_read_only_user_scoped_durable_and_revocable() {
         Err(KeyError::Forbidden)
     ));
     assert!(matches!(
+        accounts.backup_part(token, &shared.id, &["manifest"]),
+        Err(KeyError::Forbidden)
+    ));
+    assert!(matches!(
         accounts.backup_manage(&b, false, "DELETE", &format!("keys/{id}"), Value::Null),
         Err(KeyError::NotFound)
     ));
@@ -130,6 +146,10 @@ fn backup_keys_are_read_only_user_scoped_durable_and_revocable() {
         .unwrap();
     assert!(matches!(
         restarted.backup_export(token, None),
+        Err(KeyError::Unauthenticated)
+    ));
+    assert!(matches!(
+        restarted.backup_part(token, &alice.id, &["manifest"]),
         Err(KeyError::Unauthenticated)
     ));
 }

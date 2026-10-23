@@ -4,6 +4,7 @@ Use the [implementation roadmap](roadmap.md) for completed milestones and remain
 and limitations.
 
 - [Try Petika before browser-store releases](preview-installation.md)
+- [October 22 recovery changes](releases/2026-10-22.md)
 - [User installation and everyday tasks](user-guide.md)
 - [Administrator installation, buckets, backups and recovery](administrator-guide.md)
 - [Chromium extension preview installation and build](../clients/extension/README.md)

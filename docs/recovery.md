@@ -268,6 +268,37 @@ unsupported; do not substitute old account grants or reset client trust.
 
 ### Recover entry ciphertexts from Git or a user export
 
+For entry collections beyond the single-file 16 MiB export limit, fetch a chunked bundle:
+
+```sh
+python3 scripts/user_backup.py --server https://petika.example.com \
+  --api-key-file /private/backup-key --chunked --output /private/new-user-bundle
+```
+
+The version-3 collection manifest remains in `collections/COLLECTION_ID.json`; adjacent
+`collections/COLLECTION_ID.entries/ENTRY_ID.json` files contain individual encrypted entries.
+Keep the directory and manifest together. Use the same `--recover-from`, `--collection`,
+`--pin` and `--recipient-identity` workflow below with an updated native client. The native
+importer checks the exact retained head, recipient package and authenticated index, decrypts
+and parses one entry at a time, and stages the verified ciphertext before publishing a new
+cache. Source files and the retained pin are unchanged. Missing, extra, altered or mismatched
+chunks fail before output publication; interrupted publication has no `RECOVERY.json` marker.
+
+The API rechecks current credentials, membership and identity on each chunk. Every request
+is bound to the captured current head; a concurrent vault change aborts capture and requires
+a fresh attempt. The downloader checks the manifest again after the chunks. It does not
+claim a globally atomic snapshot across separate collections. Responses remain bounded to
+16 MiB, and the existing 4096-entry and server journal quotas still apply. This supports
+aggregate exports larger than 16 MiB without treating the collection as an unbounded JSON
+response. Legacy snapshots and the existing single-file/Git recovery formats retain their
+own limits. Scheduled server-side user push jobs currently retain the single-file format;
+use the explicit API pull option for large entry collections.
+
+Protocol: `GET /v1/backup/collections/ID/manifest` returns the version-3 manifest (or a
+legacy version-1 export). `GET /v1/backup/collections/ID/entries/HEAD_DIGEST/ENTRY_ID/DIGEST`
+returns one ciphertext bound to that head. Both require the user's read-only backup key;
+they do not grant a browser/CLI session or include another recipient's package.
+
 Opt-in entry-format builds support offline recovery into a **new encrypted cache**.
 Retain the client pin and identity (or recovery passphrase) independently. Recovery
 requires the backup head to equal that pin exactly: older and newer heads fail without

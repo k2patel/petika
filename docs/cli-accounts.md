@@ -335,7 +335,8 @@ are not a claim of phishing resistance. Deploy behind HTTPS and proxy rate limit
 ### Offline entry recovery
 
 Experimental `entries recover-git` reads a complete local Git clone at an explicit full
-commit ID; `entries recover-backup` reads one version-2 user collection export. Both
+commit ID; `entries recover-backup` reads a version-2 collection export or a version-3
+manifest with its adjacent `COLLECTION_ID.entries` directory. Both
 require `--pin` with independently retained trust and `--output` pointing to a new cache
 directory. Select `--recipient-identity`; Git recovery also allows an explicit
 `--recovery-wrapper-id` instead. Every live entry must authenticate before publication.

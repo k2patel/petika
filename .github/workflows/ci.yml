@@ -147,6 +147,10 @@ jobs:
         run: |
           python3 scripts/test_backup_delta.py
           python3 scripts/test_entry_recovery.py --delta-recovery
+      - name: Experimental chunked exports above 16 MiB
+        run: |
+          python3 scripts/test_chunk_backup.py
+          python3 scripts/test_entry_chunks.py
       - name: Experimental reader-role recovery
         run: python3 scripts/test_entry_shared_recovery.py --role-downgrade
       - name: Experimental replacement-identity recovery

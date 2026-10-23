@@ -21,6 +21,8 @@ use std::{
     process::{Command, Stdio},
 };
 const LIMIT: usize = 16 * 1024 * 1024;
+#[path = "entry_recover/chunks.rs"]
+mod chunks;
 #[derive(Args)]
 pub struct OutputArgs {
     /// Independently retained local pin; never copied from this backup.
@@ -151,7 +153,11 @@ fn publish(
     Ok(())
 }
 pub fn backup(args: &BackupArgs, stdin: bool) -> Result<()> {
-    let saved: UserBackup = serde_json::from_slice(&StoreFile::lock(&args.backup)?.read()?)?;
+    let bytes = chunks::read_chunk(&args.backup)?;
+    if serde_json::from_slice::<serde_json::Value>(&bytes)?["backup_version"] == 3 {
+        return chunks::recover(args, &bytes, stdin);
+    }
+    let saved: UserBackup = serde_json::from_slice(&bytes)?;
     if saved.backup_version != 2
         || saved.format != "entry-v1"
         || saved.deployment_id != saved.object.head.context.deployment_id

@@ -440,3 +440,32 @@ and rollback tests also exercise the reconstructed candidate. `scripts/test_back
 covers source mutation, missing/corrupt fragments, path and symlink rejection, deletions,
 file-to-directory transitions, no overwrite and failed publication without a completion marker.
 Filesystem tests mock the native audit; the two-profile drill supplies actual journal validation.
+
+### Large chunked exports and separate-host recovery
+
+`python3 scripts/test_entry_chunks.py` creates 64 large entries plus an initial entry through
+the real CLI/API in each profile. Aggregate ciphertext exceeds 16 MiB. It captures a
+version-3 bundle, deletes the old client/cache, decrypts every recovered entry, and checks
+missing/corrupt chunks, wrong heads, interrupted capture, output reuse and unchanged pins.
+`scripts/test_chunk_backup.py` separately exercises downloader/bundle failures with synthetic
+transport responses; server scope/revocation checks also cover the chunk endpoint.
+
+To retain only synthetic encrypted kits for another host, run:
+
+```sh
+python3 scripts/test_entry_chunks.py --retain-kit /private/new-synthetic-kits
+python3 scripts/drill_cross_platform_recovery.py \
+  --kits /private/new-synthetic-kits \
+  --image registry.example.com/your-project/petika:EXACT_COMMIT-recovery-qa \
+  --registry-namespace petika --registry-secret your-registry-pull-secret \
+  --output /private/cross-platform-evidence.json
+```
+
+The QA image must be built with `PETIKA_EXPERIMENTAL_ENTRY_FORMAT=1`; the ordinary deployed
+image stays at its default. The optional Gitea `recovery-qa.yml` workflow builds that image
+only when explicitly dispatched. The runner creates and deletes a unique namespace, copies
+only the selected registry pull credential, uses ephemeral storage and mounts no production
+data. It records source/target architectures, target release/digest, per-profile ciphertext
+sizes, decrypted counts, pin preservation and wrong-passphrase rejection. This demonstrates
+software-key restore between hosts/platforms, not hardware enrollment, biometrics or recovery
+of production data. Review recorded results before marking R07 complete.

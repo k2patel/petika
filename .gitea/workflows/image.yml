@@ -13,6 +13,7 @@ on:
       - scripts/offsite_backup.py
       - scripts/user_backup.py
       - scripts/backup_recovery.py
+      - scripts/backup_delta.py
       - scripts/build_web.sh
       - scripts/check_licenses.py
       - scripts/third_party_notices.py

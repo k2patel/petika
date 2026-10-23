@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Fetch the current user's authorized encrypted data with a read-only Petika backup key."""
 import argparse
+import hashlib
 from datetime import datetime, timezone
 import json
 import os
@@ -85,16 +86,39 @@ def verify_user_bundle(directory):
     index = json.loads((directory / 'index.json').read_text())
     check_index(index)
     expected = {'index.json', 'collections'} | {'collections/' + c['id'] + '.json' for c in index['collections']}
-    if set(actual) != expected:
-        raise ValueError('User backup is missing collections or contains unexpected files')
     if manifest.get('owner_id') != index['user']['id'] or manifest.get('deployment_id') != index['deployment_id']:
         raise ValueError('User backup ownership mismatch')
     for collection in index['collections']:
-        validate_collection(json.loads((directory / 'collections' / (collection['id'] + '.json')).read_text()), index, collection['id'])
+        saved = json.loads((directory / 'collections' / (collection['id'] + '.json')).read_text())
+        validate_collection(saved, index, collection['id'])
+        if saved.get('backup_version') == 3:
+            folder = 'collections/' + collection['id'] + '.entries'
+            expected.add(folder)
+            for entry, reference in saved['entries'].items():
+                name = folder + '/' + entry + '.json'
+                expected.add(name)
+                if actual.get(name, {}).get('sha256') != reference['digest']:
+                    raise ValueError('Chunk missing or digest mismatch')
+    if set(actual) != expected:
+        raise ValueError('User backup is missing collections or contains unexpected files')
     return manifest
 
 
 def validate_collection(saved, index, collection_id):
+    if saved.get('backup_version') == 3:
+        if (saved.get('format') != 'entry-chunks-v1' or not ID.fullmatch(saved.get('head_digest', ''))
+                or not isinstance(saved.get('entries'), dict) or len(saved['entries']) > 4096):
+            raise ValueError('Invalid chunked entry manifest')
+        for entry, reference in saved['entries'].items():
+            if (not ID.fullmatch(entry) or not isinstance(reference, dict)
+                    or set(reference) != {'revision', 'digest'}
+                    or type(reference['revision']) is not int or reference['revision'] < 1
+                    or not ID.fullmatch(reference.get('digest', ''))):
+                raise ValueError('Invalid entry chunk reference')
+        legacy = dict(saved, backup_version=2, format='entry-v1', entries={entry: '' for entry in saved['entries']})
+        del legacy['head_digest']
+        validate_collection(legacy, index, collection_id)
+        return
     if saved.get('backup_version') == 2:
         if (set(saved) != {'backup_version', 'format', 'deployment_id', 'owner_id',
                            'collection_id', 'object', 'handoff', 'entries'}
@@ -141,7 +165,7 @@ def write_json(path, value):
         os.fsync(stream.fileno())
 
 
-def fetch(api, output):
+def fetch(api, output, chunked=False):
     if output.exists() or output.is_symlink():
         raise ValueError('Output exists; choose a new directory')
     index = api.get('/v1/backup/index')
@@ -151,8 +175,29 @@ def fetch(api, output):
         (stage / 'collections').mkdir(mode=0o700)
         write_json(stage / 'index.json', index)
         for collection in index['collections']:
-            saved = api.get('/v1/backup/collections/' + collection['id'])
+            endpoint = '/v1/backup/collections/' + collection['id']
+            saved = api.get(endpoint + ('/manifest' if chunked else ''))
             validate_collection(saved, index, collection['id'])
+            if saved.get('backup_version') == 3:
+                chunks = stage / 'collections' / (collection['id'] + '.entries')
+                chunks.mkdir(mode=0o700)
+                for entry, reference in saved['entries'].items():
+                    part = api.get(endpoint + '/entries/' + saved['head_digest'] + '/' + entry + '/' + reference['digest'])
+                    if (part.get('backup_version') != 3 or part.get('collection_id') != collection['id']
+                            or part.get('head') != {'revision': saved['object']['head']['revision'], 'digest': saved['head_digest']}
+                            or part.get('entry_id') != entry or part.get('digest') != reference['digest']
+                            or not isinstance(part.get('envelope'), str)):
+                        raise ValueError('Chunk belongs to a different captured head')
+                    value = part['envelope'].encode()
+                    if hashlib.sha256(value).hexdigest() != reference['digest']:
+                        raise ValueError('Chunk digest mismatch')
+                    with (chunks / (entry + '.json')).open('xb') as stream:
+                        os.chmod(stream.name, 0o600)
+                        stream.write(value)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+                if api.get(endpoint + '/manifest') != saved:
+                    raise ValueError('Vault head or identity changed during chunk capture; retry')
             write_json(stage / 'collections' / (collection['id'] + '.json'), saved)
         latest = api.get('/v1/backup/index')
         check_index(latest)
@@ -173,7 +218,7 @@ def recover(args):
     if not ID.fullmatch(args.collection or ''):
         raise ValueError('Choose an exact collection ID from index.json')
     saved = json.loads((args.recover_from / 'collections' / (args.collection + '.json')).read_text())
-    if saved.get('backup_version') == 2:
+    if saved.get('backup_version') in (2, 3):
         if not args.pin or not args.recipient_identity:
             raise ValueError('Entry recovery requires --pin and --recipient-identity retained independently')
         command = [str(args.cli), '--no-config']
@@ -207,6 +252,7 @@ def recover(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--server')
+    parser.add_argument('--chunked', action='store_true', help='Fetch entry ciphertexts separately; supports collections beyond 16 MiB')
     parser.add_argument('--api-key-file', type=Path)
     parser.add_argument('--recover-from', type=Path)
     parser.add_argument('--collection')
@@ -221,7 +267,7 @@ def main():
         if args.recover_from:
             recover(args)
         elif args.server and args.api_key_file:
-            fetch(API(args.server, args.api_key_file, args.ca_file), args.output)
+            fetch(API(args.server, args.api_key_file, args.ca_file), args.output, args.chunked)
         else:
             raise ValueError("Supply --server and --api-key-file, or --recover-from and --collection")
     except (ValueError, OSError, KeyError, TypeError) as error:

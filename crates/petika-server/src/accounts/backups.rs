@@ -451,6 +451,45 @@ impl Accounts {
         self.backup_export_user(&accounts, user, collection)
     }
 
+    /// Every chunk request rechecks the backup credential, membership and current identity.
+    pub fn backup_part(&self, token: &str, id: &str, part: &[&str]) -> Result<Value> {
+        let file = StoreFile::lock(&self.path).map_err(|_| KeyError::Unavailable)?;
+        let accounts = Self::load(&file).map_err(|_| KeyError::Unavailable)?;
+        let user = self.backup_user(token, &accounts)?;
+        if !keys::valid_id(id) {
+            return Err(KeyError::NotFound);
+        }
+        if id != user.id
+            && !accounts
+                .groups
+                .iter()
+                .any(|g| g.id == id && g.members.iter().any(|m| m.user_id == user.id))
+        {
+            return Err(KeyError::Forbidden);
+        }
+        let path = self
+            .path
+            .parent()
+            .ok_or(KeyError::Unavailable)?
+            .join("collections")
+            .join(id)
+            .join("snapshot.json");
+        if !path
+            .parent()
+            .is_some_and(|p| p.join("entries/committed-root").exists())
+        {
+            return if part == ["manifest"] {
+                self.backup_export_user(&accounts, user, Some(id))
+            } else {
+                Err(KeyError::NotFound)
+            };
+        }
+        #[cfg(feature = "experimental-entry-format")]
+        return self.entry_backup(&accounts, user, id, &path, Some(part));
+        #[cfg(not(feature = "experimental-entry-format"))]
+        Err(KeyError::Unavailable)
+    }
+
     pub(crate) fn backup_owner_export(
         &self,
         owner: &str,
@@ -473,6 +512,7 @@ impl Accounts {
         user: &User,
         id: &str,
         path: &std::path::Path,
+        part: Option<&[&str]>,
     ) -> Result<Value> {
         use petika_core::{
             entry_format::{checkpoint::TrustedCheckpoint, epoch_transaction::EpochWrapper},
@@ -518,6 +558,24 @@ impl Accounts {
                 wrappers,
             };
             EntryHandoff::parse(&serde_json::to_vec(&handoff)?)?;
+            if let Some(part) = part {
+                let (object, entries) = journal.backup_index()?;
+                if part == ["manifest"] {
+                    return Ok(
+                        json!({"backup_version":3,"format":"entry-chunks-v1","deployment_id":accounts.deployment_id,
+                        "owner_id":user.id,"collection_id":id,"head_digest":cursor.digest,"object":object,"handoff":handoff,"entries":entries}),
+                    );
+                }
+                if let ["entries", head, entry, digest] = part {
+                    if *head != cursor.digest || !keys::valid_id(entry) || !keys::valid_id(digest) {
+                        return Err("changed head or invalid chunk request".into());
+                    }
+                    let envelope = journal.entry(&cursor, entry, digest)?;
+                    return Ok(json!({"backup_version":3,"collection_id":id,"head":cursor,
+                        "entry_id":entry,"digest":digest,"envelope":envelope}));
+                }
+                return Err("invalid backup part".into());
+            }
             let (object, entries) = journal.committed_tree(cursor.revision)?;
             let result = json!({"backup_version":2,"format":"entry-v1","deployment_id":accounts.deployment_id,
                 "owner_id":user.id,"collection_id":id,"object":object,"handoff":handoff,"entries":entries});
@@ -561,7 +619,7 @@ impl Accounts {
                 .is_some_and(|p| p.join("entries/committed-root").exists())
             {
                 #[cfg(feature = "experimental-entry-format")]
-                return self.entry_backup(accounts, user, id, &path);
+                return self.entry_backup(accounts, user, id, &path, None);
                 #[cfg(not(feature = "experimental-entry-format"))]
                 return Err(KeyError::Unavailable);
             }

@@ -757,7 +757,12 @@ pub fn backup_route(mut request: Request, accounts: &mut Accounts) {
             if tail == "index" {
                 accounts.backup_export(&token, None)
             } else if let Some(id) = tail.strip_prefix("collections/") {
-                accounts.backup_export(&token, Some(id))
+                let parts: Vec<_> = id.split('/').collect();
+                if parts.len() == 1 {
+                    accounts.backup_export(&token, Some(id))
+                } else {
+                    accounts.backup_part(&token, parts[0], &parts[1..])
+                }
             } else {
                 Err(KeyError::NotFound)
             }

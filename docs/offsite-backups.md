@@ -164,5 +164,9 @@ local adapter tests verify scheduling, credential isolation and encrypted recove
 Entry-enabled builds export migrated user collections as version-2 ciphertext bundles
 with only the requesting user's recipient package. Legacy collections remain version 1.
 Use the matching updated `user_backup.py`; entry recovery requires an independently
-retained exact client pin and identity. Exports are bounded to 16 MiB per collection and
-do not include server accounts or receipts. See [entry recovery](recovery.md#recover-entry-ciphertexts-from-git-or-a-user-export).
+retained exact client pin and identity. The version-2 single-file export is bounded to
+16 MiB. For larger entry collections, add `--chunked` to `user_backup.py`: version-3
+manifests store one ciphertext per file, fetched with bounded requests. This mode requires
+an updated entry-enabled server and native client; it does not automatically fall back to
+an older format. Legacy collections remain version 1. Neither format includes server
+accounts or receipts. See [entry recovery](recovery.md#recover-entry-ciphertexts-from-git-or-a-user-export).
