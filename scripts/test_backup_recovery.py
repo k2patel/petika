@@ -189,10 +189,12 @@ class BackupSafety(unittest.TestCase):
 
 
 class Server:
-    def __init__(self, home, provision=False, overrides=None, mirror=True):
+    def __init__(self, home, provision=False, overrides=None, mirror=True, port=None):
         self.home = home
         with socket.socket() as sock:
-            sock.bind(('127.0.0.1', 0))
+            if port is not None:
+                sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            sock.bind(('127.0.0.1', 0 if port is None else port))
             port = sock.getsockname()[1]
         self.origin = f'http://127.0.0.1:{port}'
         self.opener = build_opener(HTTPCookieProcessor(http.cookiejar.CookieJar()))

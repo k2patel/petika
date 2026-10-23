@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real shared-vault recovery, retained identity copies and membership revocation.
 
-Synthetic device directories reuse an enrolled identity; this does not test hardware
+Synthetic device directories use software identities; this does not test hardware
 keys, biometrics, independently enrolled device keys or production key custody.
 """
 import argparse
@@ -65,7 +65,7 @@ def retained_device(source, destination):
         write(destination / name, (source / name).read_bytes())
 
 
-def drill(mode, downgrade=False):
+def drill(mode, downgrade=False, replace_identity=False):
     with tempfile.TemporaryDirectory(prefix='petika-shared-recovery-') as temporary:
         root = Path(temporary)
         home = root / 'server'
@@ -171,7 +171,9 @@ def drill(mode, downgrade=False):
             write(baseline_report, run([AUDIT, home / 'data']).encode())
             baseline_cursor = json.loads(baseline_report.read_text())['collections'][0]['accepted']
             capture(home, root / 'pre-revocation-backup')
-            server = Server(home, mirror=False, overrides={'PETIKA_EXPERIMENTAL_ENTRIES': '1'})
+            # Managed identity commands retain the original origin pin across this restart.
+            server = Server(home, mirror=False, overrides={'PETIKA_EXPERIMENTAL_ENTRIES': '1'},
+                            port=int(server.origin.rsplit(':', 1)[1]) if replace_identity else None)
             owner_session = root / 'owner-restarted'
             server.login(owner_session)
             write(owner / 'session.json', (owner_session / 'session.json').read_bytes())
@@ -180,9 +182,43 @@ def drill(mode, downgrade=False):
             # Remove membership or edit permission, then rotate for the current roster.
             server.api('/v1/auth/login', {'username': 'alice', 'password': PASSWORD})
             members = [{'user_id': alice['id'], 'edit': True}]
-            if downgrade:
+            if downgrade or replace_identity:
                 members.append({'user_id': bob['id'], 'edit': False})
             server.api('/v1/admin/groups', {'id': collection, 'name': 'Shared recovery', 'members': members})
+            if replace_identity:
+                replacement = root / 'replacement-device'
+                server.login(replacement, 'bob')
+                old_identity = server.api('/v1/keys/identity')
+                run([AUDIT.parent / 'examples/recovery_identity_fixture',
+                     old_identity['public_identity']['deployment_id'], bob['id'], root / 'replacement-fixture.json'])
+                replacement_backup = json.loads((root / 'replacement-fixture.json').read_text())
+                replacement_public = replacement_backup['public_identity']
+                request = {'expected_bundle_revision': old_identity['bundle_revision'],
+                           'expected_identity_version': old_identity['public_identity']['identity_version'],
+                           'current_password': PASSWORD, 'public_identity': replacement_public,
+                           'encrypted_bundle': replacement_backup['encrypted_bundle']}
+                replacement_state = server.api('/v1/keys/identity/replace', request)
+                assert replacement_state['public_identity'] == replacement_public
+                server.api('/v1/keys/identity/replace', request, expected=409)
+                assert server.api('/v1/keys/identity') == replacement_state
+                cli(replacement, ['keys', 'restore', '--fingerprint', replacement_public['fingerprint']],
+                    [IDENTITY], identity=True)
+                # New keys do not silently inherit the old identity's verified contacts.
+                cli(replacement, ['keys', 'verify', '--user', alice['id'],
+                                  '--fingerprint', confirmed_authority], [IDENTITY], identity=True)
+                replacement_state = server.api('/v1/keys/identity')
+                # Existing packages target the retired identity until an authority rotates.
+                try:
+                    recipient_api.get('/v1/backup/collections/' + collection)
+                except ValueError as error:
+                    assert 'HTTP 503' in str(error)
+                else:
+                    raise AssertionError('Replacement identity received an obsolete package')
+                write(replacement / 'pin.json', recipient_pin)
+                server.api('/v1/auth/login', {'username': 'alice', 'password': PASSWORD})
+                # An explicit independently confirmed replacement fingerprint updates the contact pin.
+                cli(owner, ['keys', 'verify', '--user', bob['id'],
+                            '--fingerprint', replacement_public['fingerprint']], [IDENTITY], identity=True)
             if downgrade:
                 probe = root / 'downgraded-session'
                 server.login(probe, 'bob')
@@ -199,7 +235,7 @@ def drill(mode, downgrade=False):
             if downgrade:
                 assert collection in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
                 export(recipient_api, collection, root / 'downgraded-pre-rotation.json', bob['id'])
-            else:
+            elif not replace_identity:
                 assert collection not in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
                 try:
                     recipient_api.get('/v1/backup/collections/' + collection)
@@ -214,7 +250,7 @@ def drill(mode, downgrade=False):
             cli(owner, ['entries', 'rotate-submit', *revoke_args, '--confirm'], [IDENTITY, IDENTITY])
             transaction = json.loads(revoked.read_text())['transaction']
             packages = [json.loads(w['envelope']) for w in transaction['wrappers'] if w['kind'] == 'recipient']
-            assert {p['recipient_user_id'] for p in packages} == ({alice['id'], bob['id']} if downgrade else {alice['id']})
+            assert {p['recipient_user_id'] for p in packages} == ({alice['id'], bob['id']} if downgrade or replace_identity else {alice['id']})
             new_export = root / 'owner-after-revocation.json'
             newest = export(owner_api, collection, new_export, alice['id'])
             assert newest['object']['head']['context']['key_epoch'] > current['object']['head']['context']['key_epoch']
@@ -287,7 +323,35 @@ def drill(mode, downgrade=False):
             new_bob_token = json.loads((restored_bob / 'session.json').read_text())['token']
             headers = {'Authorization': 'Bearer ' + new_bob_token}
             assert server.api('/v1/auth/status', headers=headers)['user']['id'] == bob['id']
-            if downgrade:
+            if replace_identity:
+                assert server.api('/v1/keys/identity', headers=headers) == replacement_state
+                recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
+                read_export = root / 'replacement-reader-export.json'
+                read_saved = export(recipient_api, collection, read_export, bob['id'])
+                package = json.loads(read_saved['handoff']['package'])
+                assert package['recipient_identity_version'] == replacement_public['identity_version']
+                cache = root / 'recipient-recovered'
+                reader_anchor = cache / json.loads((cache / 'RECOVERY.json').read_text())['anchor']
+                reader_state = ['--collection', collection, '--anchor', reader_anchor,
+                                '--pin', replacement / 'pin.json', '--cache', cache,
+                                '--recipient-identity', second_device / 'identity.json',
+                                '--handoff', cache / 'handoff.json']
+                write(replacement / 'session.json', (restored_bob / 'session.json').read_bytes())
+                cli(replacement, ['entries', 'advance-epoch', *reader_state,
+                                  '--next-identity', second_device / 'identity.json', '--confirm'],
+                    [IDENTITY, IDENTITY], ok=False)
+                assert (replacement / 'pin.json').read_bytes() == recipient_pin
+                cli(replacement, ['entries', 'advance-epoch', *reader_state,
+                                  '--next-identity', replacement / 'identity.json', '--confirm'], [IDENTITY, IDENTITY])
+                assert json.loads((replacement / 'pin.json').read_text())['head'] == read_saved['object']['head']
+                recover(replacement, read_export, root / 'replacement-restored-verified')
+                # At the exact same new pin, the retired key still cannot decrypt the new package.
+                retired = root / 'retired-at-new-head'
+                retained_device(replacement, retired)
+                write(retired / 'identity.json', (second_device / 'identity.json').read_bytes())
+                recover(retired, read_export, root / 'retired-key-rejected', ok=False)
+                assert (second_device / 'pin.json').read_bytes() == recipient_pin
+            elif downgrade:
                 visible = next(c for c in server.api('/v1/collections', headers=headers) if c['id'] == collection)
                 assert visible['edit'] is False
                 browser_visible = next(c for c in server.api('/v1/collections') if c['id'] == collection)
@@ -344,13 +408,16 @@ def drill(mode, downgrade=False):
 
         finally:
             server.stop()
-    print(f'Shared recovery passed: {mode}, downgrade={downgrade}; scoped exports, independent trust, restored identities, rotation, revocation and complete-server reconciliation.', flush=True)
+    print(f'Shared recovery passed: {mode}, downgrade={downgrade}, replacement={replace_identity}; scoped exports, independent trust, restored identities, rotation, revocation and complete-server reconciliation.', flush=True)
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--role-downgrade', action='store_true',
+    scenario = parser.add_mutually_exclusive_group()
+    scenario.add_argument('--role-downgrade', action='store_true',
                         help='Keep the former editor as a reader instead of removing membership')
+    scenario.add_argument('--identity-replacement', action='store_true',
+                          help='Replace the retained reader identity before rotation and recovery')
     args = parser.parse_args()
     for mode in ['standard', 'hybrid-post-quantum']:
-        drill(mode, args.role_downgrade)
+        drill(mode, args.role_downgrade, args.identity_replacement)

@@ -334,7 +334,8 @@ and read-only group member in both profiles. It checks:
 
 CI runs this alongside the full-server drill. Simulated device directories share one
 user's enrolled identity; independently enrolled device keys, hardware/biometric paths,
-identity replacement, cross-platform restore and production custody are not covered.
+cross-platform restore and production custody are not covered. Recipient identity
+replacement has a separate scenario below.
 
 ### Newer-write reconciliation assessment
 
@@ -378,7 +379,7 @@ session authenticates their account, but collection listing and roster/epoch/rec
 reads enforce removal. Their existing user backup key still
 identifies them, but excludes the group and rejects its export. Fresh account login also
 cannot list/read the group. Retained client pins remain unchanged. This covers membership
-removal followed by rotation; identity replacement, independently enrolled
+removal followed by rotation; authority identity replacement, independently enrolled
 devices and production cutover remain separate scenarios.
 
 ### Editor-to-reader downgrade across complete-server reconciliation
@@ -397,3 +398,27 @@ identity/pin copy explicitly accepts the rotated epoch, then recovers and decryp
 live entry from its own scoped export. A fresh CLI write fails without publishing a draft
 or changing the accepted pin/server head. The pending encrypted draft remains unchanged.
 This uses synthetic directories sharing one enrolled identity, not independent device keys.
+
+### Replacement identity across complete-server reconciliation
+
+Build the synthetic fixture with `cargo build --locked -p petika-core --example
+recovery_identity_fixture`, then run `python3 scripts/test_entry_shared_recovery.py
+--identity-replacement`. CI runs both delivery profiles. The fixture uses a known test
+passphrase and must never generate production identities.
+
+After capturing the baseline, the reader replaces their identity through the authenticated
+API using the expected identity/bundle versions and account password. Replaying that
+replacement conflicts without modifying the new identity. Until rotation supplies a
+current package, export fails closed (currently HTTP 503). The reader restores the new
+identity using its separately known fingerprint and independently verifies the vault
+authority again. The authority explicitly verifies the replacement fingerprint and
+rotates with the reader still a member.
+
+The reconciled server preserves the exact replacement identity/bundle, group state and
+rotation receipt. Its scoped export targets the new identity version. The old key cannot
+accept the new epoch, and this failure leaves the pin unchanged. Explicit acceptance with
+the replacement key succeeds and the exported live entries decrypt. Testing the retired
+key against the exact new pin also fails, separating key rejection from rollback rejection.
+Historical retained ciphertext remains decryptable with the retired key. These are
+synthetic software identities, not hardware enrollment, biometric recovery, authority
+identity replacement or production cutover evidence.

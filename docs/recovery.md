@@ -200,8 +200,11 @@ remain decryptable, while browser/CLI submissions of a retained edit are denied.
 CLI write is also denied without publishing a draft or changing the accepted pin.
 The retained edit is additionally denied before rotation while its expected head is
 still current, distinguishing permission enforcement from stale-write rejection.
-Historical copies remain decryptable. Identity
-replacement across full-server reconciliation still needs dedicated validation. If no
+Historical copies remain decryptable. The `--identity-replacement` drill additionally
+checks reader identity replacement, explicit fingerprint verification and rotation before
+reconciliation. The restored reader can accept/decrypt the new epoch with the replacement
+key; the retired key fails even against the exact new pin. This covers synthetic recipient
+identity replacement, not authority replacement or hardware/device enrollment. If no
 complete successor backup survives, safe partial-journal import/replay with account/access
 reconciliation remains unsupported.
 
@@ -276,7 +279,7 @@ at the corresponding websites/services.
 
 This is synthetic local-filesystem evidence, not a claim that every real device is ready.
 The simulated devices reuse one user's enrolled identity, rather than independently
-enrolled hardware keys. Actual device loss/replacement, identity replacement, biometric
+enrolled hardware keys. Actual device loss/replacement, authority identity replacement, biometric
 unlock, cross-platform key custody, and production recovery objectives remain separate
 release checks. Preserve independently verified pins and encrypted identity backups for
 each recipient, and test the recovery routes you intend to rely on.
