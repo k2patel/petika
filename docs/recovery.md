@@ -194,7 +194,13 @@ post-revocation backup, deletes the original server/client directories, and star
 isolated restored server. It verifies exact group/account state, owner exports and the
 rotation receipt. Old CLI sessions are not restored. The removed member's persisted
 backup key still identifies their account but cannot list/export the group; fresh browser and CLI
-sessions also cannot list/read the group. Historical copies remain decryptable. Identity
+sessions also cannot list/read the group. A separate `--role-downgrade` scenario retains
+the former editor as a reader: their backup export and explicitly accepted rotated epoch
+remain decryptable, while browser/CLI submissions of a retained edit are denied. A new
+CLI write is also denied without publishing a draft or changing the accepted pin.
+The retained edit is additionally denied before rotation while its expected head is
+still current, distinguishing permission enforcement from stale-write rejection.
+Historical copies remain decryptable. Identity
 replacement across full-server reconciliation still needs dedicated validation. If no
 complete successor backup survives, safe partial-journal import/replay with account/access
 reconciliation remains unsupported.

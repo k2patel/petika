@@ -378,5 +378,22 @@ session authenticates their account, but collection listing and roster/epoch/rec
 reads enforce removal. Their existing user backup key still
 identifies them, but excludes the group and rejects its export. Fresh account login also
 cannot list/read the group. Retained client pins remain unchanged. This covers membership
-removal followed by rotation; identity replacement, role downgrade, independently enrolled
+removal followed by rotation; identity replacement, independently enrolled
 devices and production cutover remain separate scenarios.
+
+### Editor-to-reader downgrade across complete-server reconciliation
+
+Run `python3 scripts/test_entry_shared_recovery.py --role-downgrade` with the same
+experimental binaries. CI runs this separately for Standard and Hybrid delivery.
+The recipient begins with edit permission and stages an encrypted transaction. After
+the administrator removes edit permission, submission returns 403 while the transaction's
+expected head still matches the server. The accepted head remains unchanged; the reader
+can still export their own encrypted package.
+
+The authority rotates with both members retained. After complete-successor reconciliation
+and removal of the original server/client directories, the restored group preserves the
+reader role. Fresh browser and CLI sessions reject the retained transaction. The retained
+identity/pin copy explicitly accepts the rotated epoch, then recovers and decrypts every
+live entry from its own scoped export. A fresh CLI write fails without publishing a draft
+or changing the accepted pin/server head. The pending encrypted draft remains unchanged.
+This uses synthetic directories sharing one enrolled identity, not independent device keys.

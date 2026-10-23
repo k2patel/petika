@@ -143,6 +143,8 @@ jobs:
           python3 scripts/test_entry_recovery.py
       - name: Experimental shared recipient recovery
         run: python3 scripts/test_entry_shared_recovery.py
+      - name: Experimental reader-role recovery
+        run: python3 scripts/test_entry_shared_recovery.py --role-downgrade
       - name: Encrypted off-site repository round trip
         run: |
           curl --fail --location https://github.com/restic/restic/releases/download/v0.19.1/restic_0.19.1_linux_amd64.bz2 -o /tmp/restic.bz2

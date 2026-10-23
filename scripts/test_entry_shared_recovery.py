@@ -4,6 +4,7 @@
 Synthetic device directories reuse an enrolled identity; this does not test hardware
 keys, biometrics, independently enrolled device keys or production key custody.
 """
+import argparse
 import json
 import hashlib
 from pathlib import Path
@@ -64,7 +65,7 @@ def retained_device(source, destination):
         write(destination / name, (source / name).read_bytes())
 
 
-def drill(mode):
+def drill(mode, downgrade=False):
     with tempfile.TemporaryDirectory(prefix='petika-shared-recovery-') as temporary:
         root = Path(temporary)
         home = root / 'server'
@@ -79,7 +80,7 @@ def drill(mode):
             alice = server.login(owner)
             bob = server.api('/v1/admin/users', {'username': 'bob', 'name': 'Reader', 'password': PASSWORD})
             group = server.api('/v1/admin/groups', {'name': 'Shared recovery', 'members': [
-                {'user_id': alice['id'], 'edit': True}, {'user_id': bob['id'], 'edit': False}]})
+                {'user_id': alice['id'], 'edit': True}, {'user_id': bob['id'], 'edit': downgrade}]})
             collection = group['id']
             cli(owner, ['keys', 'enroll'], [IDENTITY, IDENTITY, PASSWORD], identity=True)
             owner_api = reader(server, root, 'owner-backup')
@@ -149,6 +150,14 @@ def drill(mode):
             retained_device(owner, owner_device)
             retained_device(recipient, second_device)
             recipient_pin = (second_device / 'pin.json').read_bytes()
+            if downgrade:
+                pending = recipient / 'pending-edit.json'
+                cli(recipient, ['entries', 'put', *state_args(recipient, collection, recipient / 'anchor.json'),
+                                '--name', 'pending-editor-change', '--password-stdin', '--draft', pending],
+                    [IDENTITY, 'synthetic pending password'])
+                pending_bytes = pending.read_bytes()
+                pending_transaction = json.loads(pending_bytes)['transaction']
+                write(second_device / 'pending-edit.json', pending_bytes)
             # Destroy the reader cache. Recovery has only the exported ciphertext and retained trust/key.
             shutil.rmtree(recipient / 'cache')
             recover(owner_device, owner_export, root / 'owner-recovered')
@@ -168,17 +177,36 @@ def drill(mode):
             write(owner / 'session.json', (owner_session / 'session.json').read_bytes())
             owner_api = user_backup.API(server.origin, root / 'owner-backup-key')
             recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
-            # Revoke API access and rotate to a new root that has no package for Bob.
+            # Remove membership or edit permission, then rotate for the current roster.
             server.api('/v1/auth/login', {'username': 'alice', 'password': PASSWORD})
-            server.api('/v1/admin/groups', {'id': collection, 'name': 'Shared recovery',
-                                          'members': [{'user_id': alice['id'], 'edit': True}]})
-            assert collection not in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
-            try:
-                recipient_api.get('/v1/backup/collections/' + collection)
-            except ValueError as error:
-                assert 'HTTP 403' in str(error)
+            members = [{'user_id': alice['id'], 'edit': True}]
+            if downgrade:
+                members.append({'user_id': bob['id'], 'edit': False})
+            server.api('/v1/admin/groups', {'id': collection, 'name': 'Shared recovery', 'members': members})
+            if downgrade:
+                probe = root / 'downgraded-session'
+                server.login(probe, 'bob')
+                probe_headers = {'Authorization': 'Bearer ' + json.loads((probe / 'session.json').read_text())['token']}
+                visible = next(c for c in server.api('/v1/collections', headers=probe_headers) if c['id'] == collection)
+                assert visible['edit'] is False
+                # The staged transaction still targets the current head: denial is not due to rotation/staleness.
+                status = server.api(f'/v1/collections/{collection}/status', headers=probe_headers)
+                assert status['accepted'] == pending_transaction['expected']
+                server.api(f'/v1/collections/{collection}/entry-transactions', pending_transaction,
+                           headers=probe_headers, expected=403)
+                assert server.api(f'/v1/collections/{collection}/status', headers=probe_headers)['accepted'] == status['accepted']
+                server.api('/v1/auth/login', {'username': 'alice', 'password': PASSWORD})
+            if downgrade:
+                assert collection in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
+                export(recipient_api, collection, root / 'downgraded-pre-rotation.json', bob['id'])
             else:
-                raise AssertionError('Revoked recipient could still export')
+                assert collection not in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
+                try:
+                    recipient_api.get('/v1/backup/collections/' + collection)
+                except ValueError as error:
+                    assert 'HTTP 403' in str(error)
+                else:
+                    raise AssertionError('Revoked recipient could still export')
             revoked = owner / 'revoked-rotation.json'
             revoke_args = [*args, '--authority-identity', owner / 'identity.json', '--draft', revoked]
             cli(owner, ['entries', 'rotate', *revoke_args, '--recovery-policy', 'replace'],
@@ -186,7 +214,7 @@ def drill(mode):
             cli(owner, ['entries', 'rotate-submit', *revoke_args, '--confirm'], [IDENTITY, IDENTITY])
             transaction = json.loads(revoked.read_text())['transaction']
             packages = [json.loads(w['envelope']) for w in transaction['wrappers'] if w['kind'] == 'recipient']
-            assert [p['recipient_user_id'] for p in packages] == [alice['id']]
+            assert {p['recipient_user_id'] for p in packages} == ({alice['id'], bob['id']} if downgrade else {alice['id']})
             new_export = root / 'owner-after-revocation.json'
             newest = export(owner_api, collection, new_export, alice['id'])
             assert newest['object']['head']['context']['key_epoch'] > current['object']['head']['context']['key_epoch']
@@ -241,7 +269,7 @@ def drill(mode):
             assert server.login(restored_owner)['id'] == alice['id']
             restored_group = next(g for g in server.api('/v1/admin/groups') if g['id'] == collection)
             assert restored_group == live_group
-            assert [m['user_id'] for m in restored_group['members']] == [alice['id']]
+            assert {m['user_id']: m['edit'] for m in restored_group['members']} == {m['user_id']: m['edit'] for m in members}
             owner_api = user_backup.API(server.origin, root / 'owner-backup-key')
             after = export(owner_api, collection, root / 'restored-owner-export.json', alice['id'])
             assert after == newest
@@ -259,32 +287,70 @@ def drill(mode):
             new_bob_token = json.loads((restored_bob / 'session.json').read_text())['token']
             headers = {'Authorization': 'Bearer ' + new_bob_token}
             assert server.api('/v1/auth/status', headers=headers)['user']['id'] == bob['id']
-            assert collection not in {c['id'] for c in server.api('/v1/collections', headers=headers)}
-            for action, body in [
-                    ('entry-roster', {}),
-                    ('entry-epoch', {'context': current['object']['head']['context'],
-                                     'after': baseline_cursor}),
-                    ('entry-receipt', {'context': newest['object']['head']['context'], 'operation': accepted['operation']})]:
-                server.api(f'/v1/collections/{collection}/{action}', body, headers=headers, expected=403)
-            recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
-            assert recipient_api.get('/v1/backup/index')['user']['id'] == bob['id']
-            assert collection not in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
-            try:
-                recipient_api.get('/v1/backup/collections/' + collection)
-            except ValueError as error:
-                assert 'HTTP 403' in str(error)
+            if downgrade:
+                visible = next(c for c in server.api('/v1/collections', headers=headers) if c['id'] == collection)
+                assert visible['edit'] is False
+                browser_visible = next(c for c in server.api('/v1/collections') if c['id'] == collection)
+                assert browser_visible['edit'] is False
+                recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
+                read_export = root / 'restored-reader-export.json'
+                read_saved = export(recipient_api, collection, read_export, bob['id'])
+                status = server.api(f'/v1/collections/{collection}/status', headers=headers)
+                for auth in (headers, None):
+                    server.api(f'/v1/collections/{collection}/entry-transactions', pending_transaction,
+                               headers=auth, expected=403)
+                assert server.api(f'/v1/collections/{collection}/status', headers=headers)['accepted'] == status['accepted']
+                assert (second_device / 'pending-edit.json').read_bytes() == pending_bytes
+                assert (second_device / 'pin.json').read_bytes() == recipient_pin
+                write(second_device / 'session.json', (restored_bob / 'session.json').read_bytes())
+                cache = root / 'recipient-recovered'
+                reader_anchor = cache / json.loads((cache / 'RECOVERY.json').read_text())['anchor']
+                reader_state = ['--collection', collection, '--anchor', reader_anchor,
+                                '--pin', second_device / 'pin.json', '--cache', cache,
+                                '--recipient-identity', second_device / 'identity.json']
+                cli(second_device, ['entries', 'advance-epoch', *reader_state, '--handoff', cache / 'handoff.json',
+                                    '--next-identity', second_device / 'identity.json', '--confirm'], [IDENTITY, IDENTITY])
+                assert json.loads((second_device / 'pin.json').read_text())['head'] == read_saved['object']['head']
+                recover(second_device, read_export, root / 'restored-reader-verified')
+                accepted_pin = (second_device / 'pin.json').read_bytes()
+                denied_draft = second_device / 'forbidden-new-write.json'
+                cli(second_device, ['entries', 'put', *reader_state, '--name', 'forbidden',
+                                    '--password-stdin', '--draft', denied_draft], [IDENTITY, 'unused'], ok=False)
+                assert not denied_draft.exists()
+                assert (second_device / 'pin.json').read_bytes() == accepted_pin
+                assert (second_device / 'pending-edit.json').read_bytes() == pending_bytes
+                assert server.api(f'/v1/collections/{collection}/status', headers=headers)['accepted'] == status['accepted']
             else:
-                raise AssertionError('Restored backup resurrected revoked group access')
-            # Browser cookies from the fresh login enforce the same membership as the CLI.
-            assert collection not in {c['id'] for c in server.api('/v1/collections')}
-            server.api(f'/v1/collections/{collection}/entry-roster', {}, expected=403)
-            assert (second_device / 'pin.json').read_bytes() == recipient_pin
+                assert collection not in {c['id'] for c in server.api('/v1/collections', headers=headers)}
+                for action, body in [
+                        ('entry-roster', {}),
+                        ('entry-epoch', {'context': current['object']['head']['context'],
+                                         'after': baseline_cursor}),
+                        ('entry-receipt', {'context': newest['object']['head']['context'], 'operation': accepted['operation']})]:
+                    server.api(f'/v1/collections/{collection}/{action}', body, headers=headers, expected=403)
+                recipient_api = user_backup.API(server.origin, root / 'recipient-backup-key')
+                assert recipient_api.get('/v1/backup/index')['user']['id'] == bob['id']
+                assert collection not in {c['id'] for c in recipient_api.get('/v1/backup/index')['collections']}
+                try:
+                    recipient_api.get('/v1/backup/collections/' + collection)
+                except ValueError as error:
+                    assert 'HTTP 403' in str(error)
+                else:
+                    raise AssertionError('Restored backup resurrected revoked group access')
+                # Browser cookies from the fresh login enforce the same membership as the CLI.
+                assert collection not in {c['id'] for c in server.api('/v1/collections')}
+                server.api(f'/v1/collections/{collection}/entry-roster', {}, expected=403)
+                assert (second_device / 'pin.json').read_bytes() == recipient_pin
 
         finally:
             server.stop()
-    print(f'Shared recovery passed: {mode}; scoped exports, independent trust, restored identities, rotation, revocation and complete-server reconciliation.', flush=True)
+    print(f'Shared recovery passed: {mode}, downgrade={downgrade}; scoped exports, independent trust, restored identities, rotation, revocation and complete-server reconciliation.', flush=True)
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--role-downgrade', action='store_true',
+                        help='Keep the former editor as a reader instead of removing membership')
+    args = parser.parse_args()
     for mode in ['standard', 'hybrid-post-quantum']:
-        drill(mode)
+        drill(mode, args.role_downgrade)
