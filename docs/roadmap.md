@@ -196,7 +196,42 @@ revocation followed by root rotation. Retained old backups remain decryptable by
 The simulated devices reuse an identity; independently enrolled/hardware-backed device
 keys and actual cross-device readiness remain unverified.
 
-### Remaining entry-format work, in order
+### Recovery milestone progress
+
+This fixed ledger tracks the current recovery milestone, not the whole product backlog.
+Keep the IDs and completion criteria stable. Report completed IDs and remaining IDs;
+do not replace a completed item with a new task under the same count. New scope belongs
+in a separately identified milestone. Validation completion does not mean a new product
+feature was implemented or that production readiness has been established.
+
+| ID | Deliverable | Status | Evidence / completion criterion |
+| --- | --- | --- | --- |
+| R01 | Assess a restored journal against retained newer-head evidence | Complete — implementation | `1788a20`: offline comparison, ancestry classification and conflict rejection |
+| R02 | Stage a complete newer backup with accounts and receipts intact | Complete — implementation | `f9d5f56`: isolated candidate, manifest pin, ancestry checks and completion marker |
+| R03 | Validate removed-member access after complete-server restore | Complete — validation | `a457e3c`: fresh sessions and persisted backup keys cannot regain removed group access |
+| R04 | Validate editor-to-reader downgrade after restore | Complete — validation | `2a14bd4`: reading works, retained/new writes fail in Standard/Hybrid drills |
+| R05 | Validate recipient identity replacement after restore | Complete — validation | `3fdddde`: new key decrypts, retired key fails at the exact new pin in both profiles |
+| R06 | Recover newer journal fragments without a complete newer backup | Not implemented — next | Explicit, verified import into a new candidate; journal/receipt continuity and independently established current access state; conflicts fail without modifying source data or client pins |
+| R07 | Demonstrate recovery across real devices/platforms | Pending | Recorded restore with independently held client kits on separate devices/platforms; simulated directories do not satisfy this |
+| R08 | Support entry exports/recovery beyond 16 MiB | Pending | Bounded-memory export/import format with integrity and interruption checks, exercised above the present limit |
+
+**Completed: 5 of these 8 deliverables. Remaining: R06, R07, R08.** This is not a
+percentage of Petika completion. The broader client, security and release backlog below
+is separate and still open.
+
+R06 is the next implementation target. Existing `reconcile` requires a complete successor
+backup and does not satisfy it. Before accepting fragments, the recovery protocol must
+define what proves the current account/access state: collection ciphertext and signed
+entry history alone cannot establish later membership removal, account disablement or
+identity replacement. Missing evidence must produce an explicit refusal, not reuse old
+grants. Its end-to-end acceptance case is an older complete backup plus a separately
+retained newer journal/receipt suffix and sufficient current-access evidence, recovered
+into a new isolated candidate after the original server has been removed. Negative cases
+must cover missing/conflicting access evidence, broken ancestry, incomplete receipts,
+interrupted publication and attempts to overwrite an existing destination. A design or
+additional full-backup drill alone does not complete R06.
+
+### Broader entry-format and release backlog
 
 1. **Remaining recovery paths:** partial-journal import/replay when no complete newer
    backup survives, authority-identity replacement, and
