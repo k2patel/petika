@@ -199,7 +199,8 @@ def main():
                         'stringData': {'token': secrets.token_hex(32), 'password': PASSWORD,
                                        'runtime.json': json.dumps({'image': args.image})}})
         cluster.create({'apiVersion': 'v1', 'kind': 'ConfigMap', 'metadata': {'name': 'recovery-tools'},
-                        'data': {'backup_recovery.py': (ROOT / 'scripts/backup_recovery.py').read_text()}})
+                        'data': {name: (ROOT / 'scripts' / name).read_text()
+                                 for name in ('backup_recovery.py', 'backup_delta.py')}})
         for claim in ['original', 'backup', 'restored']:
             cluster.disposable_volume(claim, args.storage_class)
         with tempfile.TemporaryDirectory(prefix='petika-k8s-client-') as temporary:

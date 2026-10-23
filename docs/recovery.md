@@ -204,9 +204,67 @@ Historical copies remain decryptable. The `--identity-replacement` drill additio
 checks reader identity replacement, explicit fingerprint verification and rotation before
 reconciliation. The restored reader can accept/decrypt the new epoch with the replacement
 key; the retired key fails even against the exact new pin. This covers synthetic recipient
-identity replacement, not authority replacement or hardware/device enrollment. If no
-complete successor backup survives, safe partial-journal import/replay with account/access
-reconciliation remains unsupported.
+identity replacement, not authority replacement or hardware/device enrollment.
+
+### Recover from an older full backup and an offline delta
+
+`create-delta` and `replay-delta` support recovery when the newer complete backup does
+not exist, provided a baseline-bound recovery delta was retained before the loss. This
+is an operator CLI workflow for experimental entry-format deployments. It does not
+import arbitrary API drafts, merge ciphertext, or recover permissions from Git alone.
+
+Keep a verified full baseline and its independently retained entry head report. Stop
+the server and mirror writers before capturing the later state:
+
+```sh
+target/debug/petika-entry-recovery /private/current/data > /private/evidence/newer-heads.json
+python3 scripts/backup_recovery.py create-delta --offline \
+  --baseline /private/baseline \
+  --data /private/current/data --mirror /private/current/mirror \
+  --config /private/current/config --release RECORDED_RELEASE \
+  --output /private/newer-delta
+```
+
+Protect the report with mode 600. Independently retain the SHA-256 of `newer-delta/delta.json`,
+the newer head report, the baseline report, and the exact release identifier. Copy the
+delta and baseline off-site. The delta alone is not a complete backup. Scheduling and
+off-site transport are not added by these commands.
+
+The delta stores changed/new files as content-addressed blobs, a complete target inventory
+(including deletions), and the exact baseline manifest hash. It always carries the complete
+current `accounts.json`, even if unchanged. This keeps account disablement, membership,
+identity versions and other account state together; journal fragments alone are insufficient
+evidence of current access. Changed configuration, credentials and mirror files are also
+captured, so protect the delta as strictly as a full server backup. Unchanged journal records
+are read from the exact baseline during recovery.
+
+After loss, use only those retained artifacts to build a new isolated candidate:
+
+```sh
+python3 scripts/backup_recovery.py replay-delta \
+  --baseline /private/baseline --delta /private/newer-delta \
+  --baseline-report /private/evidence/baseline-heads.json \
+  --expected-report /private/evidence/newer-heads.json \
+  --expected-delta-sha256 INDEPENDENTLY_RETAINED_DELTA_MANIFEST_HASH \
+  --recovery-tool target/debug/petika-entry-recovery \
+  --release RECORDED_RELEASE --output /private/new-candidate
+```
+
+Recovery rejects the wrong baseline/release/hash, missing or changed blobs, missing account
+evidence, unsafe paths, mismatched head reports and divergent/incomplete journal history.
+The native audit verifies the baseline and reconstructed successor, including receipt and
+epoch continuity. A successor must advance at least one retained baseline head. No source
+backup or client pin is modified. Output must be a new directory; the completion marker is
+`RECONCILIATION.json` with mode `offline-recovery-delta`, published last. An incomplete output
+without that marker must not be started. Staging needs space for temporary baseline data,
+the reconstructed tree and the final candidate; reduced off-site storage does not imply
+low temporary disk usage.
+
+Before cutover, follow the same isolated-start, client-pin/decryption, access and receipt
+checks as complete-backup reconciliation. A pinned delta proves the selected captured state,
+not that no newer changes occurred afterward. If neither a complete newer backup nor a
+coherent delta with current account evidence survives, recovery of arbitrary fragments remains
+unsupported; do not substitute old account grants or reset client trust.
 
 ### Recover entry ciphertexts from Git or a user export
 

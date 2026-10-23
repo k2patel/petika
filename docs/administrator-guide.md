@@ -258,6 +258,12 @@ substitute for the account database or identity/grant state.
 
 Follow [independent fetch and recovery](offsite-backups.md#recover-independently-of-the-server)
 and the [full recovery runbook](recovery.md#restore-a-full-server-onto-a-clean-host).
+
+Experimental entry-format deployments can also retain an
+[offline recovery delta](recovery.md#recover-from-an-older-full-backup-and-an-offline-delta)
+against an exact full baseline. This operator workflow captures changed files and current
+account state; it is not enabled by the scheduled full-backup UI. Keep `backup_delta.py`
+alongside `backup_recovery.py` when copying the recovery tools to another machine.
 Start restored servers isolated with the matching release and push jobs disabled.
 Review restored historical accounts, permissions, API keys and schedules before
 reconnecting clients. Test a recovery rather than assuming a green upload is enough.

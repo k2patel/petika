@@ -422,3 +422,21 @@ key against the exact new pin also fails, separating key rejection from rollback
 Historical retained ciphertext remains decryptable with the retired key. These are
 synthetic software identities, not hardware enrollment, biometric recovery, authority
 identity replacement or production cutover evidence.
+
+### Baseline plus journal/access delta recovery
+
+`python3 scripts/test_entry_recovery.py --delta-recovery` uses the real CLI/server in both
+Standard and Hybrid profiles. After a full baseline it accepts a new entry, disables an
+account and rotates the vault. It captures only a recovery delta, verifies unchanged journal
+records were omitted, then removes the original server and client directory. No newer full
+backup is created. Reconstruction uses the old full backup, delta, independent manifest
+hash and retained head reports.
+
+The restored server must preserve the disabled account status, accept the authorized owner,
+serve the write/rotation receipts and decrypt at the retained client pin. Wrong baseline,
+hash, release, conflicting/incorrect head evidence and missing current-account blobs are
+rejected without publishing an output. Source inventories stay unchanged. Existing corruption
+and rollback tests also exercise the reconstructed candidate. `scripts/test_backup_delta.py`
+covers source mutation, missing/corrupt fragments, path and symlink rejection, deletions,
+file-to-directory transitions, no overwrite and failed publication without a completion marker.
+Filesystem tests mock the native audit; the two-profile drill supplies actual journal validation.

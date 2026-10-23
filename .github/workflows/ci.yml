@@ -143,6 +143,10 @@ jobs:
           python3 scripts/test_entry_recovery.py
       - name: Experimental shared recipient recovery
         run: python3 scripts/test_entry_shared_recovery.py
+      - name: Experimental journal delta recovery
+        run: |
+          python3 scripts/test_backup_delta.py
+          python3 scripts/test_entry_recovery.py --delta-recovery
       - name: Experimental reader-role recovery
         run: python3 scripts/test_entry_shared_recovery.py --role-downgrade
       - name: Experimental replacement-identity recovery

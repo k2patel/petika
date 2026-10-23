@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Disposable real-server entry migration, rotation and full recovery drill."""
+import argparse
 import hashlib
 import json
 from pathlib import Path
@@ -39,7 +40,7 @@ def capture(home, output):
          '--config', home / 'config', '--release', 'entry-drill-release', '--output', output)
 
 
-def drill(mode):
+def drill(mode, delta_recovery=False):
     with tempfile.TemporaryDirectory(prefix='petika-entry-recovery-') as temporary:
         root = Path(temporary)
         original = root / 'original'
@@ -221,39 +222,85 @@ def drill(mode):
         older = json.loads(run([AUDIT, old_entry_server / 'data', '--compare', report], ok=False))
         assert older['collections'][0]['status'] == 'newer-retained-head'
         assert older['requires_reconciliation'] and not older['exact_match']
-        capture(original, root / 'full')
+        expected_accounts = (original / 'data/accounts.json').read_bytes()
+        if delta_recovery:
+            tool('create-delta', '--offline', '--baseline', root / 'before-new-writes',
+                 '--data', original / 'data', '--mirror', original / 'mirror', '--config', original / 'config',
+                 '--release', 'entry-drill-release', '--output', root / 'delta')
+            delta_manifest = json.loads((root / 'delta/delta.json').read_text())
+            old_manifest = backup.verify(root / 'before-new-writes')
+            # Retained journal history is reused from the baseline, not recopied wholesale.
+            unchanged = [r['sha256'] for n, r in old_manifest['files']['data'].items()
+                         if '/entries/' in n and 'sha256' in r
+                         and delta_manifest['files']['data'].get(n) == r]
+            assert unchanged and any(not (root / 'delta/blobs' / sha).exists() for sha in unchanged)
+        else:
+            capture(original, root / 'full')
         backup.private_copy(client, root / 'client-kit')
         # Old client caches/identity are gone; only separately retained kit survives.
         shutil.rmtree(client)
         shutil.rmtree(original)
         restored = root / 'restored'
-        manifest_hash = hashlib.sha256((root / 'full/manifest.json').read_bytes()).hexdigest()
-        reconcile = ['reconcile', root / 'full', '--release', 'entry-drill-release',
-                     '--baseline-report', baseline_report, '--expected-report', report,
-                     '--expected-manifest-sha256', manifest_hash, '--recovery-tool', AUDIT]
-        source_inventory = backup.inventory(root / 'full')
-        tool(*reconcile, '--output', restored)
-        assert (restored / 'RECONCILIATION.json').is_file()
-        assert (restored / 'data/accounts.json').read_bytes() == (root / 'full/data/accounts.json').read_bytes()
-        assert backup.inventory(root / 'full') == source_inventory
-        tool(*reconcile, '--output', restored, ok=False)
-        for label, option, value in [
-                ('wrong-manifest', '--expected-manifest-sha256', '0' * 64),
-                ('conflicting-baseline', '--baseline-report', conflict_report),
-                ('wrong-expected', '--expected-report', baseline_report),
-                ('wrong-release', '--release', 'other-release')]:
+        if delta_recovery:
+            assert not (root / 'full').exists()
+            delta_hash = hashlib.sha256((root / 'delta/delta.json').read_bytes()).hexdigest()
+            reconcile = ['replay-delta', '--baseline', root / 'before-new-writes', '--delta', root / 'delta',
+                         '--release', 'entry-drill-release', '--baseline-report', baseline_report,
+                         '--expected-report', report, '--expected-delta-sha256', delta_hash,
+                         '--recovery-tool', AUDIT]
+            sources = {name: backup.inventory(root / name) for name in ('before-new-writes', 'delta')}
+            tool(*reconcile, '--output', restored)
+            marker = json.loads((restored / 'RECONCILIATION.json').read_text())
+            assert marker['mode'] == 'offline-recovery-delta' and marker['delta_sha256'] == delta_hash
+            assert (restored / 'data/accounts.json').read_bytes() == expected_accounts
+            assert sources == {name: backup.inventory(root / name) for name in sources}
+            tool(*reconcile, '--output', restored, ok=False)
+            for label, option, value in [
+                    ('wrong-delta', '--expected-delta-sha256', '0' * 64),
+                    ('wrong-base', '--baseline', root / 'before-migration'),
+                    ('conflicting-baseline', '--baseline-report', conflict_report),
+                    ('wrong-expected', '--expected-report', baseline_report),
+                    ('wrong-release', '--release', 'other-release')]:
+                command = reconcile.copy()
+                command[command.index(option) + 1] = value
+                output = root / label
+                tool(*command, '--output', output, ok=False)
+                assert not output.exists()
+            # Missing current access evidence must not fall back to baseline accounts.
+            account_blob = root / 'delta/blobs' / delta_manifest['files']['data']['accounts.json']['sha256']
+            account_bytes = account_blob.read_bytes()
+            account_blob.unlink()
+            tool(*reconcile, '--output', root / 'missing-access', ok=False)
+            assert not (root / 'missing-access').exists()
+            write(account_blob, account_bytes)
+        else:
+            manifest_hash = hashlib.sha256((root / 'full/manifest.json').read_bytes()).hexdigest()
+            reconcile = ['reconcile', root / 'full', '--release', 'entry-drill-release',
+                         '--baseline-report', baseline_report, '--expected-report', report,
+                         '--expected-manifest-sha256', manifest_hash, '--recovery-tool', AUDIT]
+            source_inventory = backup.inventory(root / 'full')
+            tool(*reconcile, '--output', restored)
+            assert (restored / 'RECONCILIATION.json').is_file()
+            assert (restored / 'data/accounts.json').read_bytes() == (root / 'full/data/accounts.json').read_bytes()
+            assert backup.inventory(root / 'full') == source_inventory
+            tool(*reconcile, '--output', restored, ok=False)
+            for label, option, value in [
+                    ('wrong-manifest', '--expected-manifest-sha256', '0' * 64),
+                    ('conflicting-baseline', '--baseline-report', conflict_report),
+                    ('wrong-expected', '--expected-report', baseline_report),
+                    ('wrong-release', '--release', 'other-release')]:
+                command = reconcile.copy()
+                command[command.index(option) + 1] = value
+                output = root / label
+                tool(*command, '--output', output, ok=False)
+                assert not output.exists()
+            # Even a correctly identified older backup cannot satisfy newer retained evidence.
             command = reconcile.copy()
-            command[command.index(option) + 1] = value
-            output = root / label
-            tool(*command, '--output', output, ok=False)
-            assert not output.exists()
-        # Even a correctly identified older backup cannot satisfy newer retained evidence.
-        command = reconcile.copy()
-        command[1] = root / 'before-new-writes'
-        command[command.index('--expected-manifest-sha256') + 1] = hashlib.sha256(
-            (root / 'before-new-writes/manifest.json').read_bytes()).hexdigest()
-        tool(*command, '--output', root / 'stale-reconciliation', ok=False)
-        assert not (root / 'stale-reconciliation').exists()
+            command[1] = root / 'before-new-writes'
+            command[command.index('--expected-manifest-sha256') + 1] = hashlib.sha256(
+                (root / 'before-new-writes/manifest.json').read_bytes()).hexdigest()
+            tool(*command, '--output', root / 'stale-reconciliation', ok=False)
+            assert not (root / 'stale-reconciliation').exists()
         run([AUDIT, restored / 'data', '--expect', report])
         backup.private_copy(root / 'client-kit', client)
         args = state_args(client, user['id'], anchor)
@@ -330,9 +377,12 @@ def drill(mode):
             assert (client / 'pin.json').read_bytes() == pin
         finally:
             server.stop()
-    print(f'Entry recovery drill passed: {mode}, migration, rotation, full restore, Git/user exports, identity/recovery unlock, retained client kit, receipts, corruption and rollback refusal.')
+    print(f'Entry recovery drill passed: {mode}, delta={delta_recovery}, migration, rotation, full restore, Git/user exports, identity/recovery unlock, retained client kit, receipts, corruption and rollback refusal.')
 
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--delta-recovery', action='store_true')
+    options = parser.parse_args()
     for mode in ['standard', 'hybrid-post-quantum']:
-        drill(mode)
+        drill(mode, options.delta_recovery)

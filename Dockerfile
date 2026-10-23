@@ -62,7 +62,7 @@ COPY --from=core-runtime /usr/share/doc/petika/ /usr/share/doc/petika/
 COPY --from=build --chown=65532:65532 /runtime/ /
 COPY --from=backup-tools /tmp/restic /usr/local/bin/restic
 COPY --from=backup-tools /tmp/restic-LICENSE /usr/share/doc/restic/LICENSE
-COPY scripts/backup_recovery.py scripts/user_backup.py scripts/offsite_backup.py scripts/server_backup.py /usr/share/petika/scripts/
+COPY scripts/backup_recovery.py scripts/backup_delta.py scripts/user_backup.py scripts/offsite_backup.py scripts/server_backup.py /usr/share/petika/scripts/
 ARG PETIKA_RELEASE=development
 ENV PETIKA_LISTEN=0.0.0.0:8080 PETIKA_DATA_DIR=/data PETIKA_GIT_MIRROR=/mirror \
     PETIKA_TOKEN_FILE=/run/secrets/token PETIKA_WEB_DIR=/usr/share/petika/web \

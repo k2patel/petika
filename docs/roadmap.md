@@ -211,36 +211,34 @@ feature was implemented or that production readiness has been established.
 | R03 | Validate removed-member access after complete-server restore | Complete — validation | `a457e3c`: fresh sessions and persisted backup keys cannot regain removed group access |
 | R04 | Validate editor-to-reader downgrade after restore | Complete — validation | `2a14bd4`: reading works, retained/new writes fail in Standard/Hybrid drills |
 | R05 | Validate recipient identity replacement after restore | Complete — validation | `3fdddde`: new key decrypts, retired key fails at the exact new pin in both profiles |
-| R06 | Recover newer journal fragments without a complete newer backup | Not implemented — next | Explicit, verified import into a new candidate; journal/receipt continuity and independently established current access state; conflicts fail without modifying source data or client pins |
+| R06 | Recover newer journal fragments without a complete newer backup | Complete — implementation | `create-delta` / `replay-delta`: exact baseline plus retained offline journal/access delta; Standard/Hybrid clean-directory drills preserve receipts, current accounts and client pins; arbitrary fragments without current-access evidence are rejected |
 | R07 | Demonstrate recovery across real devices/platforms | Pending | Recorded restore with independently held client kits on separate devices/platforms; simulated directories do not satisfy this |
 | R08 | Support entry exports/recovery beyond 16 MiB | Pending | Bounded-memory export/import format with integrity and interruption checks, exercised above the present limit |
 
-**Completed: 5 of these 8 deliverables. Remaining: R06, R07, R08.** This is not a
+**Completed: 6 of these 8 deliverables. Remaining: R07, R08.** This is not a
 percentage of Petika completion. The broader client, security and release backlog below
 is separate and still open.
 
-R06 is the next implementation target. Existing `reconcile` requires a complete successor
-backup and does not satisfy it. Before accepting fragments, the recovery protocol must
-define what proves the current account/access state: collection ciphertext and signed
-entry history alone cannot establish later membership removal, account disablement or
-identity replacement. Missing evidence must produce an explicit refusal, not reuse old
-grants. Its end-to-end acceptance case is an older complete backup plus a separately
-retained newer journal/receipt suffix and sufficient current-access evidence, recovered
-into a new isolated candidate after the original server has been removed. Negative cases
-must cover missing/conflicting access evidence, broken ancestry, incomplete receipts,
-interrupted publication and attempts to overwrite an existing destination. A design or
-additional full-backup drill alone does not complete R06.
+R06's implemented scope is a deliberately retained offline delta, bound to the exact baseline
+and independently retained manifest hash. It contains changed/new journal and receipt files,
+all other changed server files, and the complete current account database. The acceptance
+drill creates no newer full backup and removes the original server before reconstruction.
+Missing access evidence cannot fall back to old grants. This is not arbitrary client-draft
+replay, a live merge, automatic delta scheduling or proof that no later state exists.
+See the [delta recovery workflow](recovery.md#recover-from-an-older-full-backup-and-an-offline-delta).
+R07 needs genuine separate-device/platform restore evidence. R08 is the next independent
+code deliverable; it can proceed while R07's device environments are arranged.
 
 ### Broader entry-format and release backlog
 
-1. **Remaining recovery paths:** partial-journal import/replay when no complete newer
-   backup survives, authority-identity replacement, and
+1. **Remaining recovery paths:** authority-identity replacement and
    real-device/cross-platform restore evidence. `backup_recovery.py reconcile` now stages an independently identified
    complete successor backup with its accounts and receipts together; disabled-account,
    removed-group-member, editor-to-reader downgrade and recipient-identity replacement
    checks now cover the restored API. Replacement keys can decrypt the new epoch;
    retired keys cannot, even at the exact new pin. It requires exact
-   newer-head evidence and verified baseline ancestry. It does not replay fragments.
+   newer-head evidence and verified baseline ancestry. `replay-delta` separately supports
+   coherent retained journal/access deltas when no complete successor backup survives.
    Offline `petika-entry-recovery --compare` now classifies retained-head discrepancies
    and verifies older retained heads against the complete local journal without replay.
    Full-server/client-kit restore and rejection of pre-migration server rollback now have a synthetic drill.

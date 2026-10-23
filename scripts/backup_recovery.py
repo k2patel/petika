@@ -139,7 +139,7 @@ def durable_json(path, value):
         os.fsync(stream.fileno())
 
 
-def reconcile(args):
+def reconcile(args, provenance=None):
     """Stage an independently identified complete successor backup; never replay fragments."""
     separate([args.backup, args.output, args.baseline_report, args.expected_report])
     if args.output.exists() or args.output.is_symlink():
@@ -206,9 +206,10 @@ def reconcile(args):
             'expected_report_sha256': hashlib.sha256(expected).hexdigest(),
             'account_state': 'entire selected backup; no account or access merge',
             'ancestry': ancestry, 'expected': latest,
-            'next': 'verify retained client pins, decrypt, and validate access in isolation before cutover'})
+            'next': 'verify retained client pins, decrypt, and validate access in isolation before cutover',
+            **(provenance or {})})
         os.link(receipt, args.output / 'RECONCILIATION.json')
-    print('Complete successor backup staged with journal receipts and account state. Verify client trust and access in isolation before cutover.')
+    print('Recovery candidate staged with journal receipts and account state. Verify client trust and access in isolation before cutover.')
 
 
 def git(repository, *arguments):
@@ -293,6 +294,8 @@ def recover(args):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest='command', required=True)
+    import backup_delta
+    backup_delta.add_commands(commands)
     command = commands.add_parser('create', help='Copy a stopped server and operator configuration')
     for name in ROOTS:
         command.add_argument('--' + name, type=Path, required=True)
@@ -327,6 +330,8 @@ def main():
         if args.command == 'verify':
             verify(args.backup)
             print('Backup file inventory and SHA-256 checks passed.')
+        elif hasattr(args, 'handler'):
+            args.handler(args)
         else:
             globals()[args.command](args)
     except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
