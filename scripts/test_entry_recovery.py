@@ -77,6 +77,9 @@ def drill(mode):
             digest = json.loads(draft.with_suffix('.accepted.json').read_text())['accepted']['digest']
             anchor = client / 'cache' / (digest + '.json')
             args = state_args(client, user['id'], anchor)
+            # This account is enabled in the older backup and disabled in its successor.
+            revoked_user = server.api('/v1/admin/users',
+                                      {'username': 'revoked-backup-user', 'name': 'Revoked', 'password': PASSWORD})
             # Capture a real earlier entry backup before a same-epoch write and rotation.
             server.stop()
             baseline_report = root / 'before-new-writes-report.json'
@@ -90,6 +93,7 @@ def drill(mode):
             cli(client, ['entries', 'put', *args, '--name', 'post-backup-entry',
                          '--password-stdin', '--draft', edit], [IDENTITY, 'synthetic later password'])
             cli(client, ['entries', 'submit', *args, '--draft', edit, '--confirm'], [IDENTITY])
+            server.api('/v1/admin/user-status', {'id': revoked_user['id'], 'disabled': True})
             rotation = client / 'rotation.json'
             rotation_args = [*args, '--authority-identity', client / 'identity.json', '--draft', rotation]
             cli(client, ['entries', 'rotate', *rotation_args, '--recovery-policy', 'replace'],
@@ -223,7 +227,33 @@ def drill(mode):
         shutil.rmtree(client)
         shutil.rmtree(original)
         restored = root / 'restored'
-        tool('restore', root / 'full', '--release', 'entry-drill-release', '--output', restored)
+        manifest_hash = hashlib.sha256((root / 'full/manifest.json').read_bytes()).hexdigest()
+        reconcile = ['reconcile', root / 'full', '--release', 'entry-drill-release',
+                     '--baseline-report', baseline_report, '--expected-report', report,
+                     '--expected-manifest-sha256', manifest_hash, '--recovery-tool', AUDIT]
+        source_inventory = backup.inventory(root / 'full')
+        tool(*reconcile, '--output', restored)
+        assert (restored / 'RECONCILIATION.json').is_file()
+        assert (restored / 'data/accounts.json').read_bytes() == (root / 'full/data/accounts.json').read_bytes()
+        assert backup.inventory(root / 'full') == source_inventory
+        tool(*reconcile, '--output', restored, ok=False)
+        for label, option, value in [
+                ('wrong-manifest', '--expected-manifest-sha256', '0' * 64),
+                ('conflicting-baseline', '--baseline-report', conflict_report),
+                ('wrong-expected', '--expected-report', baseline_report),
+                ('wrong-release', '--release', 'other-release')]:
+            command = reconcile.copy()
+            command[command.index(option) + 1] = value
+            output = root / label
+            tool(*command, '--output', output, ok=False)
+            assert not output.exists()
+        # Even a correctly identified older backup cannot satisfy newer retained evidence.
+        command = reconcile.copy()
+        command[1] = root / 'before-new-writes'
+        command[command.index('--expected-manifest-sha256') + 1] = hashlib.sha256(
+            (root / 'before-new-writes/manifest.json').read_bytes()).hexdigest()
+        tool(*command, '--output', root / 'stale-reconciliation', ok=False)
+        assert not (root / 'stale-reconciliation').exists()
         run([AUDIT, restored / 'data', '--expect', report])
         backup.private_copy(root / 'client-kit', client)
         args = state_args(client, user['id'], anchor)
@@ -271,6 +301,7 @@ def drill(mode):
         server = Server(restored, overrides=overrides)
         try:
             restored_session = root / 'restored-session'
+            server.api('/v1/auth/login', {'username': 'revoked-backup-user', 'password': PASSWORD}, expected=401)
             recovered_user = server.login(restored_session)
             assert recovered_user['id'] == user['id']
             write(client / 'session.json', (restored_session / 'session.json').read_bytes())
@@ -279,6 +310,11 @@ def drill(mode):
             lookup = server.api(f'/v1/collections/{user["id"]}/entry-receipt',
                                 {'context': current['head']['context'], 'operation': receipt['operation']})
             assert lookup['receipt'] == receipt
+            edited = json.loads((client / 'post-backup-edit.json').read_text())['transaction']
+            edit_receipt = server.api(f'/v1/collections/{user["id"]}/entry-receipt',
+                                     {'context': current['head']['context'], 'operation': edited['operation']})
+            assert edit_receipt['receipt']['operation'] == edited['operation']
+            assert edit_receipt['receipt']['accepted']['revision'] == edited['object']['head']['revision']
             server.api(f'/v1/collections/{user["id"]}/snapshot', expected=426)
         finally:
             server.stop()

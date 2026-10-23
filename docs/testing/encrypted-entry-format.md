@@ -351,3 +351,15 @@ unknown report fields, invalid/path-like collection IDs and zero epochs, and dis
 same-revision conflicts from missing later history. A successful structural comparison
 is not a decryption/freshness proof. This does not implement journal replay, account-state
 reconciliation or recovery from a client cache alone.
+
+### Complete successor-backup staging
+
+The real Standard/Hybrid recovery drill now restores via `backup_recovery.py reconcile`
+with a separately retained manifest hash and old/new reports. It checks source inventory
+preservation, exact restored account bytes, write and rotation receipt continuity, client
+pin preservation, and rejection of login for an account disabled after the baseline.
+Wrong hashes/releases, conflicting baseline reports, stale candidates, wrong expected
+heads and existing outputs fail. Backup safety tests inject publication failure and
+verify no completion marker is left and the source stays unchanged. These tests do not
+establish partial replay, per-group/identity-change reconciliation, power-loss durability
+or real-device restore readiness.

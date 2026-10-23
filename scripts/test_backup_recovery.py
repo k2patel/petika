@@ -2,6 +2,8 @@
 """Backup safety tests and clean-directory recovery drill using real native binaries."""
 import argparse
 import http.cookiejar
+import hashlib
+from unittest import mock
 import json
 import os
 from pathlib import Path
@@ -72,6 +74,61 @@ class BackupSafety(unittest.TestCase):
         with self.assertRaises(ValueError):
             backup.restore(restore)
         self.assertFalse(restore.output.exists())
+
+    def test_reconcile_guards_and_failed_publication_has_no_completion_marker(self):
+        backup.create(self.args)
+        baseline, expected = self.root / 'baseline.json', self.root / 'expected.json'
+        baseline.write_text('{}')
+        expected.write_text('{}')
+        args = argparse.Namespace(backup=self.args.output, output=self.root / 'reconciled',
+                                  baseline_report=baseline, expected_report=expected, release='test-release',
+                                  recovery_tool=Path('unused-tool'), expected_manifest_sha256='0' * 64)
+        with mock.patch.object(backup.subprocess, 'run') as native:
+            with self.assertRaises(ValueError):
+                backup.reconcile(args)
+            native.assert_not_called()
+        self.assertFalse(args.output.exists())
+        args.expected_manifest_sha256 = hashlib.sha256((args.backup / 'manifest.json').read_bytes()).hexdigest()
+        before = backup.inventory(args.backup)
+        # Isolate publication failure from cryptographic validation, covered by the real drill.
+        exact = {'version': 1, 'exact_match': True, 'collections': [{'status': 'matches'}]}
+        newer = {'version': 1, 'exact_match': False, 'collections': [{'status': 'retained-head-in-local-history'}]}
+        responses = [subprocess.CompletedProcess([], code, json.dumps(value).encode())
+                     for code, value in [(0, exact), (2, newer)]]
+        copy = backup.private_copy
+        def fail_publication(source, destination):
+            if destination == args.output:
+                destination.mkdir()
+                (destination / 'partial').write_bytes(b'partial ciphertext')
+                raise OSError('injected storage failure')
+            copy(source, destination)
+        with mock.patch.object(backup.subprocess, 'run', side_effect=responses), \
+                mock.patch.object(backup, 'private_copy', side_effect=fail_publication):
+            with self.assertRaises(OSError):
+                backup.reconcile(args)
+        self.assertFalse((args.output / 'RECONCILIATION.json').exists())
+        self.assertFalse((args.output / 'RESTORE.json').exists())
+        self.assertEqual(backup.inventory(args.backup), before)
+        with self.assertRaises(ValueError):
+            backup.reconcile(args)
+        args.output = self.root / 'failed-marker'
+        def fail_marker(path, value):
+            path.write_text(json.dumps(value))
+            raise OSError('injected marker fsync failure')
+        with mock.patch.object(backup.subprocess, 'run', side_effect=responses), \
+                mock.patch.object(backup, 'durable_json', side_effect=fail_marker):
+            with self.assertRaises(OSError):
+                backup.reconcile(args)
+        self.assertFalse((args.output / 'RECONCILIATION.json').exists())
+        self.assertFalse((args.output / 'RESTORE.json').exists())
+        self.assertEqual(backup.inventory(args.backup), before)
+        args.output = self.root / 'completed-reconciliation'
+        with mock.patch.object(backup.subprocess, 'run', side_effect=responses):
+            backup.reconcile(args)
+        marker = json.loads((args.output / 'RECONCILIATION.json').read_text())
+        self.assertEqual(marker['manifest_sha256'], args.expected_manifest_sha256)
+        self.assertFalse((args.output / 'RESTORE.json').exists())
+        self.assertEqual(backup.inventory(args.backup), before)
 
     def test_missing_changed_extra_files_and_manifest(self):
         backup.create(self.args)

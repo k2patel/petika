@@ -100,7 +100,7 @@ def verify(backup):
     return manifest
 
 
-def restore(args):
+def restore(args, announce=True):
     separate([args.backup, args.output])
     manifest = verify(args.backup)
     if manifest['release'] != args.release:
@@ -116,7 +116,99 @@ def restore(args):
         json.dump({'version': 1, 'release': manifest['release'],
                    'backup_created_utc': manifest['created_utc'],
                    'restored_utc': datetime.now(timezone.utc).isoformat()}, stream, indent=2)
-    print('Verified restore staged. Start isolated with the recorded release before cutover.')
+    if announce:
+        print('Verified restore staged. Start isolated with the recorded release before cutover.')
+
+
+def evidence(path):
+    if not stat.S_ISREG(path.lstat().st_mode) or path.stat().st_size > 16 * 1024 * 1024:
+        raise ValueError('Evidence must be a bounded regular file, not a link')
+    with path.open('rb') as stream:
+        value = stream.read(16 * 1024 * 1024 + 1)
+    if len(value) > 16 * 1024 * 1024:
+        raise ValueError('Evidence exceeds limit')
+    return value
+
+
+def durable_json(path, value):
+    with path.open('x') as stream:
+        os.chmod(path, 0o600)
+        json.dump(value, stream, indent=2)
+        stream.write('\n')
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def reconcile(args):
+    """Stage an independently identified complete successor backup; never replay fragments."""
+    separate([args.backup, args.output, args.baseline_report, args.expected_report])
+    if args.output.exists() or args.output.is_symlink():
+        raise ValueError('Output exists; choose a new directory')
+    if not re.fullmatch(r'[0-9a-f]{64}', args.expected_manifest_sha256):
+        raise ValueError('Supply the independently retained manifest SHA-256')
+    manifest_bytes = evidence(args.backup / 'manifest.json')
+    if hashlib.sha256(manifest_bytes).hexdigest() != args.expected_manifest_sha256:
+        raise ValueError('Backup does not match the independently retained manifest hash')
+    baseline = evidence(args.baseline_report)
+    expected = evidence(args.expected_report)
+    manifest = verify(args.backup)
+    if manifest != json.loads(manifest_bytes):
+        raise ValueError('Manifest changed during validation')
+    if manifest['release'] != args.release:
+        raise ValueError('Release does not match backup')
+    with tempfile.TemporaryDirectory(prefix='.petika-reconcile-', dir=args.output.parent) as temporary:
+        temporary = Path(temporary)
+        stage = temporary / 'candidate'
+        restore(argparse.Namespace(backup=args.backup, output=stage, release=args.release), announce=False)
+        old_report, new_report = temporary / 'baseline.json', temporary / 'expected.json'
+        for path, content in [(old_report, baseline), (new_report, expected)]:
+            with path.open('xb') as stream:
+                os.chmod(path, 0o600)
+                stream.write(content)
+        def compare(path):
+            result = subprocess.run([str(args.recovery_tool), str(stage / 'data'), '--compare', str(path)],
+                                    capture_output=True, timeout=120, check=False)
+            if result.returncode not in (0, 2) or len(result.stdout) > 16 * 1024 * 1024:
+                raise ValueError('Offline journal/evidence validation failed; no output published')
+            report = json.loads(result.stdout)
+            if (report.get('version') != 1 or not isinstance(report.get('collections'), list)
+                    or not report['collections']
+                    or report.get('exact_match') is not (result.returncode == 0)):
+                raise ValueError('Unexpected or empty comparison report')
+            return report
+        latest = compare(new_report)
+        if not latest['exact_match'] or any(r['status'] != 'matches' for r in latest['collections']):
+            raise ValueError('Candidate does not match every expected retained head')
+        ancestry = compare(old_report)
+        permitted = {'matches', 'retained-head-in-local-history', 'not-in-retained-report'}
+        if (any(r['status'] not in permitted for r in ancestry['collections'])
+                or not any(r['status'] == 'retained-head-in-local-history' for r in ancestry['collections'])):
+            raise ValueError('Candidate is not a proven successor of the retained baseline')
+        # Native audit may create lock sidecars, but no backed-up bytes may change.
+        for name in ROOTS:
+            actual = inventory(stage / name)
+            if any(actual.get(path) != value for path, value in manifest['files'][name].items()):
+                raise ValueError('Audit changed backed-up state')
+        if verify(args.backup) != manifest or evidence(args.backup / 'manifest.json') != manifest_bytes:
+            raise ValueError('Source backup changed during validation')
+        # This command has its own last-written completion marker.
+        (stage / 'RESTORE.json').unlink()
+        staged = inventory(stage)
+        private_copy(stage, args.output)
+        if inventory(args.output) != staged:
+            raise ValueError('Published candidate differs from verified stage; do not start it')
+        # Last marker: failures during publication leave an incomplete, unapproved directory.
+        receipt = temporary / 'RECONCILIATION.json'
+        durable_json(receipt, {
+            'version': 1, 'mode': 'complete-successor-backup', 'release': args.release,
+            'manifest_sha256': args.expected_manifest_sha256,
+            'baseline_report_sha256': hashlib.sha256(baseline).hexdigest(),
+            'expected_report_sha256': hashlib.sha256(expected).hexdigest(),
+            'account_state': 'entire selected backup; no account or access merge',
+            'ancestry': ancestry, 'expected': latest,
+            'next': 'verify retained client pins, decrypt, and validate access in isolation before cutover'})
+        os.link(receipt, args.output / 'RECONCILIATION.json')
+    print('Complete successor backup staged with journal receipts and account state. Verify client trust and access in isolation before cutover.')
 
 
 def git(repository, *arguments):
@@ -213,6 +305,14 @@ def main():
     command.add_argument('backup', type=Path)
     command.add_argument('--output', type=Path, required=True)
     command.add_argument('--release', required=True)
+    command = commands.add_parser('reconcile', help='Stage a proven complete successor backup into a new directory')
+    command.add_argument('backup', type=Path)
+    command.add_argument('--output', type=Path, required=True)
+    command.add_argument('--release', required=True)
+    command.add_argument('--baseline-report', type=Path, required=True)
+    command.add_argument('--expected-report', type=Path, required=True)
+    command.add_argument('--expected-manifest-sha256', required=True)
+    command.add_argument('--recovery-tool', type=Path, required=True)
     command = commands.add_parser('history', help='List commits in a full bare backup clone')
     command.add_argument('repository', type=Path)
     command.add_argument('--branch', required=True)
@@ -229,7 +329,7 @@ def main():
             print('Backup file inventory and SHA-256 checks passed.')
         else:
             globals()[args.command](args)
-    except (ValueError, OSError, KeyError, TypeError) as error:
+    except (ValueError, OSError, KeyError, TypeError, subprocess.TimeoutExpired) as error:
         parser.exit(1, f'Error: {error}\n')
 
 

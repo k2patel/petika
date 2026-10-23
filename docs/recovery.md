@@ -141,8 +141,57 @@ This is **comparison and triage**, not automatic write replay. Prefer a complete
 backup and validate it separately. Client caches and Git trees alone do not restore
 server receipt continuity, membership changes or account state. Do not replay stale
 writes, re-run migration, drop history, or manufacture a replacement pin to make an old
-restore pass. Safe import/replay with account/access reconciliation remains unfinished;
+restore pass. Partial import/replay with account/access reconciliation remains unfinished;
 keep a restore with unresolved newer evidence isolated.
+
+### Stage a complete successor backup
+
+If a complete newer backup survives, `backup_recovery.py reconcile` can stage it into a
+new private directory. Preserve the earlier restore. Retain the newer backup's exact
+`manifest.json` SHA-256 through an independent trusted channel at capture time, along
+with its compatible release and entry recovery report. Computing a hash from an
+untrusted candidate alone does not establish its authenticity or freshness.
+
+```sh
+python3 scripts/backup_recovery.py reconcile /private/newer-backup \
+  --release RECORDED_RELEASE \
+  --baseline-report /private/evidence/older-entry-report.json \
+  --expected-report /private/evidence/newer-entry-report.json \
+  --expected-manifest-sha256 INDEPENDENTLY_RETAINED_MANIFEST_SHA256 \
+  --recovery-tool target/debug/petika-entry-recovery \
+  --output /private/reconciled-candidate
+```
+
+The command verifies the selected manifest and full inventory, restores a temporary
+candidate with the matching release, checks every expected entry head, and proves
+that every older retained collection is present in the candidate's journal history.
+At least one retained collection must have advanced. New collections are accepted
+only when included in the exact newer report. Conflicting/missing history, stale
+candidates, empty evidence and existing destinations fail without replacing anything.
+
+All accounts, membership/access state, receipts, journals, mirror state and configuration
+come from the **same selected complete backup**. No older accounts are combined with
+newer ciphertext, and no fragment is replayed. The retained manifest hash identifies
+that capture's entire inventory; it does not prove that the capture contains every
+subsequent revocation or write. Establish the authoritative capture independently.
+If later access changes are known but absent, keep the candidate isolated.
+
+Evidence files are limited to 16 MiB each; each native audit has a 120-second timeout.
+
+`RECONCILIATION.json` is fsynced in temporary storage and linked into the output last. It records the manifest/report hashes, ancestry
+assessment and next checks. An interrupted or failed copy can leave an incomplete output
+without this marker: do not start it; retain the source and retry into another directory.
+The command does not produce `RESTORE.json` or switch a deployment. Source backups,
+older restores and client pins remain unchanged. Auditing may add lock sidecars to the
+candidate. Protect the candidate because it includes server credentials and configuration.
+
+Before cutover, verify retained client pins and decrypt using the recovery workflow,
+start the candidate in isolation, test permitted and revoked access, and reconcile known
+write/rotation receipts. The synthetic Standard/Hybrid drill verifies both receipts and
+that an account disabled after the baseline remains disabled after this staged restore.
+Per-group revocation and identity replacement across full-server reconciliation still
+need dedicated validation. If no complete successor backup survives, safe partial-journal
+import/replay with account/access reconciliation remains unsupported.
 
 ### Recover entry ciphertexts from Git or a user export
 
