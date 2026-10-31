@@ -26,6 +26,7 @@ jobs:
           python scripts/generate_entry_head_vectors.py --check
           python scripts/generate_entry_handoff_vectors.py --check
           python scripts/generate_device_key_vectors.py --check
+          python scripts/generate_device_enrollment_vectors.py --check
       - name: Validate proposed API contracts and schema fixtures
         run: python scripts/check_api_contracts.py
 
@@ -67,6 +68,7 @@ jobs:
       - name: Candidate device-record and roster format
         run: |
           cargo test --locked -p petika-core --features experimental-device-keys --test device_keys
+          cargo test --locked -p petika-core --features experimental-device-keys --lib device_keys
           cargo clippy --locked -p petika-core --features experimental-entry-format,experimental-device-keys --all-targets -- -D warnings
       - name: Experimental entry history transport
         run: cargo test --locked -p petika-server --features experimental-entry-format --lib --test entry_history

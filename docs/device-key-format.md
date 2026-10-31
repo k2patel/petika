@@ -145,7 +145,8 @@ exact bytes/digests, signatures and an add/remove chain, plus malformed inputs, 
 duplicate keys, signed invalid transitions and pin preservation on errors.
 
 The candidate encoding is pinned by these fixtures, not accepted for production by them.
-Next work: challenge/request/proof encoding and possession checks using these records,
-then roster CAS/persistence, device-package delivery and migration. Independent protocol
+The [candidate enrollment ceremony](device-enrollment-format.md) now defines signed
+requests, two encrypted challenges and a signed possession proof using these records.
+Next work is roster CAS/persistence, device-package delivery and migration. Independent protocol
 review, hardware lifecycle and client/server integration remain required. Account password
 reset, existing identities and production vault readers/writers are unaffected.

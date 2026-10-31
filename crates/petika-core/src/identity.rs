@@ -9,7 +9,7 @@ mod entry_handoff;
 mod entry_packages;
 #[cfg(feature = "experimental-entry-format")]
 pub use entry_handoff::EntryHandoff;
-mod hybrid_hpke;
+pub(crate) mod hybrid_hpke;
 mod packages;
 pub use contacts::{ContactPin, ContactStatus, MAX_VERIFIED_CONTACTS};
 #[cfg(feature = "experimental-entry-format")]

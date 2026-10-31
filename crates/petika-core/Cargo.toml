@@ -11,9 +11,10 @@ publish = false
 [features]
 default = []
 experimental-entry-format = ["dep:hkdf"]
-experimental-device-keys = []
+experimental-device-keys = ["dep:subtle"]
 
 [dependencies]
+subtle = { workspace = true, optional = true }
 hkdf = { version = "=0.12.4", optional = true }
 argon2.workspace = true
 chacha20poly1305.workspace = true

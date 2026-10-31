@@ -242,7 +242,9 @@ the existing single-response export and scheduled push formats retain their limi
    remain open; these tests do not add multiple identities to the account API.
    The opt-in core now implements [candidate device records and signed rosters](device-key-format.md),
    bounded parsing and pin-preserving transitions checked against independent Python
-   fixtures. Enrollment challenge/proof encoding is the next integration boundary.
+   fixtures. The [candidate enrollment ceremony](device-enrollment-format.md) now verifies
+   both encryption keys and signing possession before preparing a signed successor;
+   durable roster CAS/receipts and authenticated transport are the next boundaries.
    Same-account authority-identity replacement is now implemented experimentally with
    the retained old signing key, a newly enrolled key, two signatures and independent
    fingerprint confirmation. CLI/API and full-server/client-kit checks cover replacement

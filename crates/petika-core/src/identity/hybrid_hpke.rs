@@ -14,13 +14,13 @@ use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
 type U1120 = Sum<U1024, U96>;
 type U1216 = Sum<U1024, U192>;
-pub(super) struct XWing;
+pub(crate) struct XWing;
 #[derive(Clone, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
-pub(super) struct Secret([u8; 32]);
+pub(crate) struct Secret([u8; 32]);
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct Public([u8; 1216]);
+pub(crate) struct Public([u8; 1216]);
 #[derive(Clone)]
-pub(super) struct Encapped([u8; 1120]);
+pub(crate) struct Encapped([u8; 1120]);
 macro_rules! encoding {
     ($name:ident, $size:ty, $len:expr) => {
         impl Serializable for $name {

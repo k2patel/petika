@@ -1,6 +1,12 @@
-//! Candidate encoding for draft ADR 0005. No enrollment approval or vault access.
+//! Candidate device enrollment core for draft ADR 0005. No account API or vault access.
 //! Public signatures prove consistency/possession of a signing key, not human trust.
+mod enrollment;
 mod roster;
+pub use enrollment::{
+    ENROLLMENT_LIFETIME_SECONDS, EnrollmentChallenge, EnrollmentPacket, EnrollmentProof,
+    EnrollmentRequest, MAX_ENROLLMENT_CHALLENGE_BYTES, MAX_ENROLLMENT_PROOF_BYTES,
+    MAX_ENROLLMENT_REQUEST_BYTES, PendingEnrollment,
+};
 pub use roster::{
     DeviceRoster, MAX_ACTIVE_DEVICES, MAX_REVOKED_DEVICES, MAX_ROSTER_BYTES, TrustedDeviceRoster,
 };

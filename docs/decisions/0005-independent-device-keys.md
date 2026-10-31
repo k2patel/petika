@@ -42,8 +42,10 @@ The executable model's typed JSON tuples are not that production encoding.
 
 A separate [candidate record/roster encoding](../device-key-format.md) now has an
 opt-in core parser/verifier and independently generated Python fixtures. It defines
-the exact candidate bytes, limits and adjacent add/remove rules; challenge/proof and
-collection-package encodings, integration and independent review remain open.
+the exact candidate bytes, limits and adjacent add/remove rules. The
+[candidate enrollment format](../device-enrollment-format.md) adds independently checked
+request/challenge/proof bytes and client-side encryption/signing possession verification.
+Collection-package encodings, durable publication, integration and independent review remain open.
 
 Enrollment requires all of the following:
 
