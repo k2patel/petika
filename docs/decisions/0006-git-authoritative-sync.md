@@ -93,6 +93,57 @@ gateway retaining protected upstream credentials. Token expiry/revocation behavi
 scope are capability-tested; do not silently expose a long-lived upstream secret to clients.
 Refresh or issuer credentials remain sensitive even when issued access tokens expire.
 
+Concrete credential issuer paths:
+
+- GitHub adapter: owner installs a registered GitHub App with selected repository and
+  contents permissions. The protected backend App private key authenticates a request
+  for a scoped installation access token (one-hour lifetime). The App key itself is
+  never distributed as a client credential.
+- Gitea adapter: register an OAuth application and obtain user authorization; exchange
+  the authorization code using the appropriate client/PKCE flow. Renew via a protected
+  refresh credential where issued. Lifetime is instance-configured (documented default
+  3,600 seconds); API scope and actual Git access must be tested for the installed version.
+  This is delegated authorization, not arbitrary token minting for any account.
+- SSH-only or non-delegating hosts: gateway retains the scoped upstream key/credential
+  and issues temporary Petika access. Direct short-lived SSH certificates require explicit
+  trust of the certificate issuer at the remote. There is no provider-neutral mint API.
+
+Sources: [GitHub installation authentication](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/authenticating-as-a-github-app-installation),
+[Gitea OAuth](https://docs.gitea.com/development/oauth2-provider/),
+[Gitea token lifetime](https://docs.gitea.com/administration/config-cheat-sheet/#oauth2-oauth2).
+These are planned adapters; the existing server credential settings do not implement them.
+
+Temporary repository SSH-key leases are an additional planned adapter option. A device
+generates a fresh transport key pair and keeps the private key locally; Petika registers
+only the public key with the selected private data repository using explicitly granted
+key-management permissions. Default to read-only for fetch; grant write only when the
+host supports the needed policy. GitHub exposes create/delete deploy-key APIs and Gitea
+exposes repository-key APIs. A generic SSH server needs an authorized management interface
+or an administrator-controlled gateway; Git SSH transport alone cannot add/remove keys.
+
+Persist a lease ledger with host/repository, device, public fingerprint, remote key ID,
+permission, expiry, operation ID and lifecycle state. Register idempotently, reconcile
+lost replies, revoke on completion/logout/expiry/device removal, retry failures across
+restarts and periodically reconcile remote orphan keys. Never delete keys not owned by
+Petika's lease ledger. Expose cleanup failures, audit without credential contents, and
+protect the backend management credential: it may require broader rights than sync itself.
+Key count/rate limits and rapid concurrent usage require host tests. Transport keys are
+separate from vault encryption keys and do not bypass fresh biometric secret access.
+
+An ordinary deploy key is not intrinsically expiring. Scheduled API deletion depends on
+Petika and the host being available, so it is not a hard TTL guarantee. App/token removal
+need not remove keys created by it. If strict expiry is required, use a remote-validated
+short-lived SSH certificate or a gateway that checks leases for each permitted operation.
+Removal/expiry must not be claimed to cancel an already established SSH operation; define
+connection lifetimes and atomic publication policy separately. Repository key permissions
+are not per-entry/vault ACLs and write grants may be broad. Prefer a gateway when the
+host cannot restrict required operations or prevent bypass of publication policy.
+
+Sources: [GitHub deploy-key lifecycle](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys),
+[GitHub key-management API](https://docs.github.com/en/rest/deploy-keys/deploy-keys),
+[Gitea repository API](https://docs.gitea.com/api/1.24/). Planned capability, not implemented
+or tested against a real host in this milestone.
+
 Requiring a server secret for every vault decryption is a separate, undecided policy
 and cryptographic design. Authentication may gate online sync without preventing an
 already provisioned device from decrypting cached data. Neither token expiry nor

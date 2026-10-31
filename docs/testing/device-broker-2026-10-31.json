@@ -1,0 +1,42 @@
+{
+  "date": "2026-10-31",
+  "scope": "isolated generated-data macOS persistent operation broker",
+  "platform": "macOS arm64; Swift 6.4.2",
+  "product_integration": false,
+  "software_tests": {
+    "passed": 5,
+    "covers": [
+      "fresh protection call for each action",
+      "replay and failed-request consumption",
+      "action/device/digest/monotonic expiry binding",
+      "AEAD tamper rejection",
+      "persistent no-clobber write and owner-only bounded regular-file reads",
+      "unknown field, symlink, excessive-size and permissive-mode rejection"
+    ]
+  },
+  "hardware": {
+    "credential_created": true,
+    "persisted_state_reopened_in_new_process": true,
+    "protected_operations_completed": 2,
+    "actions": [
+      "show",
+      "copy"
+    ],
+    "generated_results_match": true,
+    "configured_policy": "biometryCurrentSet, privateKeyUsage, whenUnlockedThisDeviceOnly; new LAContext per operation, reuse duration zero, invalidated afterward",
+    "prompt_count_user_confirmation": "pending",
+    "clipboard_written": false,
+    "private_data_printed": false
+  },
+  "limits": [
+    "Two protected calls are not independent evidence of two visible prompts; user confirmation is pending",
+    "Same-instance hardware prompt test, cancellation, lockout, biometric enrollment changes and reboot remain untested",
+    "Software test backend is not a biometric proof",
+    "Synthetic random seed/payload, not Petika recipient keys or real vault data",
+    "Broker runs in harness process; product IPC isolation, account/collection/epoch and online challenge bindings remain missing",
+    "Copy uses in-memory sink; no clipboard/display integration",
+    "Swift/CryptoKit/OS memory copies prevent absolute zeroization claims",
+    "No iOS/Android/browser platform enforcement claim",
+    "B01-B03 remain in progress"
+  ]
+}

@@ -81,3 +81,9 @@ secret; this experiment makes no post-quantum or FIPS validation claim.
 API references: [Apple enclave key agreement](https://developer.apple.com/documentation/cryptokit/secureenclave/p256/keyagreement/privatekey),
 [biometric enrollment binding](https://developer.apple.com/documentation/security/secaccesscontrolcreateflags/biometrycurrentset),
 [W3C PRF explainer](https://github.com/w3c/webauthn/blob/main/explainers/prf-extension.md).
+
+## Persistent per-action broker slice
+
+The [separate broker package](broker/README.md) now implements encrypted generated-data
+custody, fresh protected-operation contexts and scoped Show/Copy requests. It has its
+own software tests and interactive hardware checks; it is not product biometric unlock.

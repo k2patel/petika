@@ -51,6 +51,7 @@ jobs:
         run: |
           swift build --package-path experiments/biometric-unlock --scratch-path "$RUNNER_TEMP/petika-swift"
           "$RUNNER_TEMP/petika-swift/debug/petika-apple-probe" --software-test
+          swift test --package-path experiments/biometric-unlock/broker --scratch-path "$RUNNER_TEMP/petika-broker"
       - name: Independent device-key software model
         if: runner.os == 'Linux'
         run: |

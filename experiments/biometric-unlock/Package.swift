@@ -7,5 +7,5 @@ let package = Package(
     platforms: [.macOS(.v13)],
     products: [.executable(name: "petika-apple-probe", targets: ["AppleProbe"])],
     targets: [.executableTarget(name: "AppleProbe", path: ".",
-        exclude: ["browser", "README.md", "test_browser.py"], sources: ["apple.swift"])]
+        exclude: ["broker", "browser", "README.md", "test_browser.py"], sources: ["apple.swift"])]
 )

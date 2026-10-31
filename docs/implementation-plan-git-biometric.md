@@ -95,3 +95,21 @@ Mark packages complete only with code, reproducible checks and recorded evidence
 to the actual platform and feature. Link evidence here as work lands. Keep CI checks local
 until a deliberate batch push. The next code task is **B01**; this plan itself does not
 implement any package or change the deployed runtime.
+
+## First implementation slice (2026-10-31)
+
+The [macOS synthetic broker](../experiments/biometric-unlock/broker/README.md) now
+implements persistent enclave-wrapped generated state, typed Show/Copy requests, fresh
+authentication contexts and five passing software tests. A separate process reopened
+the stored credential and completed two hardware-protected operations with matching
+generated results; user observation of prompt count is recorded separately in
+[evidence](testing/device-broker-2026-10-31.json). B01–B03 remain in progress: lifecycle,
+real recipient/account bindings, same-instance hardware coverage and product broker
+isolation are not complete. Copy is an in-memory sink, not OS clipboard integration.
+
+T01 also includes optional temporary repository SSH-key leases: device-local private key,
+host-authorized public-key registration, durable lease/revocation ledger, lost-response
+reconciliation, restart-safe cleanup and orphan auditing. Test cleanup-worker failure
+explicitly. Plain API-deleted keys have cleanup-dependent lifetime; strict expiration
+requires remote certificate enforcement or a lease-checking gateway. See
+[credential architecture](decisions/0006-git-authoritative-sync.md#password-plus-any-one-authorized-key).

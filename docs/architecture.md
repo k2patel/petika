@@ -45,6 +45,13 @@ approval, two-key possession proofs and verified biometric-only custody. The QR 
 not an automatic grant. See [registration protocol direction](decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
 This UI and pairing relay are planned, not implemented.
 
+Host-authorized temporary repository SSH-key leases can register a device's public
+transport key and remove it on completion/expiry via host management APIs. This requires
+a durable cleanup/reconciliation ledger; ordinary deploy keys do not enforce expiry
+themselves. Strict expiry requires a host-validated certificate or lease-checking gateway.
+Private transport keys stay on devices; secret access still requires per-action biometrics.
+This adapter is planned, not part of the current broker implementation.
+
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
 browser transport, durable device custody and complete recovery are release gates.
 Branches do not isolate repository readers. The [implementation sequence](research/git-vault-sync.md)
@@ -104,6 +111,11 @@ coverage must pass the [acceptance plan](testing/git-authoritative-sync.md) befo
 Read the [full enforcement contract and platform sources](decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
 This policy assumes trusted client/OS execution; once plaintext is revealed it can be
 copied, and compromised processes remain outside an absolute no-extraction guarantee.
+
+The first [synthetic macOS broker slice](../experiments/biometric-unlock/broker/README.md)
+now persists enclave-wrapped generated state and executes separate protected Show/Copy
+actions. It is an experiment inside one process; product isolation, lifecycle enforcement
+and client integration remain pending. See [evidence](testing/device-broker-2026-10-31.json).
 
 ## Current boundaries
 
