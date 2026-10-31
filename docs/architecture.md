@@ -53,7 +53,9 @@ Private transport keys stay on devices; secret access still requires per-action 
 The [cleanup engine](git-key-lease-cleanup.md) now provides a durable lease inventory,
 scoped revocation, restart retries and late-registration reconciliation under the
 experimental device feature. GitHub/Gitea list/delete adapters and an opt-in bounded worker now drain durable account
-session cleanup events. Key issuance, cryptographic device-removal admission and actual-host
+session cleanup events. The [registration API](git-key-registration.md) now verifies password, admitted device
+and independent SSH-key proofs, persists intent before creation and supports completion
+cleanup. Native SSH custody, cryptographic device-removal admission and actual-host
 validation remain pending; no deployment or live key mutation occurred in this milestone.
 
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,

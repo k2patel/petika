@@ -31,9 +31,12 @@ fn fake(
     let logs = Arc::clone(&requests);
     let mode = mode.to_owned();
     let handle = thread::spawn(move || {
-        let mut present = true;
-        while let Ok(Some(request)) = server.recv_timeout(Duration::from_secs(1)) {
-            let method = request.method().as_str();
+        let mut present = !mode.starts_with("registration");
+        let mut title = "test-owned".to_owned();
+        let mut public = public_key();
+        let mut read_only = true;
+        while let Ok(Some(mut request)) = server.recv_timeout(Duration::from_secs(1)) {
+            let method = request.method().as_str().to_owned();
             let path = request.url().to_owned();
             assert!(
                 request
@@ -47,6 +50,23 @@ fn fake(
                 (302, "[]".into())
             } else if mode == "denied" {
                 (403, "{}".into())
+            } else if method == "POST" {
+                let mut bytes = Vec::new();
+                request
+                    .as_reader()
+                    .take(16385)
+                    .read_to_end(&mut bytes)
+                    .unwrap();
+                let payload: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                title = payload["title"].as_str().unwrap().into();
+                public = payload["key"].as_str().unwrap().into();
+                read_only = payload["read_only"].as_bool().unwrap();
+                present = true;
+                if mode == "registration-lost" {
+                    (503, "{}".into())
+                } else {
+                    (201,serde_json::json!({"id":17,"title":title,"key":public,"read_only":read_only}).to_string())
+                }
             } else if method == "DELETE" {
                 present = false;
                 (204, String::new())
@@ -60,7 +80,7 @@ fn fake(
                 } else {
                     (
                         200,
-                        serde_json::json!([{ "id":17,"title":"test-owned","key":public_key() }])
+                        serde_json::json!([{ "id":17,"title":title,"key":public,"read_only":read_only }])
                             .to_string(),
                     )
                 }
@@ -87,6 +107,9 @@ fn fake(
             },
             token: Zeroizing::new("synthetic-local-only".into()),
             auth_scheme: Scheme::Bearer,
+            owner_user_id: Some("b".repeat(64)),
+            allow_write: false,
+            max_lease_seconds: 3600,
         }],
     };
     (
@@ -157,5 +180,37 @@ fn configuration_requires_https_owner_only_and_known_provider_prefix() {
         assert!(ConfiguredHosts::load(&alias).is_err());
         std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o644)).unwrap();
         assert!(ConfiguredHosts::load(&path).is_err());
+    }
+}
+
+#[test]
+fn repository_key_creation_and_uncertain_http_reply_are_reconcilable() {
+    for provider in [Provider::Github, Provider::Gitea] {
+        for mode in ["registration", "registration-lost"] {
+            let (mut adapter, repo, requests, handle) = fake(provider.clone(), mode);
+            assert!(adapter.authorized(&repo, &"b".repeat(64), true, 300));
+            assert!(!adapter.authorized(&repo, &"b".repeat(64), false, 300));
+            assert!(!adapter.authorized(&repo, &"a".repeat(64), true, 300));
+            assert!(adapter.inventory(&repo).unwrap().keys.is_empty());
+            let marker = format!("petika-lease:v1:{}", "f".repeat(64));
+            let result = adapter.create(&repo, &marker, &public_key(), true);
+            assert_eq!(result.is_ok(), mode == "registration");
+            let inventory = adapter.inventory(&repo).unwrap();
+            assert_eq!(inventory.keys.len(), 1);
+            assert_eq!(inventory.keys[0].marker, marker);
+            assert_eq!(inventory.keys[0].read_only, Some(true));
+            adapter.delete(&repo, &inventory.keys[0].id).unwrap();
+            assert!(adapter.inventory(&repo).unwrap().keys.is_empty());
+            assert_eq!(
+                requests
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .filter(|r| r.starts_with("POST "))
+                    .count(),
+                1
+            );
+            handle.join().unwrap();
+        }
     }
 }

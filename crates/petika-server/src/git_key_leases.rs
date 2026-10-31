@@ -2,6 +2,7 @@
 //! Key registration APIs remain pending.
 //! All remote inventory pages must be obtained before claiming absence or deleting keys.
 mod host;
+pub(crate) mod registration;
 pub mod runtime;
 pub use host::ConfiguredHosts;
 use petika_core::StoreFile;
@@ -31,6 +32,7 @@ pub enum Provider {
 #[serde(rename_all = "snake_case")]
 pub enum State {
     PendingRegistration,
+    Registering,
     Active,
     Revoking,
     Removed,
@@ -48,6 +50,8 @@ pub struct Lease {
     pub attempts: u32,
     pub retry_at: u64,
     pub last_error: Option<Failure>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub authorization: Option<petika_core::device_keys::GitLeaseChallenge>,
 }
 impl Lease {
     pub fn marker(&self) -> String {
@@ -62,12 +66,14 @@ pub enum Failure {
     OwnershipMismatch,
     Delete,
     StillPresent,
+    Registration,
 }
 #[derive(Clone, Debug)]
 pub struct RemoteKey {
     pub id: String,
     pub marker: String,
     pub fingerprint: String,
+    pub read_only: Option<bool>,
 }
 pub struct Inventory {
     pub keys: Vec<RemoteKey>,
@@ -80,8 +86,21 @@ pub trait KeyHost {
     fn inventory(&mut self, repository: &Repository) -> std::result::Result<Inventory, Failure>;
     fn delete(&mut self, repository: &Repository, id: &str) -> std::result::Result<(), Failure>;
 }
+pub trait KeyRegistrar: KeyHost {
+    fn authorized(&self, _repo: &Repository, _user: &str, _read_only: bool, _ttl: u64) -> bool {
+        false
+    }
+    fn create(
+        &mut self,
+        repo: &Repository,
+        marker: &str,
+        public_key: &str,
+        read_only: bool,
+    ) -> std::result::Result<RemoteKey, Failure>;
+}
 pub enum Cleanup<'a> {
     All,
+    Lease(&'a str),
     Device(&'a str),
     Session(&'a str),
 }
@@ -155,6 +174,19 @@ impl LeaseStore {
         {
             return Err("Invalid SSH lease ledger".into());
         }
+        for lease in &ledger.leases {
+            if let Some(auth) = &lease.authorization
+                && (auth.lease_id != lease.id
+                    || auth.session_id != lease.session
+                    || auth.device_id != lease.device
+                    || auth.lease_expires_at != lease.expires_at
+                    || auth.management_origin != lease.repository.management_origin
+                    || auth.repository != lease.repository.repository
+                    || auth.ssh_fingerprint()? != lease.fingerprint)
+            {
+                return Err("Invalid lease authorization binding".into());
+            }
+        }
         Ok(ledger)
     }
     fn save(&self, ledger: &Ledger) -> Result<()> {
@@ -205,6 +237,7 @@ impl LeaseStore {
             attempts: 0,
             retry_at: 0,
             last_error: None,
+            authorization: None,
         };
         ledger.leases.push(lease.clone());
         self.save(&ledger)?;
@@ -220,6 +253,7 @@ impl LeaseStore {
         for lease in &mut ledger.leases {
             let selected = scopes.iter().any(|scope| match scope {
                 Cleanup::All => true,
+                Cleanup::Lease(id) => lease.id == *id,
                 Cleanup::Device(id) => lease.device == *id,
                 Cleanup::Session(id) => lease.session == *id,
             });
@@ -301,6 +335,16 @@ fn reconcile(lease: &mut Lease, host: &mut impl KeyHost) -> std::result::Result<
     // Never delete a marker collision with different key material.
     if matches.iter().any(|k| k.fingerprint != lease.fingerprint) {
         return Err(Failure::OwnershipMismatch);
+    }
+    if !matches!(lease.state, State::Revoking | State::Removed)
+        && lease
+            .authorization
+            .as_ref()
+            .is_some_and(|auth| matches.iter().any(|k| k.read_only != Some(auth.read_only)))
+    {
+        // Persist newly detected revocation before a later destructive call.
+        lease.state = State::Revoking;
+        return Err(Failure::Registration);
     }
     if lease.state != State::Revoking && lease.state != State::Removed {
         if !matches.is_empty() {

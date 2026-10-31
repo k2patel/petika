@@ -2,10 +2,14 @@
 mod backups;
 mod delivery;
 #[cfg(feature = "experimental-device-keys")]
-mod device_keys;
+pub(crate) mod device_keys;
 #[cfg(feature = "experimental-device-keys")]
 pub use device_keys::{DeviceKeyOperation, MAX_DEVICE_KEY_BODY};
+#[cfg(feature = "experimental-device-keys")]
+mod git_leases;
 mod git_sync;
+#[cfg(feature = "experimental-device-keys")]
+pub use git_leases::GitLeaseOperation;
 mod keys;
 use crate::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};

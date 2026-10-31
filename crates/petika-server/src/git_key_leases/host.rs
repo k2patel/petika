@@ -22,6 +22,15 @@ struct Host {
     token: Zeroizing<String>,
     #[serde(default)]
     auth_scheme: Scheme,
+    #[serde(default)]
+    owner_user_id: Option<String>,
+    #[serde(default)]
+    allow_write: bool,
+    #[serde(default = "default_ttl")]
+    max_lease_seconds: u64,
+}
+fn default_ttl() -> u64 {
+    3600
 }
 #[derive(Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -58,6 +67,15 @@ pub struct ConfiguredHosts {
     deadline: Instant,
 }
 impl ConfiguredHosts {
+    pub(crate) fn metadata_only() -> Self {
+        Self::new(
+            Configuration {
+                version: 1,
+                hosts: vec![],
+            },
+            true,
+        )
+    }
     pub fn load(path: &Path) -> Result<Self> {
         let mut options = std::fs::OpenOptions::new();
         options.read(true);
@@ -99,6 +117,8 @@ impl ConfiguredHosts {
                     (&host.repository.provider, host.api_prefix.as_str()),
                     (Provider::Github, "" | "/api/v3") | (Provider::Gitea, "/api/v1")
                 )
+                || !(60..=3600).contains(&host.max_lease_seconds)
+                || host.owner_user_id.as_deref().is_some_and(|id| !hex(id))
                 || config.hosts[..index]
                     .iter()
                     .any(|h| h.repository == host.repository)
@@ -121,6 +141,25 @@ impl ConfiguredHosts {
             agent: ureq::Agent::new_with_config(options),
             deadline: Instant::now() + Duration::from_secs(30),
         }
+    }
+    pub(crate) fn authorize_repository(
+        &self,
+        repo: &Repository,
+        user: &str,
+        read_only: bool,
+        ttl: u64,
+    ) -> Result<()> {
+        let host = self
+            .host(repo)
+            .map_err(|_| "Git repository is not configured")?;
+        if host.owner_user_id.as_deref() != Some(user)
+            || (!read_only && !host.allow_write)
+            || ttl < 60
+            || ttl > host.max_lease_seconds
+        {
+            return Err("Git repository access denied".into());
+        }
+        Ok(())
     }
     fn host(&self, repo: &Repository) -> std::result::Result<&Host, Failure> {
         if Instant::now() >= self.deadline {
@@ -146,6 +185,7 @@ struct ApiKey {
     id: u64,
     title: String,
     key: String,
+    read_only: bool,
 }
 fn fingerprint(key: &str) -> std::result::Result<String, Failure> {
     if key.len() > 16384 {
@@ -222,6 +262,7 @@ impl KeyHost for ConfiguredHosts {
                     id: row.id.to_string(),
                     marker: row.title,
                     fingerprint: fingerprint(&row.key)?,
+                    read_only: Some(row.read_only),
                 });
                 if keys.len() > LIMIT {
                     return Err(Failure::Incomplete);
@@ -252,3 +293,67 @@ impl KeyHost for ConfiguredHosts {
 
 #[cfg(test)]
 mod tests;
+
+impl KeyRegistrar for ConfiguredHosts {
+    fn authorized(&self, repo: &Repository, user: &str, read_only: bool, ttl: u64) -> bool {
+        self.authorize_repository(repo, user, read_only, ttl)
+            .is_ok()
+    }
+    fn create(
+        &mut self,
+        repo: &Repository,
+        marker: &str,
+        public_key: &str,
+        read_only: bool,
+    ) -> std::result::Result<RemoteKey, Failure> {
+        let host = self.host(repo)?;
+        if !marker.starts_with("petika-lease:v1:")
+            || !hex(marker.trim_start_matches("petika-lease:v1:"))
+        {
+            return Err(Failure::Registration);
+        }
+        if !read_only && !host.allow_write {
+            return Err(Failure::Registration);
+        }
+        let expected = fingerprint(public_key)?;
+        let payload = serde_json::to_vec(
+            &serde_json::json!({"title":marker,"key":public_key,"read_only":read_only}),
+        )
+        .map_err(|_| Failure::Registration)?;
+        let mut response = self
+            .agent
+            .post(Self::endpoint(host))
+            .header("Authorization", host.authorization())
+            .header("User-Agent", "Petika-key-registration")
+            .header("Content-Type", "application/json")
+            .send(payload.as_slice())
+            .map_err(|_| Failure::Registration)?;
+        if response.status().as_u16() != 201 {
+            return Err(Failure::Registration);
+        }
+        let mut bytes = Vec::new();
+        response
+            .body_mut()
+            .as_reader()
+            .take(65537)
+            .read_to_end(&mut bytes)
+            .map_err(|_| Failure::Registration)?;
+        if bytes.len() > 65536 {
+            return Err(Failure::Registration);
+        }
+        let key: ApiKey = serde_json::from_slice(&bytes).map_err(|_| Failure::Registration)?;
+        if key.id == 0
+            || key.title != marker
+            || fingerprint(&key.key)? != expected
+            || key.read_only != read_only
+        {
+            return Err(Failure::Registration);
+        }
+        Ok(RemoteKey {
+            id: key.id.to_string(),
+            marker: key.title,
+            fingerprint: expected,
+            read_only: Some(key.read_only),
+        })
+    }
+}

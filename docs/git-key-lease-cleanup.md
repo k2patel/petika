@@ -3,8 +3,8 @@
 Date: 2026-10-31. Implemented native engine in
 `crates/petika-server/src/git_key_leases.rs`, behind `experimental-device-keys`.
 GitHub/Gitea HTTP inventory/deletion adapters, an opt-in scheduler and durable account
-session cleanup hooks are now wired. Key issuance/registration and cryptographic device
-removal remain pending. No real host keys have been registered or deleted by these tests.
+session cleanup hooks are now wired. Authorized key registration is now implemented in the [registration contract](git-key-registration.md);
+cryptographic device removal and native SSH custody remain pending. No real host keys have been registered or deleted by these tests.
 
 ## Ownership and complete inventory
 
@@ -162,3 +162,12 @@ in this milestone. Timed deletion still depends on a live authorized worker and 
 host; strict remote TTL requires the certificate/gateway design described above.
 
 Validation evidence: [2026-10-31 wiring checks](testing/git-key-cleanup-wiring-2026-10-31.json).
+
+## Registration extension
+
+[Authorized registration](git-key-registration.md) now persists the exact device/SSH
+challenge before host creation, reserves `registering` before its sole create attempt,
+and connects explicit per-lease completion to cleanup. Wrong permissions on an owned
+authorization cause revocation. Backend host policy adds `owner_user_id`, `allow_write`
+and `max_lease_seconds`; absent owner assignment remains cleanup-only. Native SSH use
+and actual-host validation remain open; no live keys were changed.

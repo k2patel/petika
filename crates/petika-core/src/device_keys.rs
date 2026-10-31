@@ -1,6 +1,8 @@
 //! Candidate device enrollment core for draft ADR 0005. No account API or vault access.
 //! Public signatures prove consistency/possession of a signing key, not human trust.
 mod enrollment;
+mod git_lease;
+pub use git_lease::{GitLeaseChallenge, GitLeaseProof};
 #[cfg(not(target_arch = "wasm32"))]
 mod journal;
 mod roster;

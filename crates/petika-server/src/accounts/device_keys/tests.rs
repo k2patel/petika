@@ -47,16 +47,16 @@ fn later_legacy_identity_replacement_cannot_replace_the_committed_authority() {
     let candidate = f.candidate(&f.bootstrap.initial_roster);
     f.publish(&"1".repeat(64), &candidate).unwrap();
 }
-struct Fixture {
+pub(crate) struct Fixture {
     _directory: tempfile::TempDir,
-    accounts: Accounts,
-    token: String,
-    identity: UnlockedIdentity,
-    authority: DeviceAuthorityKey,
-    bootstrap: DeviceAuthorityBootstrap,
+    pub(crate) accounts: Accounts,
+    pub(crate) token: String,
+    pub(crate) identity: UnlockedIdentity,
+    pub(crate) authority: DeviceAuthorityKey,
+    pub(crate) bootstrap: DeviceAuthorityBootstrap,
 }
 impl Fixture {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
         let mut accounts = Accounts::new(directory.path().join("accounts.json"));
         let user = accounts
@@ -91,23 +91,23 @@ impl Fixture {
             bootstrap,
         }
     }
-    fn run(&mut self, operation: DeviceKeyOperation, body: Value) -> Result<Value> {
+    pub(crate) fn run(&mut self, operation: DeviceKeyOperation, body: Value) -> Result<Value> {
         self.accounts.device_key_operation(
             &self.token,
             operation,
             &serde_json::to_vec(&body).unwrap(),
         )
     }
-    fn initialize(&mut self) -> Result<Value> {
+    pub(crate) fn initialize(&mut self) -> Result<Value> {
         self.run(
             DeviceKeyOperation::Initialize,
             json!({"current_password":PASSWORD,"bootstrap":self.bootstrap}),
         )
     }
-    fn publish(&mut self, id: &str, candidate: &DeviceRoster) -> Result<Value> {
+    pub(crate) fn publish(&mut self, id: &str, candidate: &DeviceRoster) -> Result<Value> {
         self.run(DeviceKeyOperation::Publish, json!({"current_password":PASSWORD,"operation_id":id,"expected_parent":candidate.parent_digest,"roster":candidate}))
     }
-    fn pin(&self, roster: &DeviceRoster) -> TrustedDeviceRoster {
+    pub(crate) fn pin(&self, roster: &DeviceRoster) -> TrustedDeviceRoster {
         TrustedDeviceRoster::bootstrap(
             roster.clone(),
             &roster.authority.fingerprint,
@@ -115,7 +115,7 @@ impl Fixture {
         )
         .unwrap()
     }
-    fn candidate(&self, roster: &DeviceRoster) -> DeviceRoster {
+    pub(crate) fn candidate(&self, roster: &DeviceRoster) -> DeviceRoster {
         let current = self.pin(roster);
         let device =
             DeviceIdentity::generate(&roster.authority.deployment_id, &roster.authority.user_id)
@@ -138,7 +138,7 @@ impl Fixture {
             .approve(&self.authority, &proof, &current, &fingerprint, 103)
             .unwrap()
     }
-    fn path(&self, name: &str) -> PathBuf {
+    pub(crate) fn path(&self, name: &str) -> PathBuf {
         self.accounts
             .device_key_directory(&self.bootstrap.legacy_identity.user_id)
             .join(name)

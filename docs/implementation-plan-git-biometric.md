@@ -126,3 +126,10 @@ logout/session-expiry/client-revocation/account-disable/password-change events a
 Tests use local fake HTTP hosts. Key registration, cryptographic device removal, completion
 hooks, real-host permissions and status UI remain open; see
 [operational configuration](git-key-lease-cleanup.md#runtime-configuration-and-adapters).
+
+Registration update: [challenge/registration/status/completion](git-key-registration.md)
+now verifies a current admitted-device signer and independent SSH signer, owner-assigned
+repository policy and server session binding. It persists intent before the only allowed
+create attempt, reconciles unknown outcomes and queues completion cleanup. Independent
+Python fixtures and fake-host tests cover the candidate protocol; native SSH agent/custody,
+real-host trials and biometric product integration remain open.

@@ -28,6 +28,7 @@ jobs:
           python scripts/generate_device_key_vectors.py --check
           python scripts/generate_device_enrollment_vectors.py --check
           python scripts/generate_device_bootstrap_vectors.py --check
+          python scripts/generate_git_lease_vectors.py --check
       - name: Validate proposed API contracts and schema fixtures
         run: python scripts/check_api_contracts.py
 
@@ -78,6 +79,7 @@ jobs:
           cargo test --locked -p petika-server --features experimental-device-keys --lib accounts::device_keys
           cargo test --locked -p petika-server --features experimental-device-keys --lib git_key_leases
           cargo test --locked -p petika-server --features experimental-device-keys --lib accounts::git_key_cleanup_tests
+          cargo test --locked -p petika-server --features experimental-device-keys --lib accounts::git_leases
           cargo test --locked -p petika-server --features experimental-device-keys --bin petika-server web::device_keys
           cargo clippy --locked -p petika-server --features experimental-entry-format,experimental-device-keys --all-targets -- -D warnings
       - name: Experimental entry history transport

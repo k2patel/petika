@@ -14,6 +14,7 @@ type Result<T> = std::result::Result<T, KeyError>;
 
 pub enum DeviceKeyOperation {
     Own,
+    GitLease(super::GitLeaseOperation),
     Initialize,
     Publish,
     Receipt(String),
@@ -69,10 +70,32 @@ fn state(bootstrap: &DeviceAuthorityBootstrap, journal: &DeviceRosterJournal) ->
 }
 
 impl Accounts {
-    fn device_key_directory(&self, user: &str) -> std::path::PathBuf {
+    pub(super) fn device_key_directory(&self, user: &str) -> std::path::PathBuf {
         let mut path = self.path.as_os_str().to_os_string();
         path.push(".device-keys");
         std::path::PathBuf::from(path).join(user)
+    }
+    pub(super) fn locked_device_roster(
+        &self,
+        deployment: &str,
+        user: &str,
+    ) -> Result<(StoreFile, DeviceRosterJournal, TrustedDeviceRoster)> {
+        let directory = self.device_key_directory(user);
+        let anchor =
+            StoreFile::lock(directory.join("bootstrap.json")).map_err(|_| KeyError::Unavailable)?;
+        if !anchor.exists() {
+            return Err(KeyError::NotFound);
+        }
+        let bootstrap = DeviceAuthorityBootstrap::parse(
+            &anchor
+                .read_limited(MAX_DEVICE_BOOTSTRAP_BYTES)
+                .map_err(|_| KeyError::Unavailable)?,
+        )
+        .map_err(|_| KeyError::Unavailable)?;
+        scoped(&bootstrap, deployment, user).map_err(|_| KeyError::Unavailable)?;
+        let journal = open_journal(&directory.join("roster.json"), &bootstrap)?;
+        let current = journal.current().map_err(|_| KeyError::Unavailable)?;
+        Ok((anchor, journal, current))
     }
     /// Lock order: accounts -> immutable bootstrap -> roster journal. The account lock
     /// remains held through publication, so disable/key changes cannot race admission.
@@ -83,6 +106,9 @@ impl Accounts {
         operation: DeviceKeyOperation,
         body: &[u8],
     ) -> Result<Value> {
+        if let DeviceKeyOperation::GitLease(operation) = operation {
+            return self.git_lease_operation(token, operation, body);
+        }
         if body.len() > MAX_DEVICE_KEY_BODY {
             return Err(KeyError::TooLarge);
         }
@@ -224,10 +250,10 @@ impl Accounts {
                     })?;
                 Ok(json!({"receipt":receipt}))
             }
-            DeviceKeyOperation::Initialize => unreachable!(),
+            DeviceKeyOperation::Initialize | DeviceKeyOperation::GitLease(_) => unreachable!(),
         }
     }
 }
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;

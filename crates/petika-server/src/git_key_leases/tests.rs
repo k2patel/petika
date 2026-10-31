@@ -59,6 +59,7 @@ fn key(lease: &Lease, id: &str) -> RemoteKey {
         id: id.into(),
         marker: lease.marker(),
         fingerprint: lease.fingerprint.clone(),
+        read_only: Some(true),
     }
 }
 #[test]
@@ -70,6 +71,7 @@ fn all_managed_copies_expire_and_unrelated_keys_survive() {
         id: "permanent".into(),
         marker: format!("petika-lease:v1:{}", "d".repeat(64)),
         fingerprint: "d".repeat(64),
+        read_only: Some(true),
     };
     let mut host = Host {
         keys: vec![key(&lease, "one"), key(&lease, "duplicate"), permanent],

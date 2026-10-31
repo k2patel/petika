@@ -8,7 +8,9 @@ pub fn device_key_route(request: Request, _: &mut Accounts, _: bool) {
 
 #[cfg(feature = "experimental-device-keys")]
 pub fn device_key_route(mut request: Request, accounts: &mut Accounts, enabled: bool) {
-    use petika_server::accounts::{DeviceKeyOperation, KeyError, MAX_DEVICE_KEY_BODY};
+    use petika_server::accounts::{
+        DeviceKeyOperation, GitLeaseOperation, KeyError, MAX_DEVICE_KEY_BODY,
+    };
     use std::io::Read;
     let fail =
         |request: Request, error: KeyError| json(request, error.status(), error.body(), None);
@@ -29,6 +31,40 @@ pub fn device_key_route(mut request: Request, accounts: &mut Accounts, enabled: 
     }
     let operation = match (request.url(), request.method().as_str()) {
         ("/v1/device-keys", "GET") => DeviceKeyOperation::Own,
+        ("/v1/device-keys/git-leases/challenges", "POST") => {
+            DeviceKeyOperation::GitLease(GitLeaseOperation::Challenge)
+        }
+        ("/v1/device-keys/git-leases", "POST") => {
+            DeviceKeyOperation::GitLease(GitLeaseOperation::Register)
+        }
+        ("/v1/device-keys/git-leases" | "/v1/device-keys/git-leases/challenges", _) => {
+            return fail(request, KeyError::MethodNotAllowed);
+        }
+        (path, "GET") if path.starts_with("/v1/device-keys/git-leases/") => {
+            DeviceKeyOperation::GitLease(GitLeaseOperation::Status(
+                path.strip_prefix("/v1/device-keys/git-leases/")
+                    .unwrap()
+                    .into(),
+            ))
+        }
+        (path, "POST")
+            if path.starts_with("/v1/device-keys/git-leases/") && path.ends_with("/complete") =>
+        {
+            DeviceKeyOperation::GitLease(GitLeaseOperation::Complete(
+                path.strip_prefix("/v1/device-keys/git-leases/")
+                    .unwrap()
+                    .strip_suffix("/complete")
+                    .unwrap()
+                    .into(),
+            ))
+        }
+        (path, _)
+            if path == "/v1/device-keys/git-leases"
+                || path.starts_with("/v1/device-keys/git-leases/") =>
+        {
+            return fail(request, KeyError::MethodNotAllowed);
+        }
+
         ("/v1/device-keys/bootstrap", "POST") => DeviceKeyOperation::Initialize,
         ("/v1/device-keys/publications", "POST") => DeviceKeyOperation::Publish,
         (path, "GET") if path.starts_with("/v1/device-keys/receipts/") => {
@@ -48,6 +84,11 @@ pub fn device_key_route(mut request: Request, accounts: &mut Accounts, enabled: 
         }
         _ => return fail(request, KeyError::NotFound),
     };
+    let limit = if matches!(&operation, DeviceKeyOperation::GitLease(_)) {
+        16384
+    } else {
+        MAX_DEVICE_KEY_BODY
+    };
     let mut body = zeroize::Zeroizing::new(Vec::new());
     if request.method() != &tiny_http::Method::Get {
         if crate::header(&request, "Content-Type") != Some("application/json") {
@@ -56,21 +97,18 @@ pub fn device_key_route(mut request: Request, accounts: &mut Accounts, enabled: 
         if !super::csrf(&request) {
             return fail(request, KeyError::Forbidden);
         }
-        if request
-            .body_length()
-            .is_some_and(|len| len > MAX_DEVICE_KEY_BODY)
-        {
+        if request.body_length().is_some_and(|len| len > limit) {
             return fail(request, KeyError::TooLarge);
         }
         if request
             .as_reader()
-            .take(MAX_DEVICE_KEY_BODY as u64 + 1)
+            .take(limit as u64 + 1)
             .read_to_end(&mut body)
             .is_err()
         {
             return fail(request, KeyError::Invalid);
         }
-        if body.len() > MAX_DEVICE_KEY_BODY {
+        if body.len() > limit {
             return fail(request, KeyError::TooLarge);
         }
     }

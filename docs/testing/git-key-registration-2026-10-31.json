@@ -1,0 +1,46 @@
+{
+  "date": "2026-10-31",
+  "scope": "candidate device/SSH possession proofs and authorized temporary-key registration",
+  "production_enabled": false,
+  "live_provider_keys_modified": false,
+  "validation": {
+    "platform": "macOS arm64",
+    "rust": "1.90.0",
+    "combined_core_library_tests": 34,
+    "combined_server_library_tests": 60,
+    "http_route_tests": 4,
+    "account_integration_tests": 7,
+    "entry_history_integration_tests": 7,
+    "sharing_integration_tests": 3,
+    "new_core_proof_tests_included": 3,
+    "new_account_registration_tests_included": 4,
+    "new_registration_state_tests_included": 4,
+    "fake_http_host_tests_included": 4,
+    "independent_python_signature_transcripts": "passed",
+    "default_and_combined_core_server_clippy": "passed with warnings denied",
+    "core_wasm_feature_check": "passed",
+    "focused_post_review_registration_tests_passed": 6,
+    "focused_post_review_account_tests_passed": 4
+  },
+  "coverage": [
+    "Independent Python canonical challenge bytes, both Ed25519 signatures, digest and OpenSSH wire framing",
+    "Client proof requires active device, independently confirmed remote and matching independent SSH private key",
+    "Password, configured owner/repository/read permission/TTL and server-owned session binding",
+    "Unadmitted devices, changed rosters, other sessions, expired proofs, malformed and excessive requests rejected",
+    "Durable challenge/cleanup intent before response; registering state precedes the only host POST",
+    "Lost create reply across restart reconciles one existing key; empty unknown outcome never repeats POST",
+    "Wrong permission/duplicate matching keys trigger cleanup; explicit completion revokes that lease",
+    "Fake GitHub/Gitea HTTP create/list/delete and a successful create side effect followed by 503",
+    "All existing account, sharing, cleanup, identity, entry and HTTP regressions",
+    "Wrong-permission detection after uncertain create persists revocation before the next destructive cleanup call",
+    "A new operation cannot renew a previously tracked repository SSH public key"
+  ],
+  "limits": [
+    "Host ownership mapping is for a private single-account repository, not shared-vault membership or per-branch ACLs",
+    "No real provider permissions, SSH transfer, host key trust, native agent or SSH private-key custody tested",
+    "Device signatures are not evidence of biometric-only execution; no vault-decryption API is added",
+    "Ordinary deploy keys still depend on cleanup availability and do not enforce hard TTL themselves",
+    "Native broker, QR/status UI, cryptographic device removal/rotation and production migration remain pending",
+    "Candidate protocol and encodings still require independent security review"
+  ]
+}

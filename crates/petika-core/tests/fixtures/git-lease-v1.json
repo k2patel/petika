@@ -1,0 +1,29 @@
+{
+  "provenance": "Independent Python Ed25519/transcript encoding; public synthetic labels; no private keys emitted",
+  "proof": {
+    "challenge": {
+      "version": 1,
+      "lease_id": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "operation_id": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      "deployment_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "user_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "session_id": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "device_id": "1111111111111111111111111111111111111111111111111111111111111111",
+      "device_fingerprint": "2bb4874a6ed3af293887c76e669d6be7835b285c21fcabbf9675089c4cb35515",
+      "roster_digest": "482303458ad3a9fb15cf32e7866c0ba199e71017213102ff0dd9688a55ad09f4",
+      "management_origin": "https://git.example/",
+      "repository": "synthetic/vault",
+      "ssh_public_key": "MReYx7LvKFvVVfGp9lCKqF4lpuMFd41LAMMmEyZLWuk=",
+      "read_only": true,
+      "issued_at": 100,
+      "challenge_expires_at": 160,
+      "lease_expires_at": 400
+    },
+    "device_signature": "UweBs5988q1I3JULabeANy3oroQSKpJqAqUv4SkdJtjIa7TAIJpa320DaEyJKkV/Y40/gAgrhmXEIUuFWfJoCw==",
+    "ssh_signature": "pJfr33ugfu7p2y8FyFRLb7laYsJOnTPrcH/tq1N9W4xItVgy0/gPJkFapoDDIFmXCDBWC9rpJibOYRicLb45BQ=="
+  },
+  "canonical": "AAAAJHBldGlrYTpnaXQtc3NoLWxlYXNlOmV4cGVyaW1lbnRhbC12MQAAAAEAAABAZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZmZgAAAEBkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkZGRkAAAAQGFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWFhYWEAAABAYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYmJiYgAAAEBlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlZWVlAAAAQDExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTExMTEAAABAMmJiNDg3NGE2ZWQzYWYyOTM4ODdjNzZlNjY5ZDZiZTc4MzViMjg1YzIxZmNhYmJmOTY3NTA4OWM0Y2IzNTUxNQAAAEA0ODIzMDM0NThhZDNhOWZiMTVjZjMyZTc4NjZjMGJhMTk5ZTcxMDE3MjEzMTAyZmYwZGQ5Njg4YTU1YWQwOWY0AAAAFGh0dHBzOi8vZ2l0LmV4YW1wbGUvAAAAD3N5bnRoZXRpYy92YXVsdAAAACAxF5jHsu8oW9VV8an2UIqoXiWm4wV3jUsAwyYTJkta6QEAAAAAAAAAZAAAAAAAAACgAAAAAAAAAZA=",
+  "digest": "3a6c4ddfcb57c42207fe17c01acca788cf11d071af426fd3fd1f9e42dee3b43f",
+  "openssh_public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDEXmMey7yhb1VXxqfZQiqheJabjBXeNSwDDJhMmS1rp",
+  "ssh_fingerprint": "b952fa89d8b8484951509388fcd3fd909a96e2b6aed2594f043995b45b94e2fa"
+}

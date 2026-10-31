@@ -143,3 +143,12 @@ accounts and public synthetic fixtures, never real credentials.
 
 Next: durable client authority/device custody and draft/receipt reconciliation, followed
 by device-bound sessions, collection rotation/package delivery, migration and recovery.
+
+## Temporary Git SSH-key admission
+
+The gated [registration API](git-key-registration.md) adds challenge, registration,
+own-session status and completion routes under `/v1/device-keys/git-leases`. It requires
+current password reauthentication, a currently admitted device, independent SSH signing
+proof and exact operator-assigned repository policy. The cleanup flag is an additional
+required gate. This is ciphertext transport authorization, not proof of biometric-only
+vault access; no private SSH key is accepted.
