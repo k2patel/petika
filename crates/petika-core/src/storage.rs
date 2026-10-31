@@ -92,7 +92,10 @@ impl StoreFile {
     /// Experimental persistence harness. Called after temporary-file write,
     /// file sync, atomic replacement and parent-directory sync, respectively.
     /// Errors after replacement represent an uncertain durable outcome.
-    #[cfg(feature = "experimental-entry-format")]
+    #[cfg(any(
+        feature = "experimental-entry-format",
+        feature = "experimental-device-keys"
+    ))]
     #[doc(hidden)]
     pub fn write_observed(
         &self,

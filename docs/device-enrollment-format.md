@@ -145,6 +145,8 @@ expiry/future requests, replay, stale roster and intervening revocation. Failed 
 preserve pending state and the baseline; success clears the expected response without
 prematurely advancing the pin. Public wire fields and secret local state remain separate.
 
-Durable CAS/receipts, authenticated account transport, recovery, device packages,
-biometric-protected persistence, migration, independent review and platform lifecycle
+The native [candidate publication journal](device-roster-journal.md) now provides
+bounded durable CAS/history and retry receipts for signed successors. It is not integrated
+with account APIs. Authenticated transport, durable client drafts, recovery, device packages,
+biometric-protected key persistence, migration, independent review and platform lifecycle
 validation remain open. This candidate protocol is not enabled in production.

@@ -244,7 +244,9 @@ the existing single-response export and scheduled push formats retain their limi
    bounded parsing and pin-preserving transitions checked against independent Python
    fixtures. The [candidate enrollment ceremony](device-enrollment-format.md) now verifies
    both encryption keys and signing possession before preparing a signed successor;
-   durable roster CAS/receipts and authenticated transport are the next boundaries.
+   a [native publication journal](device-roster-journal.md) now persists signed updates
+   and exact retry receipts with CAS and interruption checks. Authenticated account
+   transport, session/rotation integration and durable client drafts remain open.
    Same-account authority-identity replacement is now implemented experimentally with
    the retained old signing key, a newly enrolled key, two signatures and independent
    fingerprint confirmation. CLI/API and full-server/client-kit checks cover replacement

@@ -174,8 +174,9 @@ It is separate from production vault formats and the hardware wrapping probes.
 The [candidate record/roster encoding](../device-key-format.md) now has opt-in core
 parsers, transition checks and independent Python fixtures. The
 [candidate enrollment ceremony](../device-enrollment-format.md) now implements signed
-requests and two-key decryption proofs. Next: durable roster CAS/receipts, package
-encodings, then the gated client/server integration
+requests and two-key decryption proofs. A [native publication journal](../device-roster-journal.md)
+now adds durable roster CAS/receipts. Next: authenticated transport, device-package
+encodings and the gated client/server integration
 and migration. Platform lifecycle tests
 and Android/Windows validation remain open. No real vault enrollment during the spikes.
 

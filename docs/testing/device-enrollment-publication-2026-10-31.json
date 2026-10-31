@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-31",
+  "scope": "opt-in candidate enrollment proof and native reference publication journal",
+  "feature": "experimental-device-keys (disabled by default)",
+  "production_api_integration": false,
+  "validation": {
+    "rust": "1.90.0",
+    "platform": "macOS arm64",
+    "enrollment_tests_passed": 7,
+    "journal_tests_passed": 6,
+    "existing_device_format_tests_passed": 8,
+    "existing_xwing_adapter_vectors": "passed",
+    "python_independent_device_and_enrollment_fixtures": "passed",
+    "wasm_core_compilation": "passed; native journal excluded",
+    "combined_feature_clippy": "passed with warnings denied"
+  },
+  "enrollment": [
+    "Exact independent request/challenge/proof bytes and signatures",
+    "Standard and X-Wing HPKE ciphertexts open to the expected independent proof",
+    "Both decryption results and device signature required",
+    "Explicit fingerprint, authority, device, current roster and expiry checks",
+    "Mixed ceremony, altered ciphertext, expired/future request, replay and stale roster rejected",
+    "Single-use pending approval prepares a candidate without advancing the pin"
+  ],
+  "journal": [
+    "Atomic signed history and retry record publication",
+    "Reopen and historical exact retry after a later commit",
+    "Stale CAS, conflicting operation-ID reuse and receipt mismatch rejected",
+    "Exclusive locking and restrictive Unix file mode",
+    "Failure injection after temporary write, file sync, replacement and directory sync",
+    "Corrupt/truncated/duplicate history never triggers reinitialization",
+    "Retained newer pin rejects coherent old-journal rollback"
+  ],
+  "limits": [
+    "No account/session authorization, collection access, device package or migration integration",
+    "No physical power-loss or disk-full certification",
+    "No global freshness proof after loss of all newer independent evidence",
+    "Unsigned receipt correspondence is not independent proof of remote publication",
+    "128 publications and 8 MiB journal cap; no silent compaction"
+  ]
+}

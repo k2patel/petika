@@ -1,11 +1,17 @@
 //! Candidate device enrollment core for draft ADR 0005. No account API or vault access.
 //! Public signatures prove consistency/possession of a signing key, not human trust.
 mod enrollment;
+#[cfg(not(target_arch = "wasm32"))]
+mod journal;
 mod roster;
 pub use enrollment::{
     ENROLLMENT_LIFETIME_SECONDS, EnrollmentChallenge, EnrollmentPacket, EnrollmentProof,
     EnrollmentRequest, MAX_ENROLLMENT_CHALLENGE_BYTES, MAX_ENROLLMENT_PROOF_BYTES,
     MAX_ENROLLMENT_REQUEST_BYTES, PendingEnrollment,
+};
+#[cfg(not(target_arch = "wasm32"))]
+pub use journal::{
+    DeviceRosterJournal, MAX_ROSTER_JOURNAL_BYTES, MAX_ROSTER_PUBLICATIONS, PublicationReceipt,
 };
 pub use roster::{
     DeviceRoster, MAX_ACTIVE_DEVICES, MAX_REVOKED_DEVICES, MAX_ROSTER_BYTES, TrustedDeviceRoster,

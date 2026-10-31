@@ -45,7 +45,9 @@ opt-in core parser/verifier and independently generated Python fixtures. It defi
 the exact candidate bytes, limits and adjacent add/remove rules. The
 [candidate enrollment format](../device-enrollment-format.md) adds independently checked
 request/challenge/proof bytes and client-side encryption/signing possession verification.
-Collection-package encodings, durable publication, integration and independent review remain open.
+A [native reference journal](../device-roster-journal.md) now provides bounded durable
+publication and retry receipts. Collection-package encodings, authenticated integration
+and independent review remain open.
 
 Enrollment requires all of the following:
 
