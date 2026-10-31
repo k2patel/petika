@@ -20,8 +20,9 @@
       "error_code": 4099,
       "interpretation": "sandbox access failure; not evidence of absent hardware"
     },
-    "physical_biometric_roundtrip": "not run; requires interactive user verification",
-    "key_export_behavior": "not hardware-tested; implementation keeps opaque representation in memory only",
+    "physical_biometric_roundtrip": "passed with user-approved Touch ID at 16:27 EDT",
+    "hardware_policy": "whenUnlockedThisDeviceOnly + privateKeyUsage + biometryCurrentSet; fresh LAContext; reuse disabled; no fallback",
+    "key_export_behavior": "opaque Secure Enclave representation reconstructed in memory; protected ECDH opened synthetic ciphertext; no blob persisted or raw enclave private key exported",
     "ios": "not tested"
   },
   "browser": {
@@ -40,7 +41,7 @@
   },
   "production_changes": false,
   "remaining": [
-    "Physical Apple biometric roundtrip and lifecycle validation",
+    "Apple cancellation, lockout, reboot, biometric enrollment changes and other lifecycle validation",
     "Physical browser/authenticator PRF and fallback/sync validation",
     "Android and Windows hardware probes",
     "Independent device identities, signed enrollment and revocation protocol",

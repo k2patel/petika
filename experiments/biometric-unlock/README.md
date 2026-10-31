@@ -67,6 +67,8 @@ requests, and saves desktop/mobile screenshots under ignored `output/biometric-u
 ## Evidence and remaining work
 
 See [recorded results](../../docs/testing/biometric-unlock-2026-10-31.json).
+The physical Mac Touch ID round-trip passed with user approval on 2026-10-31;
+this is one successful hardware operation, not full lifecycle validation.
 Hardware lifecycle tests, real browser/authenticator PRF tests, two independent device
 identities, Standard/Hybrid packages, enrollment/revocation/recovery and protocol review
 remain open. A classical outer wrapper adds a classical access path to any Hybrid
