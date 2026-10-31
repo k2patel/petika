@@ -252,7 +252,9 @@ account/policy state; a Git clone alone is not a complete recovery kit.
 
 ## Delivery and acceptance
 
-Start with one disposable private vault and two native clients. Validate unchanged-object
+First prove persistent per-action biometric custody and a native operation broker
+(B01–B03 in the [ordered work plan](../implementation-plan-git-biometric.md)).
+Then start with one disposable private vault and two native clients. Validate unchanged-object
 reuse, show/edit refresh, same/different-entry races, repeated contention, uncertain push
 success, encrypted draft recovery, invalid/rollback history, deletion and key rotation.
 Then implement host capability adapters, browser-compatible gateway transport, device

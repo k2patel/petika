@@ -1,0 +1,97 @@
+# Implementation plan: Git sync and mandatory per-action biometrics
+
+Date: 2026-10-31. Status: work identified; no milestone below is complete.
+Target: [ADR 0006](decisions/0006-git-authoritative-sync.md).
+Validation: [acceptance scenarios](testing/git-authoritative-sync.md).
+The current application continues to use API authority and outbound Git replication.
+Changes stay experimental until explicit migration and validation.
+
+## Existing foundations to reuse
+
+| Foundation | Evidence / code | Actual boundary |
+| --- | --- | --- |
+| Local encryption and recipient packages | `crates/petika-core/src/identity.rs`, `identity/packages.rs` | Shared legacy user identity; not independent device package integration |
+| Per-entry encryption, signed history and transactions | `crates/petika-core/src/entry_format`, [transport contract](research/entry-history-transport.md) | Gated API/journal authority, not direct Git authority |
+| Drafts, receipts, conflict handling, Git replication | Entry CLI/server transaction and replication implementations | Reuse semantics, not old commit authority or automatic ciphertext rebase |
+| Device records, roster and two-key enrollment proofs | `crates/petika-core/src/device_keys` | Experimental crypto/validation, no protected persistent client custody |
+| Account device publication API | `crates/petika-server/src/accounts/device_keys.rs`, [API contract](device-account-api.md) | Bootstrap/additions/history/receipts; no device-bound sessions, QR relay or vault packages |
+| Physical Touch ID capability | `experiments/biometric-unlock/apple.swift`, [evidence](testing/biometric-unlock-2026-10-31.json) | One ephemeral generated-data operation; not per-action or lifecycle enforcement |
+| Browser PRF probe | `experiments/biometric-unlock/browser` | May authenticate with PIN; cannot establish strict biometric-only policy |
+
+Passing older tests does not complete the new target's milestones. Legacy recovery R01–R08
+remains complete within its original scope; these are new requirements.
+
+## Ordered work packages
+
+| ID | Work / deliverable | Depends on | Complete when |
+| --- | --- | --- | --- |
+| B01 | Specify exact secret actions, prompt scope, platform support and denial behavior; prove fresh per-use biometric-only key operation on this Mac | Existing probe | Two consecutive actions require two distinct successful biometric ceremonies; replay, cancellation, PIN fallback, context reuse, lockout and invalidation cases deny access; test gaps are recorded |
+| B02 | Persistent device/authority custody adapter: protected key wrapper, scoped encrypted bundles, atomic save/reopen and recovery enrollment constraints | B01 | Restart reopens protected synthetic device identity; wrong origin/account/device, corrupt blob or biometric set change cannot unlock it; no reusable keys returned to UI |
+| B03 | Native secret-operation broker: typed one-use actions, bounded plaintext lifetime, no unlocked-session key cache | B02 | Show then copy requires two approvals; changed action/entry/origin/epoch or replay fails; reveal, TOTP, edit/save, export and offline paths have positive and denial tests |
+| G01 | Freeze Git authoritative tree/ref, canonical signed publication, expected-parent, policy evidence, operation ID/receipt and pin-persistence contract | Existing entry/device formats; B03 informs action binding | Independent fixtures and state machine define accepted/conflict/uncertain outcomes, atomic ordering of membership/revocation with publication, and supported direct-host versus gateway capabilities |
+| G02 | Native Git sync engine against a disposable local bare remote | G01 | Two clients fetch/verify and conditionally publish; one competing successor wins; stale draft survives; user re-edit creates a fresh candidate; uncertain push reconciles without duplicate edits |
+| K01 | Per-device vault-secret packages and durable trusted recipient/pin state | B02, G01 | Two independently enrolled keys open their own package for one vault epoch in both supported profiles; wrong/ungranted device fails; adding a device does not re-encrypt all entries |
+| A01 | Password sessions plus enrolled-device proof and action-bound online authorization; temporary scoped sync credentials | B03, G01 | Password/token alone cannot authorize secret operations; nonces are single-use, scoped and expiring; disabled/revoked/stale-policy requests fail; tests establish the chosen publication ordering |
+| Q01 | Web QR pairing relay and UI, new-device onboarding, authority confirmation and reconnect/receipt reconciliation | B02, K01, A01; existing enrollment proof/API | QR scan alone grants nothing; expiry/replay/cross-account/origin substitution fail; existing authority approves verified fingerprint and both encryption proofs; device ready only after durable custody and package verification |
+| C01 | Wire real client secret actions through broker; native messaging bridge for browser/extension; CLI integration | B03, K01, A01 | Every supported entry point passes fresh-approval tests; direct worker/cache/legacy handler paths cannot bypass the policy; unsupported clients deny secret processing |
+| T01 | Actual SSH/HTTPS Git host adapters and optional API/gateway adapters, scope/expiry/host identity and browser transport checks | G02, A01 | Real-host tests establish conditional update semantics, trust and credentials; insufficient host capabilities require gateway or are rejected; no universal token assumption |
+| D01 | Device removal, session/credential denial, fresh-epoch rotation and biometric-compatible recovery | K01, A01, G02 | Removed key cannot open new epoch; retained keys can; old history remains explicitly accessible; recovery provisions a biometric-protected device with no raw-key/viewer shortcut; restore retains newest independent pins |
+| M01 | Explicit per-vault migration, legacy-client exclusion, full restore, protocol/security review and release packaging | All required packages above | Exactly one authority accepts writes after cutover; original stores/backups survive; no legacy unlock bypass; complete failure matrix and required independent review pass before enablement |
+
+`D01` belongs to this plan; the original recovery ledger R01–R08 remains separate.
+
+## First milestone: one real protected action
+
+Start B01 → B02 → B03 on macOS with generated data and a minimal native test harness.
+The first reviewable result is a persistent synthetic device credential and **Show secret**
+operation that invokes a fresh Touch ID ceremony every time. A second request must not
+reuse the first approval. Add Copy as a separate operation to prove action isolation.
+The harness must deny unavailable/failed biometrics and never accept a secret string or
+OS passcode as a substitute. Hardware prompts require the user's presence; software
+negative tests can run independently. Do not label this an iOS/Android proof.
+
+No real vault migration, browser feature or QR enrollment is required to establish this
+boundary. These depend on a proven protected operation rather than a decorative prompt.
+
+## Second milestone: complete native vertical slice
+
+Connect B03, G01/G02, K01 and A01 for one private synthetic vault and two independently
+protected native clients. Demonstrate password login, biometric Show, fetch-before-edit,
+biometric edit/save, per-entry object reuse, competing push rejection, encrypted draft,
+review/re-edit, lost acknowledgement reconciliation and persistent verified pins.
+A Git outage must not report a successful remote save. Every secret action still needs
+its own approval even when a session or ciphertext cache is warm.
+
+Use a local bare remote first so Git ordering and crypto can be tested separately from
+host credentials. This validates logic, not SSH/HTTPS, hosted access control or browser
+compatibility. G01 must resolve authorization/publication ordering before shared-vault
+or credential-revocation claims.
+
+## Product milestones after the native slice
+
+1. Q01/C01: web QR pairing and a trusted browser/extension bridge, with real platform
+   evidence. Plain WebAuthn user verification does not establish biometrics-only use.
+2. T01: actual host adapters and optional gateway, including devices lacking native Git
+   transport. Add Android/iOS custody adapters and test their biometric-only guarantees
+   individually; passing macOS tests does not enable other platforms.
+3. D01/M01: recovery/removal/rotation, sharing, migration, independent review and
+   product release. No percentage or completion date is asserted without execution evidence.
+
+## Decisions that must be closed during implementation
+
+- Define action lifetime and whether a bounded batch export is supportable; disable
+  unsupported actions rather than allowing an approval to expand its scope.
+- Decide and prove per-operation platform evidence; ordinary device signatures/UV flags
+  do not establish biometric-only use. State trusted client/OS assumptions honestly.
+- Resolve atomic authorization versus external Git publication: select a compatible
+  host/gateway contract, rather than relying on a stale server ACL checked before push.
+- Specify safe enrollment/recovery when every protected device is lost or invalidated.
+  Existing raw software recovery kits must not silently become a bypass of the new model.
+- Define legacy-client cutoff and recovery artifact versioning before migration.
+
+## Tracking and verification
+
+Mark packages complete only with code, reproducible checks and recorded evidence scoped
+to the actual platform and feature. Link evidence here as work lands. Keep CI checks local
+until a deliberate batch push. The next code task is **B01**; this plan itself does not
+implement any package or change the deployed runtime.

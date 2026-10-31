@@ -1,5 +1,10 @@
 # Architecture
 
+Implementation is tracked in the [ordered work plan](implementation-plan-git-biometric.md),
+which maps existing code to missing work and gives each package dependencies and completion
+criteria. The first code milestone is a persistent native credential with fresh biometric
+approval for every synthetic Show/Copy operation.
+
 ## Accepted target: Git-authoritative sync
 
 [ADR 0006](decisions/0006-git-authoritative-sync.md), accepted as direction on

@@ -98,6 +98,11 @@ These are foundations, not a completed Git-authoritative client. See the
 
 ## Implementation order
 
+The [ordered work plan](../implementation-plan-git-biometric.md) now supplies package
+dependencies and completion criteria. First prove persistent per-action biometric custody
+and the native operation broker (B01–B03); then execute the Git work below.
+
+
 1. Isolated single-vault/two-client prototype using a private local bare remote; test
    atomic races, on-demand refresh, fresh re-edit candidates and uncertain acknowledgements.
 2. Freeze signed Git tree/ref, authorization, operation-ID, receipt and pin-persistence

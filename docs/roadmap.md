@@ -5,6 +5,15 @@ on 2026-10-31. This is the central checklist;
 feature guides describe current behavior. Checked items record implemented experimental capabilities or explicitly labeled
 completed decisions, not a production-readiness certification.
 
+## Active implementation sequence
+
+The new Git/biometric target is tracked in the [ordered work plan](implementation-plan-git-biometric.md).
+Start **B01 → B02 → B03**: fresh per-use macOS biometric proof, persistent device custody,
+then a typed secret-operation broker. Next deliver the native two-client Git vertical
+slice (G01/G02, K01, A01), then QR enrollment/browser integration, hosted transports,
+removal/rotation/recovery and explicit migration. Existing crypto/API experiments are
+reusable foundations; they do not complete these packages.
+
 ## Implemented
 
 - [x] Rust core, offline CLI password management, standard and experimental hybrid encryption.
