@@ -415,9 +415,11 @@ initial entries and exact wrappers. It has no HTTP endpoint. It cannot attach an
 authority to an existing unanchored journal or convert snapshots. A future migration
 workflow must validate the source and candidate before invoking it.
 
-`entry-rotations` requires current edit access and the currently enrolled identity
-of the persisted designated authority as its authenticated writer. This first server
-profile does not support authority handover. Every enabled current collection member
+`entry-rotations` requires current edit access by the account of the persisted
+designated authority. The next checkpoint must use that account's currently enrolled
+identity. An explicit replacement with a higher identity version requires both the
+old authority's transition signature and the new identity's checkpoint signature.
+Delegation to another account is not supported by this server profile. Every enabled current collection member
 must have exactly one recipient package matching their enrolled identity version and
 fingerprint; missing identities, duplicate deliveries and revoked recipients reject
 the transaction. Optional recovery wrappers remain explicit and use the fixed supported
@@ -427,8 +429,10 @@ The account database remains locked through journal publication. A changed gener
 rejects a staged request. Rotation does not separately clear the legacy account
 `rotation_required` flag: subsequent entry writes require the committed epoch's
 generation to match current membership. This avoids a two-file publication window.
-Removing or replacing the designated authority itself stops rotation until a separate
-reviewed handover/recovery workflow exists; administrator status cannot bypass it.
+Removing the designated authority account still stops rotation. Replacing its identity
+requires the retained old signing key and the explicit replacement workflow below;
+administrator status cannot bypass either signature. Losing the old signing key still
+requires a separate recovery policy; vault recovery alone does not authorize a trust reset.
 
 One immutable record contains the transition, complete new wrapper set, encrypted
 index, every live entry replacement and scoped receipt. The existing record/root sync
@@ -531,3 +535,76 @@ draft no-overwrite, lost acknowledgements, forged receipts, cache conflicts,
 receipt-only retry, malformed transitions, review without acceptance and independent
 recipient advancement. Existing core tests validate decrypted payload equality and
 signed authority continuity. These checks do not constitute an independent audit.
+
+## Replace the same account's authority identity
+
+Experimental and off by default. This completes an authority transition after the
+existing reauthenticated identity-replacement API enrolls a new identity for the same
+account. It does not enroll multiple devices, add biometrics, delegate to another
+account, or recover a lost authority signing key. Guided identity enrollment/replacement
+UI remains separate work.
+
+Retain the old encrypted identity, an independently accepted checkpoint/head, and a
+working old-epoch unlock method. Preserve complete backups before identity replacement.
+Confirm the new identity's fingerprint from its trusted local bundle, independently
+of the server directory. The replacement identity must separately verify every other
+current recipient's fingerprint; contact trust is not silently copied from the old key.
+
+Stage a fresh epoch with the retained authority and the newly enrolled identity:
+
+```sh
+petika entries rotate --collection COLLECTION \
+  --anchor anchor.json --pin pin.json --cache cache \
+  --recipient-identity retired-identity.json \
+  --authority-identity retired-identity.json \
+  --replacement-identity current-identity.json \
+  --replacement-fingerprint INDEPENDENTLY_CONFIRMED_FINGERPRINT \
+  --recovery-policy replace --draft authority-replacement.json
+```
+
+The CLI unlocks the old epoch, unlocks the new identity, verifies the new recovery
+passphrase twice, then asks for the retained old authority's unlock passphrase to
+sign the transition. Input remains hidden. It re-encrypts every live entry under a
+fresh root, preserves names/fields/TOTP and the delivery profile, creates packages for
+the current roster, and round-trips the new authority's own package before saving.
+The draft contains ciphertext and public verification metadata, not plaintext keys.
+
+Review and submit with the **new** identity as `--authority-identity`. Keep the old
+identity as the old-epoch unlock method until acceptance advances the local pin:
+
+```sh
+petika entries rotate-review --collection COLLECTION \
+  --anchor anchor.json --pin pin.json --cache cache \
+  --recipient-identity retired-identity.json \
+  --authority-identity current-identity.json --draft authority-replacement.json
+petika entries rotate-submit --collection COLLECTION \
+  --anchor anchor.json --pin pin.json --cache cache \
+  --recipient-identity retired-identity.json \
+  --authority-identity current-identity.json --draft authority-replacement.json --confirm
+```
+
+After success, use `current-identity.json` for entry unlock and subsequent rotations.
+Other recipients independently verify the new authority fingerprint, verify every
+entry's content continuity, and explicitly accept the adjacent epoch. A changed roster,
+head, or enrollment rejects stale drafts. Exact retries reconcile the existing receipt
+and never reset a newer local pin; retain the draft and old evidence after a failure.
+
+For a recipient whose old epoch unlock depends on an authority-issued package, retain
+an encrypted copy of the existing identity/contact bundle before verifying the new
+authority. Use that retained bundle for `advance-epoch --recipient-identity` and the
+updated bundle for `--next-identity`. This lets the client verify each epoch against
+its corresponding contact pin. A working old recovery wrapper is another old-epoch
+unlock option. Do not overwrite the only old unlock path before accepting the transition.
+
+The server locks account authorization through journal publication, checks current
+edit access and exact recipient enrollment, and verifies both signatures before its
+single durable publication. A server administrator, another editor, or a replacement
+key alone cannot authorize the transition. Retired keys cannot open the new packages;
+already retained old ciphertext remains decryptable with old keys.
+
+Validation includes wrong confirmation, same-version/foreign replacement, missing or
+forged signatures, stale enrollment/roster, unauthorized administrator submission,
+interrupted acknowledgements, cache conflicts, exact retry and checkpoint preservation.
+`scripts/test_authority_recovery.py` exercises full-server and retained-client-kit
+recovery in Standard and experimental Hybrid with retired-key rejection. These are
+software-identity fixtures, not hardware protection or independent review evidence.

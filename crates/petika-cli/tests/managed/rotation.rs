@@ -17,11 +17,18 @@ fn save(path: impl AsRef<Path>, bytes: &[u8]) {
 #[test]
 fn rotation_drafts_reconcile_lost_ack_and_clients_verify_before_advancing() {
     for policy in ["omit", "replace"] {
-        workflow(policy);
+        workflow(policy, false);
     }
 }
 
-fn workflow(policy: &str) {
+#[test]
+fn authority_replacement_drafts_preserve_content_and_reconcile_lost_ack() {
+    for policy in ["omit", "replace"] {
+        workflow(policy, true);
+    }
+}
+
+fn workflow(policy: &str, replace_authority: bool) {
     let dir = tempfile::tempdir().unwrap();
     let base = dir.path();
     let root = RootKey::generate("a".repeat(64), "b".repeat(64), 1).unwrap();
@@ -41,11 +48,30 @@ fn workflow(policy: &str) {
     recipient
         .verify_contact(&public.user_id, public, &public.fingerprint, None)
         .unwrap();
-    let roster = json!({"version":1,"membership_generation":2,"recipients":[authority.public_identity(),recipient.public_identity()]});
+    let mut replacement = UnlockedIdentity::generate(&"a".repeat(64), &"f".repeat(64), 2).unwrap();
+    let public = recipient.public_identity();
+    replacement
+        .verify_contact(&public.user_id, public, &public.fingerprint, None)
+        .unwrap();
+    let signer = if replace_authority {
+        &replacement
+    } else {
+        &authority
+    };
+    let replacement_fingerprint = replacement.public_identity().fingerprint.clone();
+    let roster = json!({"version":1,"membership_generation":2,"recipients":[signer.public_identity(),recipient.public_identity()]});
+    save(base.join("authority.json"), &signer.seal(PASSWORD).unwrap());
     save(
-        base.join("authority.json"),
+        base.join("retired-authority.json"),
         &authority.seal(PASSWORD).unwrap(),
     );
+    if replace_authority {
+        let public = replacement.public_identity();
+        let pin = recipient.contact_pin(&public.user_id).cloned();
+        recipient
+            .verify_contact(&public.user_id, public, &public.fingerprint, pin.as_ref())
+            .unwrap();
+    }
     save(
         base.join("recipient.json"),
         &recipient.seal(PASSWORD).unwrap(),
@@ -231,7 +257,12 @@ fn workflow(policy: &str) {
         });
         let cache = base.join(if reader { "reader-cache" } else { "cache" });
         let recovery = base.join("recovery.json");
-        let authority = base.join("authority.json");
+        let authority = base.join(if replace_authority && command == "rotate" {
+            "retired-authority.json"
+        } else {
+            "authority.json"
+        });
+        let replacement = base.join("authority.json");
         let draft = base.join("draft.json");
         let mut args = vec![
             "entries",
@@ -253,15 +284,26 @@ fn workflow(policy: &str) {
                 draft.to_str().unwrap(),
             ]);
         }
+        if replace_authority && command == "rotate" {
+            args.extend([
+                "--replacement-identity",
+                replacement.to_str().unwrap(),
+                "--replacement-fingerprint",
+                &replacement_fingerprint,
+            ]);
+        }
         args.extend(extra);
         run(base, &args, input)
     };
     let two = format!("{PASSWORD}\n{PASSWORD}\n");
-    let stage_input = if policy == "replace" {
+    let mut stage_input = if policy == "replace" {
         two.repeat(2)
     } else {
         two.clone()
     };
+    if replace_authority {
+        stage_input.push_str(&format!("{PASSWORD}\n"));
+    }
     assert!(
         !invoke(
             "rotate",
@@ -334,6 +376,37 @@ fn workflow(policy: &str) {
     assert_eq!(std::fs::read(base.join("pin.json")).unwrap(), old_pin);
     shared.lock().unwrap().forge = false;
     let tx = shared.lock().unwrap().tx.clone().unwrap();
+    assert_eq!(
+        tx.transition.next.authority.identity_version,
+        if replace_authority { 2 } else { 1 }
+    );
+    if replace_authority {
+        let own = tx
+            .wrappers
+            .iter()
+            .find_map(|w| match w {
+                EpochWrapper::Recipient(value)
+                    if serde_json::from_str::<Value>(value).unwrap()["recipient_user_id"]
+                        == "f".repeat(64) =>
+                {
+                    Some(value)
+                }
+                _ => None,
+            })
+            .unwrap();
+        let next = trusted_for_test(&cp).advance(&tx.transition, 1).unwrap();
+        let refs = EpochState {
+            checkpoint: tx.transition.next.clone(),
+            wrappers: tx.wrappers.clone(),
+        }
+        .references(&next)
+        .unwrap();
+        assert!(
+            authority
+                .open_entry_key_package(own.as_bytes(), &tx.transition.next.authority, &next, &refs)
+                .is_err()
+        );
+    }
     let next_trust =
         TrustedCheckpoint::bootstrap(cp.clone(), &cp.digest().unwrap(), &cp.authority.fingerprint)
             .unwrap()
@@ -358,7 +431,12 @@ fn workflow(policy: &str) {
         })
         .unwrap();
     let new_root = recipient
-        .open_entry_key_package(package.as_bytes(), &cp.authority, &next_trust, &next_refs)
+        .open_entry_key_package(
+            package.as_bytes(),
+            &tx.transition.next.authority,
+            &next_trust,
+            &next_refs,
+        )
         .unwrap();
     let new_index = VerifiedIndex::open(
         &new_root,
@@ -501,4 +579,9 @@ fn workflow(policy: &str) {
     ok(&output);
     assert!(String::from_utf8_lossy(&output.stdout).contains("Hidden entry name"));
     assert!(!String::from_utf8_lossy(&output.stdout).contains(&entry().password));
+}
+
+fn trusted_for_test(cp: &Checkpoint) -> TrustedCheckpoint {
+    TrustedCheckpoint::bootstrap(cp.clone(), &cp.digest().unwrap(), &cp.authority.fingerprint)
+        .unwrap()
 }

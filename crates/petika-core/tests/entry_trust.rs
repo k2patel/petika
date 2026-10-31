@@ -43,6 +43,79 @@ fn dummy_refs() -> Vec<WrapperRef> {
     }]
 }
 #[test]
+fn authority_identity_replacement_requires_both_keys_and_explicit_confirmation() {
+    for profile in [
+        DeliveryProfile::Standard,
+        DeliveryProfile::ExperimentalXwingDraft06,
+    ] {
+        let old = identity('c');
+        let mut new = UnlockedIdentity::generate(&"a".repeat(64), &"c".repeat(64), 2).unwrap();
+        let root = root_for_epoch(1);
+        let next_root = root_for_epoch(2);
+        let trusted = pin(old
+            .sign_entry_checkpoint(&root, target(1, profile.clone()), &dummy_refs())
+            .unwrap());
+        let next = new
+            .sign_entry_checkpoint(&next_root, target(2, profile.clone()), &dummy_refs())
+            .unwrap();
+        let fingerprint = new.public_identity().fingerprint.clone();
+        assert!(
+            old.authorize_entry_identity_replacement(&trusted, next.clone(), 1, &"0".repeat(64))
+                .is_err()
+        );
+        assert!(
+            new.authorize_entry_identity_replacement(&trusted, next.clone(), 1, &fingerprint)
+                .is_err()
+        );
+        for invalid in [
+            identity('c'),
+            identity('d'),
+            UnlockedIdentity::generate(&"b".repeat(64), &"c".repeat(64), 2).unwrap(),
+        ] {
+            let other_root = RootKey::generate(
+                invalid.public_identity().deployment_id.clone(),
+                "b".repeat(64),
+                2,
+            )
+            .unwrap();
+            let cp = invalid
+                .sign_entry_checkpoint(&other_root, target(2, profile.clone()), &dummy_refs())
+                .unwrap();
+            assert!(
+                old.authorize_entry_identity_replacement(
+                    &trusted,
+                    cp,
+                    1,
+                    &invalid.public_identity().fingerprint
+                )
+                .is_err()
+            );
+        }
+        let transition = old
+            .authorize_entry_identity_replacement(&trusted, next, 1, &fingerprint)
+            .unwrap();
+        let advanced = trusted.advance(&transition, 1).unwrap();
+        advanced.validate_root(&next_root).unwrap();
+        assert!(advanced.validate_root(&root).is_err());
+        assert!(advanced.advance(&transition, 2).is_err());
+        let mut forged = transition.clone();
+        forged.signature = "A".repeat(88);
+        assert!(trusted.advance(&forged, 1).is_err());
+        let mut forged = transition;
+        forged.next.signature = "A".repeat(88);
+        assert!(trusted.advance(&forged, 1).is_err());
+        let third = new
+            .sign_entry_checkpoint(&root_for_epoch(3), target(3, profile), &dummy_refs())
+            .unwrap();
+        assert!(
+            old.authorize_entry_identity_replacement(&advanced, third.clone(), 2, &fingerprint)
+                .is_err()
+        );
+        let next = new.authorize_entry_transition(&advanced, third, 2).unwrap();
+        advanced.advance(&next, 2).unwrap();
+    }
+}
+#[test]
 fn entry_recipients_require_checkpoint_membership_and_verified_issuer_in_both_profiles() {
     for profile in [
         DeliveryProfile::Standard,

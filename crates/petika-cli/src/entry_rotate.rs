@@ -17,7 +17,7 @@ use petika_core::{
         transport::*,
         *,
     },
-    identity::{CheckpointTarget, EntryKeyPackage, PublicIdentity},
+    identity::{CheckpointTarget, EntryKeyPackage, PublicIdentity, UnlockedIdentity},
 };
 use serde::{Deserialize, Serialize};
 use std::{
@@ -37,6 +37,12 @@ pub struct StageArgs {
     pub state: StateArgs,
     #[arg(long)]
     pub authority_identity: PathBuf,
+    /// Newly enrolled identity of this same account; requires the retained old key.
+    #[arg(long, requires = "replacement_fingerprint")]
+    pub replacement_identity: Option<PathBuf>,
+    /// Independently confirmed fingerprint of the replacement identity.
+    #[arg(long, requires = "replacement_identity")]
+    pub replacement_fingerprint: Option<String>,
     /// Replace all recovery paths with one new passphrase wrapper, or omit them.
     #[arg(long, value_enum)]
     pub recovery_policy: RecoveryPolicy,
@@ -152,6 +158,11 @@ fn material(tx: &EpochTransaction) -> EpochState {
     }
 }
 fn summary(tx: &EpochTransaction) -> Result<()> {
+    let authority = &tx.transition.next.authority;
+    println!(
+        "Next authority: account {}, identity {}, fingerprint {}",
+        authority.user_id, authority.identity_version, authority.fingerprint
+    );
     println!(
         "Rotation {}: epoch {} -> {}, revision {} -> {}; {} live entries.",
         tx.operation,
@@ -218,8 +229,24 @@ pub fn stage(session: &Path, args: &StageArgs, stdin: bool) -> Result<()> {
             return Err("Foreign or duplicate recipient".into());
         }
     }
-    if !roster.recipients.contains(&trusted.checkpoint().authority) {
-        return Err("Authority missing or changed in recipient roster".into());
+    let old_authority = &trusted.checkpoint().authority;
+    let current_authority = roster
+        .recipients
+        .iter()
+        .find(|r| r.user_id == old_authority.user_id)
+        .ok_or("Authority missing from recipient roster")?;
+    if args.replacement_identity.is_some() {
+        if current_authority.identity_version <= old_authority.identity_version
+            || current_authority.fingerprint == old_authority.fingerprint
+            || args.replacement_fingerprint.as_deref() != Some(&current_authority.fingerprint)
+        {
+            return Err(
+                "Confirm the newly enrolled authority fingerprint independently; no draft saved"
+                    .into(),
+            );
+        }
+    } else if current_authority != old_authority {
+        return Err("Authority identity changed; use explicit replacement with the retained old signing key".into());
     }
     let old_objects = fetch_objects(&client, &root, &previous)?;
     let old_bytes = bytes(&old_objects);
@@ -231,9 +258,9 @@ pub fn stage(session: &Path, args: &StageArgs, stdin: bool) -> Result<()> {
             .checked_add(1)
             .ok_or("Epoch overflow")?,
     )?;
-    let tx = with_identity(&args.authority_identity, stdin, |identity| {
-        if identity.public_identity() != &trusted.checkpoint().authority {
-            return Err("Identity differs from the pinned authority".into());
+    let prepare = |identity: &mut UnlockedIdentity| -> Result<_> {
+        if identity.public_identity() != current_authority {
+            return Err("Identity differs from the currently enrolled authority".into());
         }
         let mut wrappers = vec![];
         let mut refs = vec![];
@@ -317,35 +344,69 @@ pub fn stage(session: &Path, args: &StageArgs, stdin: bool) -> Result<()> {
             },
             &index.wrappers,
         )?;
-        let transition =
-            identity.authorize_entry_transition(&trusted, checkpoint, previous.head().revision)?;
-        let tx = EpochTransaction {
-            version: 1,
-            operation: random_id()?,
-            expected: Cursor::from_head(previous.head())?,
-            transition,
-            object,
-            entries,
-            wrappers,
-        };
-        tx.verify(
-            &trusted,
-            RotationSnapshot {
-                index: &previous,
-                root: &root,
-                objects: &old_bytes,
-            },
-            &new_root,
+        // The signer constructed this checkpoint locally and must prove it can
+        // open its own new package before saving any candidate.
+        let candidate = TrustedCheckpoint::bootstrap(
+            checkpoint.clone(),
+            &checkpoint.digest()?,
+            &checkpoint.authority.fingerprint,
         )?;
-        let next = trusted.advance(&tx.transition, previous.head().revision)?;
-        // Round-trip the authority's package before saving a key that only lives
-        // in memory. Other recipients still need their own delivery verification.
-        let delivered = open_recipient(identity, &material(&tx), &next)?;
+        let delivered = open_recipient(
+            identity,
+            &EpochState {
+                checkpoint: checkpoint.clone(),
+                wrappers: wrappers.clone(),
+            },
+            &candidate,
+        )?;
         if delivered.commitment() != new_root.commitment() {
             return Err("Authority delivery verification failed".into());
         }
-        Ok(tx)
-    })?;
+        Ok((checkpoint, object, entries, wrappers))
+    };
+    let (transition, object, entries, wrappers) = if let Some(path) = &args.replacement_identity {
+        // Open files sequentially, so aliases cannot deadlock nested identity locks.
+        let (checkpoint, object, entries, wrappers) = with_identity(path, stdin, prepare)?;
+        let transition = with_identity(&args.authority_identity, stdin, |old| {
+            Ok(old.authorize_entry_identity_replacement(
+                &trusted,
+                checkpoint,
+                previous.head().revision,
+                args.replacement_fingerprint
+                    .as_deref()
+                    .ok_or("Confirm replacement fingerprint")?,
+            )?)
+        })?;
+        (transition, object, entries, wrappers)
+    } else {
+        with_identity(&args.authority_identity, stdin, |identity| {
+            let (checkpoint, object, entries, wrappers) = prepare(identity)?;
+            let transition = identity.authorize_entry_transition(
+                &trusted,
+                checkpoint,
+                previous.head().revision,
+            )?;
+            Ok((transition, object, entries, wrappers))
+        })?
+    };
+    let tx = EpochTransaction {
+        version: 1,
+        operation: random_id()?,
+        expected: Cursor::from_head(previous.head())?,
+        transition,
+        object,
+        entries,
+        wrappers,
+    };
+    tx.verify(
+        &trusted,
+        RotationSnapshot {
+            index: &previous,
+            root: &root,
+            objects: &old_bytes,
+        },
+        &new_root,
+    )?;
     let previous_object = read_object(
         &args
             .state
@@ -366,6 +427,12 @@ pub fn stage(session: &Path, args: &StageArgs, stdin: bool) -> Result<()> {
         return Err("Complete rotation draft exceeds 16 MiB; nothing submitted".into());
     }
     file.write(&encoded, true)?;
+    if args.replacement_identity.is_some() {
+        println!(
+            "Authority identity replacement: old identity {} -> new identity {}. Review/submit with --authority-identity pointing to the replacement bundle.",
+            old_authority.identity_version, current_authority.identity_version
+        );
+    }
     summary(&draft.transaction)?;
     println!(
         "Encrypted rotation draft saved. Review the recipient list and recovery policy before rotate-submit --confirm. Nothing submitted."

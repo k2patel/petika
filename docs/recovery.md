@@ -204,7 +204,8 @@ Historical copies remain decryptable. The `--identity-replacement` drill additio
 checks reader identity replacement, explicit fingerprint verification and rotation before
 reconciliation. The restored reader can accept/decrypt the new epoch with the replacement
 key; the retired key fails even against the exact new pin. This covers synthetic recipient
-identity replacement, not authority replacement or hardware/device enrollment.
+identity replacement. The separate authority-replacement drill below covers retained
+old-authority authorization; neither drill establishes hardware/device enrollment.
 
 ### Recover from an older full backup and an offline delta
 
@@ -369,7 +370,7 @@ at the corresponding websites/services.
 
 This is synthetic local-filesystem evidence, not a claim that every real device is ready.
 The simulated devices reuse one user's enrolled identity, rather than independently
-enrolled hardware keys. Actual device loss/replacement, authority identity replacement, biometric
+enrolled hardware keys. Actual device loss/replacement, lost-authority recovery, biometric
 unlock, cross-platform key custody, and production recovery objectives remain separate
 release checks. Preserve independently verified pins and encrypted identity backups for
 each recipient, and test the recovery routes you intend to rely on.
@@ -617,3 +618,30 @@ need Kubernetes API access, preventing an overlapping automatic service-account 
 If a retained archive contains group-readable data-file modes, restore regular data files
 to `0600` under the application UID before starting Petika. Keep the original archive and
 its integrity evidence; do not weaken Petika's permission checks.
+
+### Authority identity replacement and restore
+
+The experimental [same-account authority replacement workflow](research/entry-history-transport.md#replace-the-same-accounts-authority-identity)
+requires a retained old signing key, an independently confirmed newly enrolled identity,
+and both signatures over a fresh epoch. An account-password reset or a vault recovery
+passphrase alone cannot replace the designated authority. Keep the old encrypted bundle
+until all relevant collections have accepted replacement and backups are verified.
+
+After the experimental native build, run:
+
+```sh
+cargo build --locked -p petika-core --example recovery_identity_fixture
+python3 scripts/test_authority_recovery.py
+```
+
+The fixture generator is for synthetic tests only. The drill covers Standard and
+experimental Hybrid: replacement enrollment, stale/wrong-fingerprint rejection,
+forged old signatures, content-preserving rotation, confirmed submission and exact
+retry. It deletes the original server and working clients, restores a full backup,
+and recovers with a separately retained new identity and exact pin. The retired
+identity fails on the new epoch even with the exact new pin; historical exports remain
+decryptable with their original identity and pin. No client trust is automatically reset.
+
+This closes the retained-key authority-replacement path. Lost-authority recovery,
+independent hardware device identities, biometric protection and production recovery
+objectives remain separate work. The fixed R01–R08 ledger remains 8/8 complete.

@@ -338,6 +338,39 @@ impl UnlockedIdentity {
         }
         // A new authority's self-signature is not independent identity verification.
         self.trust_package_peer(&next.authority)?;
+        self.sign_entry_transition(previous, next, highest_observed_revision)
+    }
+    /// Explicit same-account identity replacement. The caller must independently
+    /// confirm the replacement fingerprint; a directory response is not consent.
+    /// Both the retained old signing key and the new checkpoint signature are
+    /// required. This does not reset trust when the old signing key is lost.
+    pub fn authorize_entry_identity_replacement(
+        &self,
+        previous: &TrustedCheckpoint,
+        next: Checkpoint,
+        highest_observed_revision: u64,
+        confirmed_fingerprint: &str,
+    ) -> Result<Transition> {
+        let replacement = &next.authority;
+        if replacement.user_id != self.public.user_id
+            || replacement.deployment_id != self.public.deployment_id
+            || replacement.identity_version <= self.public.identity_version
+            || replacement.fingerprint == self.public.fingerprint
+            || confirmed_fingerprint != replacement.fingerprint
+        {
+            return Err(Error::Authentication);
+        }
+        self.sign_entry_transition(previous, next, highest_observed_revision)
+    }
+    fn sign_entry_transition(
+        &self,
+        previous: &TrustedCheckpoint,
+        next: Checkpoint,
+        highest_observed_revision: u64,
+    ) -> Result<Transition> {
+        if previous.checkpoint().authority != self.public {
+            return Err(Error::Authentication);
+        }
         let mut transition = Transition {
             transition_version: 1,
             previous_checkpoint_digest: previous.checkpoint().digest()?,

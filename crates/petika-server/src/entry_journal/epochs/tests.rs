@@ -1218,3 +1218,213 @@ fn migration_process_exit_exposes_only_complete_format_switch() {
         assert_eq!(journal.current().unwrap().revision, 1);
     }
 }
+
+#[test]
+fn authority_identity_replacement_requires_current_enrollment_and_old_signature() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut accounts = Accounts::new(dir.path().join("accounts.json"));
+    accounts.migrate().unwrap();
+    let owner = accounts
+        .create_user("owner", "Owner", PASSWORD.into(), true, true)
+        .unwrap();
+    let peer = accounts
+        .create_user("peer", "Peer", PASSWORD.into(), true, false)
+        .unwrap();
+    let (owner_token, _) = accounts.login("owner", PASSWORD.into()).unwrap();
+    let (peer_token, _) = accounts.login("peer", PASSWORD.into()).unwrap();
+    let deployment = accounts
+        .key_operation(&owner_token, KeyOperation::Deployment, b"")
+        .unwrap()["deployment_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let authority = enroll(&mut accounts, &owner_token, &deployment, &owner.id);
+    let recipient = enroll(&mut accounts, &peer_token, &deployment, &peer.id);
+    let group = accounts
+        .save_group(
+            None,
+            "Replacement",
+            vec![
+                Membership {
+                    user_id: owner.id.clone(),
+                    edit: true,
+                },
+                Membership {
+                    user_id: peer.id.clone(),
+                    edit: true,
+                },
+            ],
+        )
+        .unwrap();
+    let recipients = vec![
+        authority.public_identity().clone(),
+        recipient.public_identity().clone(),
+    ];
+    let mut f = Fixture::new(
+        authority,
+        group.id.clone(),
+        &recipients,
+        group.membership_generation,
+    );
+    let path = dir
+        .path()
+        .join("collections")
+        .join(&group.id)
+        .join("entries");
+    let mut journal = Journal::open(path.clone()).unwrap();
+    let original = f.initialize(&mut journal).accepted;
+    drop(journal);
+    let mut tx = f.rotation(&recipients, group.membership_generation);
+    let old_tx = tx.clone();
+    let mut replacement = UnlockedIdentity::generate(&deployment, &owner.id, 2).unwrap();
+    let public = recipient.public_identity();
+    replacement
+        .verify_contact(&public.user_id, public, &public.fingerprint, None)
+        .unwrap();
+    let mut index = VerifiedIndex::open(
+        &f.next_root,
+        tx.object.head.clone(),
+        tx.object.envelope.as_bytes(),
+    )
+    .unwrap()
+    .index()
+    .clone();
+    index.wrappers.clear();
+    tx.wrappers.clear();
+    for public in [
+        replacement.public_identity().clone(),
+        recipient.public_identity().clone(),
+    ] {
+        let package = replacement
+            .create_entry_key_package(
+                &f.next_root,
+                &public,
+                group.membership_generation,
+                DeliveryProfile::Standard,
+            )
+            .unwrap();
+        index.wrappers.push(package.reference().unwrap());
+        tx.wrappers.push(EpochWrapper::Recipient(
+            serde_json::to_string(&package).unwrap(),
+        ));
+    }
+    tx.object = wire(&f.next_root, &index);
+    let next = sign(&replacement, &f.next_root, &tx.object, &index);
+    tx.transition = f
+        .authority
+        .authorize_entry_identity_replacement(
+            &f.trusted,
+            next,
+            1,
+            &replacement.public_identity().fingerprint,
+        )
+        .unwrap();
+    let send = |accounts: &mut Accounts, token: &str, tx: &EpochTransaction| {
+        dispatch(
+            accounts,
+            dir.path(),
+            token,
+            &group.id,
+            "entry-rotations",
+            serde_json::to_vec(tx).unwrap().as_slice(),
+        )
+    };
+    // A locally generated replacement cannot become authority before enrollment.
+    assert!(send(&mut accounts, &owner_token, &tx).is_err());
+    let enrolled = accounts
+        .key_operation(&owner_token, KeyOperation::Own, b"")
+        .unwrap();
+    let backup: serde_json::Value =
+        serde_json::from_slice(&replacement.seal(PASSWORD).unwrap()).unwrap();
+    accounts.key_operation(&owner_token, KeyOperation::Replace, &serde_json::to_vec(&serde_json::json!({
+        "expected_bundle_revision":enrolled["bundle_revision"], "expected_identity_version":1,
+        "current_password":PASSWORD, "public_identity":backup["public_identity"], "encrypted_bundle":backup["encrypted_bundle"],
+    })).unwrap()).unwrap();
+    // Identity replacement increments membership generation; rebuilding that
+    // candidate is mandatory. Even two valid signatures cannot bypass this CAS.
+    assert!(send(&mut accounts, &owner_token, &tx).is_err());
+    assert!(send(&mut accounts, &owner_token, &old_tx).is_err());
+    let roster: serde_json::Value = serde_json::from_slice(
+        &dispatch(
+            &mut accounts,
+            dir.path(),
+            &owner_token,
+            &group.id,
+            "entry-roster",
+            &b"{}"[..],
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    let generation = roster["membership_generation"].as_u64().unwrap();
+    index.membership_generation = generation;
+    index.wrappers.clear();
+    tx.wrappers.clear();
+    for public in [
+        replacement.public_identity().clone(),
+        recipient.public_identity().clone(),
+    ] {
+        let package = replacement
+            .create_entry_key_package(&f.next_root, &public, generation, DeliveryProfile::Standard)
+            .unwrap();
+        index.wrappers.push(package.reference().unwrap());
+        tx.wrappers.push(EpochWrapper::Recipient(
+            serde_json::to_string(&package).unwrap(),
+        ));
+    }
+    tx.object = wire(&f.next_root, &index);
+    let next = sign(&replacement, &f.next_root, &tx.object, &index);
+    tx.transition = f
+        .authority
+        .authorize_entry_identity_replacement(
+            &f.trusted,
+            next,
+            1,
+            &replacement.public_identity().fingerprint,
+        )
+        .unwrap();
+    assert!(send(&mut accounts, &peer_token, &tx).is_err());
+    let mut forged = tx.clone();
+    forged.transition.signature = "A".repeat(88);
+    assert!(send(&mut accounts, &owner_token, &forged).is_err());
+    let mut forged = tx.clone();
+    forged.transition.next.signature = "A".repeat(88);
+    assert!(send(&mut accounts, &owner_token, &forged).is_err());
+    let mut missing = tx.clone();
+    missing.wrappers.pop();
+    assert!(send(&mut accounts, &owner_token, &missing).is_err());
+    assert_eq!(
+        Journal::open(path.clone()).unwrap().current().unwrap(),
+        original
+    );
+    let receipt = send(&mut accounts, &owner_token, &tx).unwrap();
+    assert_eq!(send(&mut accounts, &owner_token, &tx).unwrap(), receipt);
+    assert!(send(&mut accounts, &owner_token, &old_tx).is_err());
+    let journal = Journal::open(path).unwrap();
+    let current = journal.current().unwrap();
+    assert_eq!(current.revision, 2);
+    assert_eq!(
+        journal
+            .epoch_state(&current)
+            .unwrap()
+            .unwrap()
+            .checkpoint
+            .authority,
+        *replacement.public_identity()
+    );
+    tx.verify(
+        &f.trusted,
+        RotationSnapshot {
+            index: &VerifiedIndex::open(
+                &f.root,
+                f.initial.head.clone(),
+                f.initial.envelope.as_bytes(),
+            )
+            .unwrap(),
+            root: &f.root,
+            objects: &f.objects,
+        },
+        &f.next_root,
+    )
+    .unwrap();
+}

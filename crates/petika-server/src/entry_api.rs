@@ -167,17 +167,25 @@ pub fn dispatch(
                     .epoch_state(&transaction.expected)?
                     .ok_or("rotation requires anchored journal")?;
                 let authority = &state.checkpoint.authority;
+                let next_authority = &transaction.transition.next.authority;
                 if auth.writer != authority.user_id
+                    || next_authority.user_id != authority.user_id
+                    || next_authority.deployment_id != authority.deployment_id
                     || auth
                         .recipient_identities
                         .get(&auth.writer)
                         .and_then(Option::as_ref)
-                        != Some(authority)
-                    || transaction.transition.next.authority != *authority
+                        != Some(next_authority)
+                    || (next_authority != authority
+                        && (next_authority.identity_version <= authority.identity_version
+                            || next_authority.fingerprint == authority.fingerprint))
                     || transaction.object.head.membership_generation != auth.membership_generation
                 {
                     return Err("rotation authority or membership mismatch".into());
                 }
+                // Journal validation verifies both the old authority's transition
+                // signature and the newly enrolled authority's checkpoint. Account
+                // administration alone cannot replace the pinned signing key.
                 let mut delivered = std::collections::BTreeSet::new();
                 for wrapper in &transaction.wrappers {
                     if let EpochWrapper::Recipient(bytes) = wrapper {

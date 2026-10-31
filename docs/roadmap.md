@@ -232,8 +232,14 @@ the existing single-response export and scheduled push formats retain their limi
 
 ### Broader entry-format and release backlog
 
-1. **Remaining recovery paths:** authority-identity replacement and
-   independently enrolled hardware-backed device recovery. Software-key cross-platform
+1. **Remaining recovery paths:** independently enrolled hardware-backed device recovery.
+   Same-account authority-identity replacement is now implemented experimentally with
+   the retained old signing key, a newly enrolled key, two signatures and independent
+   fingerprint confirmation. CLI/API and full-server/client-kit checks cover replacement
+   and retired-key rejection in both profiles; see the
+   [workflow](research/entry-history-transport.md#replace-the-same-accounts-authority-identity).
+   This does not recover a missing signing key or enable multiple device identities.
+   Software-key cross-platform
    restore now has recorded evidence. `backup_recovery.py reconcile` now stages an independently identified
    complete successor backup with its accounts and receipts together; disabled-account,
    removed-group-member, editor-to-reader downgrade and recipient-identity replacement
