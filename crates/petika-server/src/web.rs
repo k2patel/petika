@@ -104,7 +104,14 @@ pub fn account_route(
         };
     }
     if path == "/v1/auth/logout" && method == Method::Post {
-        accounts.logout(&token);
+        if accounts.logout(&token).is_err() {
+            return json(
+                request,
+                503,
+                serde_json::json!({"error":"Logout cleanup could not be queued; retry"}),
+                None,
+            );
+        }
         return json(
             request,
             200,

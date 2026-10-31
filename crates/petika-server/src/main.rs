@@ -295,6 +295,8 @@ fn run() -> Result<()> {
         mirror.clone(),
         Arc::clone(&backup_gate),
     );
+    #[cfg(feature = "experimental-device-keys")]
+    petika_server::git_key_leases::runtime::start_worker(data.clone(), Arc::clone(&backup_gate))?;
     for request in server.incoming_requests() {
         let path = request.url().to_owned();
         if path == "/healthz" && request.method() == &Method::Get {

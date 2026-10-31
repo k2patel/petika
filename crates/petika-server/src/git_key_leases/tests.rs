@@ -284,3 +284,22 @@ fn successful_delete_reply_is_not_enough_without_verified_absence() {
         Some(Failure::StillPresent)
     );
 }
+
+#[test]
+fn bounded_sweeps_continue_after_restart_instead_of_starving_later_leases() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("leases.json");
+    let store = LeaseStore::lock(&path).unwrap();
+    let first = prepare(&store);
+    let second = prepare(&store);
+    let mut host = Host {
+        keys: vec![key(&first, "one"), key(&second, "two")],
+        ..Host::default()
+    };
+    store.sweep_batch(200, &mut host, 1).unwrap();
+    assert_eq!(host.deleted, vec!["one"]);
+    drop(store);
+    let store = LeaseStore::lock(&path).unwrap();
+    store.sweep_batch(201, &mut host, 1).unwrap();
+    assert_eq!(host.deleted, vec!["one", "two"]);
+}

@@ -1891,6 +1891,7 @@ name = "petika-server"
 version = "0.1.0"
 dependencies = [
  "argon2",
+ "base64 0.22.1",
  "chacha20poly1305",
  "getrandom 0.2.17",
  "gix",
@@ -1902,6 +1903,7 @@ dependencies = [
  "subtle",
  "tempfile",
  "tiny_http",
+ "ureq",
  "url",
  "zeroize",
 ]

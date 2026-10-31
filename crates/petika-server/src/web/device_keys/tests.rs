@@ -256,7 +256,7 @@ fn device_http_enforces_session_csrf_body_limits_and_signed_publication() {
         exchange(&mut accounts, true, "GET", "/v1/device-keys", &cli, "").0,
         200
     );
-    accounts.logout(&token);
+    accounts.logout(&token).unwrap();
     assert_eq!(
         exchange(&mut accounts, true, "GET", "/v1/device-keys", &headers, "").0,
         401

@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-31",
+  "scope": "experimental cleanup host adapters, scheduler and durable session event wiring",
+  "production_enabled": false,
+  "live_provider_keys_modified": false,
+  "validation": {
+    "platform": "macOS arm64",
+    "rust": "1.90.0",
+    "combined_server_library_tests": 51,
+    "http_route_tests": 4,
+    "account_integration_tests": 7,
+    "entry_history_integration_tests": 7,
+    "sharing_integration_tests": 3,
+    "focused_post_batching_runtime_tests": 4,
+    "focused_post_batching_engine_tests": 10,
+    "default_and_combined_feature_clippy": "passed, warnings denied",
+    "formatting": "passed"
+  },
+  "coverage": [
+    "Local fake GitHub/Gitea JSON HTTP list/delete endpoints, query pagination through empty page and deletion verification",
+    "No redirects, unconfigured scope rejection, malformed responses and authorization denial",
+    "Protected owner-only regular credential files, read-only file mode and symlink rejection",
+    "Durable deduplicated session/device event queue, restart replay and corruption rejection",
+    "Logout, client revocation, observed expiry, account disablement and password change hooks",
+    "Logout queue failure returns error and retains session for retry",
+    "Single worker lifetime lock and cleanup of previous-process leases at startup",
+    "Persisted round-robin sweep cursor and bounded passes",
+    "Existing entry/journal/identity and account regression suite"
+  ],
+  "limits": [
+    "Fake hosts use test-only loopback HTTP; production configuration requires HTTPS with normal certificate verification",
+    "No real GitHub/Gitea permissions, certificates, rate limits or SSH transfer tested",
+    "Registration/issuance, sync-completion hook, cryptographic device-removal admission and status UI remain pending",
+    "Cleanup scheduler is explicitly opt-in and was not started against any real configuration",
+    "Account sessions are process-local; this wiring is not a distributed session/worker protocol",
+    "API deletion is cleanup-dependent lifetime; strict remote TTL still requires certificates or a lease-checking gateway",
+    "Partial account storage failure after event queueing may conservatively revoke transport access",
+    "Vault-secret biometric access enforcement remains a separate experimental workstream"
+  ]
+}

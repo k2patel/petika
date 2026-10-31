@@ -159,6 +159,8 @@ pub struct Accounts {
     devices: HashMap<String, DeviceGrant>,
     device_attempts: Vec<Instant>,
     key_attempts: HashMap<String, Vec<Instant>>,
+    #[cfg(feature = "experimental-device-keys")]
+    lease_cleanup: bool,
 }
 fn random_id() -> Result<String> {
     let mut bytes = [0u8; 32];
@@ -266,6 +268,9 @@ impl Accounts {
             devices: HashMap::new(),
             device_attempts: Vec::new(),
             key_attempts: HashMap::new(),
+            #[cfg(feature = "experimental-device-keys")]
+            lease_cleanup: std::env::var("PETIKA_EXPERIMENTAL_GIT_KEY_LEASES").as_deref()
+                == Ok("1"),
         }
     }
     pub fn initial_snapshot(&mut self, encrypted: String) -> Result<()> {
@@ -426,7 +431,7 @@ impl Accounts {
             .filter(|u| valid && !u.disabled)
             .ok_or("Incorrect username or password")?
             .clone();
-        self.sessions.retain(|_, s| s.expires > Instant::now());
+        self.prune_expired_sessions()?;
         if self.sessions.len() >= 1000 {
             return Err("Too many active sessions".into());
         }
@@ -447,7 +452,7 @@ impl Accounts {
             return Ok(None);
         };
         if session.expires <= Instant::now() {
-            self.sessions.remove(token);
+            self.logout(token)?;
             return Ok(None);
         }
         let db = Self::load(&StoreFile::lock(&self.path)?)?;
@@ -475,7 +480,7 @@ impl Accounts {
             .find(|(_, session)| session.user_id == user.id && session.id == id)
             .map(|(token, _)| token.clone())
             .ok_or("Client session not found")?;
-        self.logout(&token);
+        self.logout(&token)?;
         Ok(())
     }
     pub fn website_permissions(&self, user: &User) -> Result<Vec<String>> {
@@ -530,8 +535,35 @@ impl Accounts {
         file.write(&serde_json::to_vec(&db)?, false)?;
         Ok(origins)
     }
-    pub fn logout(&mut self, token: &str) {
+    fn queue_session_cleanup(&self, session: &Session) -> Result<()> {
+        #[cfg(feature = "experimental-device-keys")]
+        if self.lease_cleanup {
+            crate::git_key_leases::runtime::enqueue_session(
+                self.path.parent().unwrap_or(std::path::Path::new(".")),
+                &session.id,
+            )?;
+        }
+        let _ = session;
+        Ok(())
+    }
+    fn prune_expired_sessions(&mut self) -> Result<()> {
+        let expired: Vec<_> = self
+            .sessions
+            .iter()
+            .filter(|(_, s)| s.expires <= Instant::now())
+            .map(|(t, _)| t.clone())
+            .collect();
+        for token in expired {
+            self.logout(&token)?;
+        }
+        Ok(())
+    }
+    pub fn logout(&mut self, token: &str) -> Result<()> {
+        if let Some(session) = self.sessions.get(token) {
+            self.queue_session_cleanup(session)?;
+        }
         self.sessions.remove(token);
+        Ok(())
     }
     /// Petika device approval, not an OAuth/OIDC endpoint. No decryption keys are issued.
     pub fn device_start(&mut self) -> Result<serde_json::Value> {
@@ -574,7 +606,7 @@ impl Accounts {
             .ok_or("Sign in to continue")?;
         // Reauthentication is rate-limited through the same path as normal login.
         let (temporary, _) = self.login(&user.username, password)?;
-        self.logout(&temporary);
+        self.logout(&temporary)?;
         let code = code.trim().replace('-', "").to_uppercase();
         let grant = self
             .devices
@@ -613,7 +645,7 @@ impl Accounts {
         let Some(user) = user else {
             return Ok(serde_json::json!({"status":"expired_or_denied"}));
         };
-        self.sessions.retain(|_, s| s.expires > Instant::now());
+        self.prune_expired_sessions()?;
         if self.sessions.len() >= 1000 {
             return Err("Too many active sessions".into());
         }
@@ -720,6 +752,9 @@ impl Accounts {
             .find(|u| u.id == id)
             .ok_or("User not found")?;
         let changed = user.disabled != disabled;
+        for session in self.sessions.values().filter(|s| s.user_id == id) {
+            self.queue_session_cleanup(session)?;
+        }
         user.disabled = disabled;
         if changed {
             db.identity_changed(id, disabled)?;
@@ -750,7 +785,13 @@ impl Accounts {
         Argon2::default()
             .verify_password(current.as_bytes(), &parsed)
             .map_err(|_| "Current password is incorrect")?;
-        saved.password_hash = hash(&replacement)?;
+        let replacement_hash = hash(&replacement)?;
+        for (token, session) in &self.sessions {
+            if session.user_id == user.id && token != keep_session {
+                self.queue_session_cleanup(session)?;
+            }
+        }
+        saved.password_hash = replacement_hash;
         file.write(&serde_json::to_vec(&db)?, false)?;
         self.sessions
             .retain(|token, s| s.user_id != user.id || token == keep_session);
@@ -851,3 +892,6 @@ mod device_expiry_tests {
         assert!(!accounts.devices.contains_key(device));
     }
 }
+
+#[cfg(all(test, feature = "experimental-device-keys"))]
+mod git_key_cleanup_tests;

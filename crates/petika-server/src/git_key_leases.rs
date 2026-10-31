@@ -1,5 +1,9 @@
-//! Experimental durable cleanup engine. Host adapters and registration APIs are not wired yet.
+//! Experimental durable cleanup engine with opt-in HTTP adapters and worker wiring.
+//! Key registration APIs remain pending.
 //! All remote inventory pages must be obtained before claiming absence or deleting keys.
+mod host;
+pub mod runtime;
+pub use host::ConfiguredHosts;
 use petika_core::StoreFile;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, path::Path};
@@ -86,6 +90,8 @@ pub enum Cleanup<'a> {
 struct Ledger {
     version: u32,
     leases: Vec<Lease>,
+    #[serde(default)]
+    cursor: usize,
 }
 pub struct LeaseStore {
     file: StoreFile,
@@ -128,6 +134,7 @@ impl LeaseStore {
             return Ok(Ledger {
                 version: 1,
                 leases: vec![],
+                cursor: 0,
             });
         }
         let ledger: Ledger = serde_json::from_slice(&self.file.read_limited(MAX_BYTES)?)?;
@@ -205,14 +212,17 @@ impl LeaseStore {
     }
     /// Caller must authorize this selector. It does not modify unrelated repository keys.
     pub fn request_cleanup(&self, scope: Cleanup<'_>) -> Result<usize> {
+        self.request_cleanups(&[scope])
+    }
+    fn request_cleanups(&self, scopes: &[Cleanup<'_>]) -> Result<usize> {
         let mut ledger = self.read()?;
         let mut count = 0;
         for lease in &mut ledger.leases {
-            let selected = match scope {
+            let selected = scopes.iter().any(|scope| match scope {
                 Cleanup::All => true,
-                Cleanup::Device(id) => lease.device == id,
-                Cleanup::Session(id) => lease.session == id,
-            };
+                Cleanup::Device(id) => lease.device == *id,
+                Cleanup::Session(id) => lease.session == *id,
+            });
             if selected && lease.state != State::Removed {
                 lease.state = State::Revoking;
                 lease.retry_at = 0;
@@ -225,11 +235,18 @@ impl LeaseStore {
     /// Startup/periodic worker: examines every retained lease and reconciles registrations
     /// that succeeded remotely before a lost reply or process crash. No key is recreated.
     pub fn sweep(&self, now: u64, host: &mut impl KeyHost) -> Result<()> {
+        self.sweep_batch(now, host, LIMIT)
+    }
+    pub fn sweep_batch(&self, now: u64, host: &mut impl KeyHost, budget: usize) -> Result<()> {
         if now == 0 || now > MAX_TIME {
             return Err("Invalid clock".into());
         }
         let mut ledger = self.read()?;
-        for index in 0..ledger.leases.len() {
+        let total = ledger.leases.len();
+        let start = if total == 0 { 0 } else { ledger.cursor % total };
+        for offset in 0..total.min(budget) {
+            let index = (start + offset) % total;
+            ledger.cursor = (index + 1) % total;
             if ledger.leases[index].retry_at > now {
                 continue;
             }
@@ -256,6 +273,7 @@ impl LeaseStore {
             // A write failure after deletion is uncertain; reopen and inventory on retry.
             self.save(&ledger)?;
         }
+        self.save(&ledger)?;
         Ok(())
     }
 }

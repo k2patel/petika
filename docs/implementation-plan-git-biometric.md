@@ -119,3 +119,10 @@ subcomponent: durable ownership intent, session/device/all cleanup, all matching
 restart retry and late-registration scans. Nine deterministic host-interface tests pass.
 T01 remains open: real host adapters, issuance, scheduler, logout/removal atomic wiring,
 rate limiting and user-visible status/auditing have not been implemented.
+
+Cleanup wiring update: GitHub/Gitea HTTP list/delete adapters, protected configuration,
+a single restart-safe worker with bounded persistent round-robin sweeps, and durable
+logout/session-expiry/client-revocation/account-disable/password-change events are wired.
+Tests use local fake HTTP hosts. Key registration, cryptographic device removal, completion
+hooks, real-host permissions and status UI remain open; see
+[operational configuration](git-key-lease-cleanup.md#runtime-configuration-and-adapters).

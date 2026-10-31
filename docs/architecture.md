@@ -52,8 +52,9 @@ themselves. Strict expiry requires a host-validated certificate or lease-checkin
 Private transport keys stay on devices; secret access still requires per-action biometrics.
 The [cleanup engine](git-key-lease-cleanup.md) now provides a durable lease inventory,
 scoped revocation, restart retries and late-registration reconciliation under the
-experimental device feature. Host adapters and scheduler/account integration are still
-pending; no live key issuance/deletion is enabled.
+experimental device feature. GitHub/Gitea list/delete adapters and an opt-in bounded worker now drain durable account
+session cleanup events. Key issuance, cryptographic device-removal admission and actual-host
+validation remain pending; no deployment or live key mutation occurred in this milestone.
 
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
 browser transport, durable device custody and complete recovery are release gates.

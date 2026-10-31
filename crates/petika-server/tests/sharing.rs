@@ -151,7 +151,7 @@ fn enrollment_directory_cas_replacement_and_revocation() {
         call(&mut accounts, &c, KeyOperation::Deployment, &Value::Null),
         Err(KeyError::Unauthenticated)
     );
-    accounts.logout(&a);
+    accounts.logout(&a).unwrap();
     assert_eq!(
         call(&mut accounts, &a, KeyOperation::Own, &Value::Null),
         Err(KeyError::Unauthenticated)

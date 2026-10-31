@@ -231,7 +231,7 @@ fn device_approval_is_single_use_and_revocable() {
             true,
         )
         .unwrap();
-    accounts.logout(&browser);
+    accounts.logout(&browser).unwrap();
     assert_eq!(
         accounts
             .device_poll(pending["device_code"].as_str().unwrap())

@@ -12,9 +12,11 @@ publish = false
 [features]
 default = []
 experimental-entry-format = ["petika-core/experimental-entry-format"]
-experimental-device-keys = ["petika-core/experimental-device-keys"]
+experimental-device-keys = ["petika-core/experimental-device-keys", "dep:ureq", "dep:base64"]
 
 [dependencies]
+ureq = { version = "=3.4.2", default-features = false, features = ["rustls"], optional = true }
+base64 = { workspace = true, optional = true }
 chacha20poly1305.workspace = true
 tempfile.workspace = true
 sha2.workspace = true

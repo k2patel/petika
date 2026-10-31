@@ -1,5 +1,9 @@
 # Container and source deployment
 
+Experimental cleanup wiring now has separate opt-in configuration for protected host
+credentials, GitHub/Gitea list/delete adapters and restart-safe session cleanup. It does
+not enable key issuance or migrate vaults. See [cleanup operations](git-key-lease-cleanup.md#runtime-configuration-and-adapters).
+
 Current deployment instructions enable the existing API and outbound Git mirror. [ADR 0006](decisions/0006-git-authoritative-sync.md) defines the next Git-authoritative target; no environment setting here enables it. Host-neutral SSH/HTTPS, optional API/gateway credentials and browser compatibility require implementation and capability testing.
 
 Experimental web UI and local managed accounts, with personal/group encrypted collections.

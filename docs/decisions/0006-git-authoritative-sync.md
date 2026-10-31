@@ -141,8 +141,9 @@ host cannot restrict required operations or prevent bypass of publication policy
 
 Sources: [GitHub deploy-key lifecycle](https://docs.github.com/en/authentication/connecting-to-github-with-ssh/managing-deploy-keys),
 [GitHub key-management API](https://docs.github.com/en/rest/deploy-keys/deploy-keys),
-[Gitea repository API](https://docs.gitea.com/api/1.24/). Planned capability, not implemented
-or tested against a real host in this milestone.
+[Gitea repository API](https://docs.gitea.com/api/1.24/). The [cleanup implementation](../git-key-lease-cleanup.md) now includes host inventory/deletion
+adapters, the bounded worker and durable session-event wiring. Registration/issuance and
+actual-host validation remain pending; no real host keys were changed in this milestone.
 
 Requiring a server secret for every vault decryption is a separate, undecided policy
 and cryptographic design. Authentication may gate online sync without preventing an

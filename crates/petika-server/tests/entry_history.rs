@@ -514,7 +514,7 @@ fn account_entry_api_binds_access_context_receipts_and_legacy_boundary() {
         )
         .is_ok()
     );
-    accounts.logout(&owner_token);
+    accounts.logout(&owner_token).unwrap();
     assert!(
         dispatch(
             &mut accounts,

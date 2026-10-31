@@ -16,7 +16,9 @@ reusable foundations; they do not complete these packages.
 
 A gated [temporary Git-key cleanup engine](git-key-lease-cleanup.md) now covers durable
 lease intent, managed-key inventory, scoped cleanup, retry/restart and late registrations.
-Real host registration/adapters, scheduler and account-event wiring remain T01 work.
+GitHub/Gitea list/delete adapters, the worker and durable session/account hooks are now
+wired and tested against local fake hosts. Registration, cryptographic device removal,
+real-host validation and a status UI remain T01 work.
 
 ## Implemented
 
