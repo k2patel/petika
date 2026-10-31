@@ -33,6 +33,13 @@ all keys are not required together. Account enrollment alone does not grant a sh
 Device vault keys stay local. Mandatory server participation in every decrypt remains
 a separate undecided policy.
 
+Registration offers supported biometric/Face ID or secret-string protection for a locally
+generated device credential. Web **Add device** presents an expiring QR pairing session;
+scanning generates keys on the new device, followed by existing-authority fingerprint
+approval and two-key possession proofs. The QR never contains vault/private keys and is
+not an automatic grant. See [registration protocol direction](decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
+This UI and pairing relay are planned, not implemented.
+
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
 browser transport, durable device custody and complete recovery are release gates.
 Branches do not isolate repository readers. The [implementation sequence](research/git-vault-sync.md)

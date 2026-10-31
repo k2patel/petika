@@ -65,6 +65,12 @@ local device key use. Account password reset cannot recover lost vault keys. Pro
 keys can decrypt retained ciphertext offline; server participation in every decrypt is
 a separate, undecided cryptographic policy.
 
+Device registration presents available biometric/Face ID or secret-string unlock methods
+for generated device keys. Web QR pairing starts an expiring session; the new device
+generates its keys, and an existing authority explicitly confirms its fingerprint and
+verifies the two-key enrollment proof. The QR contains no vault/private key and does not
+authorize admission by itself. [Exact flow](../decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
+
 Repo readers can obtain its history across branches; branches are not vault ACLs. Shared
 vault permissions require repository separation or a gateway, plus verifiable writer,
 membership/device and epoch policy. Publication and revocation need atomic ordering.

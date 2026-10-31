@@ -98,6 +98,56 @@ and cryptographic design. Authentication may gate online sync without preventing
 already provisioned device from decrypting cached data. Neither token expiry nor
 revocation erases learned keys, historical ciphertext or plaintext.
 
+## Registration methods and QR device enrollment
+
+Users register a credential with a supported local unlock method: Touch ID/fingerprint,
+Face ID, or a secret string/passphrase. Generate the actual recipient/signing key material
+with cryptographic randomness. Biometrics authorize platform-protected key use locally;
+never store biometric templates or derive encryption keys from a face/fingerprint. A
+secret string protects the private bundle with the existing reviewed password-based
+wrapping policy; it is distinct from the online account password. The server stores
+public enrollment records and any permitted ciphertext, never plaintext private keys,
+unlock strings or biometric data. Platform support must be detected and unsupported
+methods reported explicitly, without silently choosing another unlock method.
+
+A device normally has one independent logical credential. Several local unlock methods
+may protect the same credential; that alone does not create independently revocable
+recipients. Separate enrolled credentials have separate keys and vault-secret packages.
+A method change can rewrap retained keys; enrolling a new key always requires admission.
+Biometric reset/invalidation and loss of the unlock string require an explicit recovery
+path before the method is enabled for real vaults.
+
+The web UI must offer **Add device → Show QR code**. Planned flow:
+
+1. An authenticated user starts an expiring, single-use pairing session in the web UI.
+   Its QR contains a version, expected Petika HTTPS origin, opaque session reference and
+   expiry. It carries no account password, vault secret or device private key. Treat
+   pairing metadata as sensitive and never log it or commit it to Git.
+2. The new device scans the QR, confirms the expected origin/account, selects an available
+   unlock method and generates its own protected key material locally. A QR-supplied
+   origin is not independently trusted; new-origin association needs explicit confirmation.
+3. It submits the signed public enrollment request bound to that session and current
+   account/deployment/roster. The QR/session reference alone grants no access or login.
+4. The existing device-authority client displays the new device and full fingerprint;
+   the user compares it through a trusted channel and explicitly approves. A logged-in
+   web session without the authority key must obtain approval from an existing authority
+   holder; the server cannot manufacture its signature.
+5. Reuse the two-recipient-key challenge/decryption proof and device-signature checks.
+   The authority signs the adjacent roster addition only after successful verification.
+   Require current password reauthentication for admission. Expiry, cancellation, replay,
+   mismatched account/origin/device, or a stale roster must fail and restart the ceremony.
+6. Publish the addition conditionally, reconcile uncertain results, then have an unlocked
+   authorized issuer create the new device's package for each permitted vault. Enrollment
+   alone does not grant shared-vault access. Mark the device ready only after verified
+   publication, package decryption and durable local custody/pin persistence.
+
+The existing challenge lifetime is at most 300 seconds; the QR pairing session must not
+outlive its enrollment authorization. Exact QR encoding, relay APIs, session consumption,
+rate limits and reconnect behavior remain protocol/implementation gates. No secret-bearing
+QR export or automatic approval on scan is implied. Pairing must not silently repoint Git
+remotes or authenticate an arbitrary URL. Local unlock method choice does not change
+vault permissions, the password-plus-key model, or Git conflict handling.
+
 ## Failure handling and custody
 
 Plaintext belongs in client memory during use, never Git objects, commit messages,

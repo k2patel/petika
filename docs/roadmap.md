@@ -112,6 +112,12 @@ parallel. Feature backlog items remain open but do not replace these security ga
   atomic publication/authorization ordering; validate against independent fixtures.
 - [ ] Add provider-neutral SSH/HTTPS and optional host API/gateway adapters, capability
   checks and password plus any one authorized device key.
+- [ ] Implement registration method selection for platform biometrics/Face ID or a
+  distinct secret string protecting generated device keys, with custody/recovery checks.
+- [ ] Add web QR pairing: expiring session, origin/account binding, new-device key
+  generation, existing-authority fingerprint confirmation, two-key possession proof,
+  single-use publication and authorized per-vault package delivery. Scanning alone grants
+  no access; see [registration flow](decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
 - [ ] Validate browser transport, shared-vault isolation, removal/rotation and full
   recovery; implement explicit per-collection migration with a single write authority.
   See [delivery sequence](research/git-vault-sync.md) and

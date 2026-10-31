@@ -17,6 +17,15 @@ reset or account enrollment alone does not grant decryption. Key removal require
 rotation for future exclusion; historical copies remain accessible. See
 [ADR 0006](0006-git-authoritative-sync.md#password-plus-any-one-authorized-key).
 
+## Registration UX direction
+
+Register each device credential with a supported local method: Touch ID/fingerprint,
+Face ID or a distinct secret string/passphrase. These protect generated cryptographic
+keys; biometric data is never encryption material. The web UI will offer QR-based
+pairing followed by existing-authority confirmation and encryption/signing possession
+checks. Scanning alone grants no access. See the [QR flow and custody rules](0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
+Both the method-selection UI and QR relay remain pending implementation.
+
 ## Proposed decision
 
 Give each enrolled device a fresh encryption/signing identity under one immutable
