@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-31",
+  "scope": "candidate public device-record, authority and signed-roster encoding",
+  "feature": "petika-core/experimental-device-keys (off by default)",
+  "production_api_or_storage_integration": false,
+  "independent_reference": "Python hashlib and cryptography 46.0.3; public synthetic inputs and upstream X-Wing public vectors",
+  "fixture_check": "passed",
+  "rust_tests": {"passed": 8, "failed": 0},
+  "validation": {
+    "rust": "1.90.0",
+    "host": "macOS arm64",
+    "wasm32_unknown_unknown_check": "passed",
+    "combined_entry_and_device_features_clippy": "passed with warnings denied",
+    "default_core_check": "passed"
+  },
+  "checks": [
+    "Exact canonical transcript bytes, fingerprints, signatures and three-roster chain match independent fixtures",
+    "JSON whitespace/key ordering preserve cryptographic meaning",
+    "Malformed, duplicate, unknown, missing, oversized and invalid-version inputs rejected",
+    "Malformed/noncanonical/noncontributory encryption keys and weak signing keys rejected",
+    "Modified records, signatures, account and deployment bindings rejected",
+    "Distinct same-account device keys and separate authority key",
+    "Duplicate active key material, unsorted/overlapping IDs and excess counts rejected",
+    "Maximum active-device and tombstone counts accepted within input bounds",
+    "Exact roster retry and adjacent add/remove chain accepted",
+    "Signed rekey, batched/no-op change, authority swap, fork, skipped generation and erased revocation rejected",
+    "Failed transitions preserve the prior trusted pin"
+  ],
+  "remaining": [
+    "Candidate encoding and authority policy review",
+    "Enrollment challenge/request/proof encoding and encryption-key possession protocol",
+    "Persistent roster CAS and authenticated account APIs",
+    "Device packages, migration, recovery and hardware-wrapper integration"
+  ]
+}

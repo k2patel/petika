@@ -11,6 +11,7 @@ publish = false
 [features]
 default = []
 experimental-entry-format = ["dep:hkdf"]
+experimental-device-keys = []
 
 [dependencies]
 hkdf = { version = "=0.12.4", optional = true }

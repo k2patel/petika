@@ -171,8 +171,10 @@ and an [executable software model](../../experiments/device-keys/README.md). The
 checks two independent same-account keys, encryption/signing possession, signed roster
 transitions and exclusion from a fresh synthetic epoch in both delivery profiles.
 It is separate from production vault formats and the hardware wrapping probes.
-Next: review/freeze enrollment and package encodings with independent fixtures, then
-implement the gated client/server integration and migration. Platform lifecycle tests
+The [candidate record/roster encoding](../device-key-format.md) now has opt-in core
+parsers, transition checks and independent Python fixtures. Next: review/define
+challenge/proof and package encodings, then implement the gated client/server integration
+and migration. Platform lifecycle tests
 and Android/Windows validation remain open. No real vault enrollment during the spikes.
 
 - [ ] Record OS/browser/app/authenticator versions, actual hardware security level,

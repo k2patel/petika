@@ -1,5 +1,8 @@
 //! Experimental local encrypted storage for Petika.
 mod crypto;
+/// Candidate device wire format; not connected to account APIs or vault storage.
+#[cfg(feature = "experimental-device-keys")]
+pub mod device_keys;
 /// Opt-in prototype; not connected to production storage or APIs.
 #[cfg(feature = "experimental-entry-format")]
 pub mod entry_format;

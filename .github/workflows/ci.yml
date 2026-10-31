@@ -25,6 +25,7 @@ jobs:
           python scripts/generate_entry_trust_vectors.py --check
           python scripts/generate_entry_head_vectors.py --check
           python scripts/generate_entry_handoff_vectors.py --check
+          python scripts/generate_device_key_vectors.py --check
       - name: Validate proposed API contracts and schema fixtures
         run: python scripts/check_api_contracts.py
 
@@ -63,6 +64,10 @@ jobs:
         run: cargo test --locked -p petika-core --features experimental-entry-format
       - name: Experimental entry format Clippy
         run: cargo clippy --locked -p petika-core --features experimental-entry-format --all-targets -- -D warnings
+      - name: Candidate device-record and roster format
+        run: |
+          cargo test --locked -p petika-core --features experimental-device-keys --test device_keys
+          cargo clippy --locked -p petika-core --features experimental-entry-format,experimental-device-keys --all-targets -- -D warnings
       - name: Experimental entry history transport
         run: cargo test --locked -p petika-server --features experimental-entry-format --lib --test entry_history
       - name: Experimental entry history Clippy
@@ -133,6 +138,8 @@ jobs:
           cargo install wasm-bindgen-cli --version 0.2.114 --locked
       - name: Check experimental entry core for WASM
         run: cargo check --locked -p petika-core --features experimental-entry-format --target wasm32-unknown-unknown
+      - name: Check candidate device format for WASM
+        run: cargo check --locked -p petika-core --features experimental-device-keys --target wasm32-unknown-unknown
       - name: Build native and browser clients
         run: |
           cargo build --workspace --locked

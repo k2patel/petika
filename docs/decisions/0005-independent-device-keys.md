@@ -40,6 +40,11 @@ transcript with a distinct domain tag. Ordered records, size/counter limits and 
 rules must be frozen in a separate encoding specification before API implementation.
 The executable model's typed JSON tuples are not that production encoding.
 
+A separate [candidate record/roster encoding](../device-key-format.md) now has an
+opt-in core parser/verifier and independently generated Python fixtures. It defines
+the exact candidate bytes, limits and adjacent add/remove rules; challenge/proof and
+collection-package encodings, integration and independent review remain open.
+
 Enrollment requires all of the following:
 
 1. An authenticated account session, explicit reauthentication and a user-started
