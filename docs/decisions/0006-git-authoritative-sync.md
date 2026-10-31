@@ -100,22 +100,23 @@ revocation erases learned keys, historical ciphertext or plaintext.
 
 ## Registration methods and QR device enrollment
 
-Users register a credential with a supported local unlock method: Touch ID/fingerprint,
-Face ID, or a secret string/passphrase. Generate the actual recipient/signing key material
-with cryptographic randomness. Biometrics authorize platform-protected key use locally;
-never store biometric templates or derive encryption keys from a face/fingerprint. A
-secret string protects the private bundle with the existing reviewed password-based
-wrapping policy; it is distinct from the online account password. The server stores
-public enrollment records and any permitted ciphertext, never plaintext private keys,
-unlock strings or biometric data. Platform support must be detected and unsupported
-methods reported explicitly, without silently choosing another unlock method.
+Each active device credential must be protected by a supported biometric-only local
+policy (Touch ID/fingerprint or Face ID). The per-action policy below supersedes the
+earlier secret-string alternative for routine secret access. A string, account password,
+OS PIN/passcode, recovery kit or Git token cannot substitute for biometric approval.
+Generate recipient/signing key material with cryptographic randomness; never derive
+keys from biometric templates or transmit biometric data. Enrollment must establish a
+supported protected key-use path before marking a device ready. Unsupported devices
+cannot perform secret actions. Biometric set changes/invalidation stop access until an
+explicit authorized re-enrollment/recovery process restores a biometric-protected device.
+Recovery may re-provision a supported device; it cannot provide an unrestricted secret
+viewer or raw-key export bypass. Design and review this restriction before enabling
+recovery/export in the new model. Legacy recovery tools remain legacy behavior, not
+an implementation of the target policy.
 
-A device normally has one independent logical credential. Several local unlock methods
-may protect the same credential; that alone does not create independently revocable
-recipients. Separate enrolled credentials have separate keys and vault-secret packages.
-A method change can rewrap retained keys; enrolling a new key always requires admission.
-Biometric reset/invalidation and loss of the unlock string require an explicit recovery
-path before the method is enabled for real vaults.
+Each device normally holds an independent logical credential with separate encryption
+and signing roles. Any one permitted device can access the vault, but every secret action
+on that device requires its own fresh biometric approval. No quorum or all-keys requirement.
 
 The web UI must offer **Add device → Show QR code**. Planned flow:
 
@@ -123,8 +124,8 @@ The web UI must offer **Add device → Show QR code**. Planned flow:
    Its QR contains a version, expected Petika HTTPS origin, opaque session reference and
    expiry. It carries no account password, vault secret or device private key. Treat
    pairing metadata as sensitive and never log it or commit it to Git.
-2. The new device scans the QR, confirms the expected origin/account, selects an available
-   unlock method and generates its own protected key material locally. A QR-supplied
+2. The new device scans the QR, confirms the expected origin/account, checks biometric-only capability
+   and generates its own protected key material locally. A QR-supplied
    origin is not independently trusted; new-origin association needs explicit confirmation.
 3. It submits the signed public enrollment request bound to that session and current
    account/deployment/roster. The QR/session reference alone grants no access or login.
@@ -148,6 +149,84 @@ QR export or automatic approval on scan is implied. Pairing must not silently re
 remotes or authenticate an arbitrary URL. Local unlock method choice does not change
 vault permissions, the password-plus-key model, or Git conflict handling.
 
+## Mandatory biometric approval for every secret action
+
+Status: required target policy (2026-10-31); not implemented or enforced by the current
+runtime. Password sign-in establishes an account session. Any active permitted device
+credential is usable only after a new biometric approval for the exact secret action.
+
+Require a fresh biometric for every reveal/show, copy, autofill, TOTP access, secret edit,
+secret-bearing search/preview, import/export or other operation that consumes/decrypts
+secret material. Do not exclude CLI, extensions, API-triggered actions, offline views,
+background workers, accessibility paths or recovery flows. Editing is an explicit bounded
+transaction: approval to open an editor does not authorize a later reveal/copy/export;
+saving a secret-bearing mutation requires fresh approval bound to the final candidate.
+A multi-secret export must explicitly describe its bounded scope; if this cannot be
+safely supported with this policy, disable export. No silent batch expansion.
+
+Ciphertext-only fetch/push, hash/history verification, pairing display and non-secret
+account screens may run without a biometric. Each transition into secret processing
+passes through the same broker; there is no cached unlocked-vault bypass. Metadata that
+requires secret decryption is itself a protected action.
+
+### Enforcement architecture
+
+1. A trusted native credential broker owns protected key access and operation execution.
+   UI/CLI/extension callers request a typed action bound to account, device, collection,
+   entry/explicit object set, epoch/head and request nonce. A UI prompt alone is insufficient.
+2. The broker verifies capability, local pins and current authorization before requesting
+   biometric-only OS approval. Configure platform-protected key operations per use, without
+   device-password/PIN fallback, reuse windows or reusable authentication contexts. A
+   cancelled, failed, timed-out or locked-out prompt denies the operation. No downgrade.
+3. Approval authorizes exactly the bound action once. Execute the protected unwrap/decrypt
+   and operation inside the broker, keep transient collection/recipient secrets within
+   its bounded lifetime, then clear/drop them. Never return raw keys or reusable decrypted
+   bundles to UI, extension content scripts or a long-running worker. Do not cache usable
+   collection keys across secret actions. Ciphertext and verified public pins can persist.
+4. Return only the minimum requested output to the intended consumer. Bind autofill to
+   the verified requesting origin/frame and fields; bind copy to the requested secret.
+   End display/editor lifetimes explicitly and clear transient plaintext when complete,
+   locked, backgrounded or cancelled. Clipboard cleanup is best effort and cannot revoke
+   copies another process has already read.
+5. Online protected operations also require a one-use server challenge/authorization
+   bound to the same action/device/context, short expiry and fresh nonce. Verify device
+   signatures, current membership/roster/epoch and consume authorization atomically with
+   the relevant operation. A sync bearer token cannot satisfy this check on its own.
+   The exact challenge/evidence format and ordering with Git publication remain a review
+   gate. Do not claim that an arbitrary device signature proves a biometric was performed.
+6. Direct Git readers already possess ciphertext and may bypass a server UI. Local key
+   protection must therefore enforce biometric use even for cached/offline data. A
+   participating client must not contain a raw-key, recovery or legacy unlock backdoor.
+   Host adapters may transfer ciphertext without acquiring decryption capability.
+
+### Platform feasibility and evidence gates
+
+Apple candidates use biometric-only protected Keychain/Secure Enclave access and fresh
+per-operation contexts, including current-biometric-set invalidation. Android candidates
+use auth-per-use Keystore operations restricted to strong biometrics, without device
+credential fallback. Hardware support and fresh-prompt behavior require real-device tests;
+existing generated-data probes do not establish this per-action property.
+
+Generic browser WebAuthn user verification can be satisfied by PIN or biometrics; the
+UV flag is not proof of biometric-only approval. A plain browser/PRF implementation is
+therefore insufficient evidence for this requirement. Browser and extension secret
+operations need an explicitly verified native broker or a separately reviewed capability
+that can enforce the same biometric-only per-action contract. Deny secret access on
+unsupported platforms. Never label unsupported WebAuthn as compliant.
+
+This is an enforced application/platform policy under trusted client and OS assumptions,
+not a guarantee against a compromised unlocked process/OS or a user copying revealed
+plaintext. Software X25519/X-Wing recipient material and epoch secrets necessarily exist
+transiently during use; current hardware probes do not move those algorithms into secure
+hardware. Independent review must assess that boundary. Server-delivered malicious web
+code remains a threat; an independently distributed broker must constrain requested actions
+and outputs. No documentation claim may describe the current application as enforcing
+this policy until the complete path and negative tests pass.
+
+Sources: [Apple current-set access control](https://developer.apple.com/documentation/security/secaccesscontrolcreateflags/biometrycurrentset),
+[Android auth-per-use keys](https://developer.android.com/identity/sign-in/biometric-auth),
+[WebAuthn user verification](https://www.w3.org/TR/webauthn-3/#user-verification).
+
 ## Failure handling and custody
 
 Plaintext belongs in client memory during use, never Git objects, commit messages,
@@ -161,7 +240,7 @@ another current head does not prove our earlier operation was absent. A verified
 operation must not be applied twice. Git head, retained signed checkpoint and receipt
 semantics need one explicit transaction contract. Local pin advancement must survive crashes.
 
-Refresh failure blocks the online show/edit path. Explicit offline viewing shows its
+Refresh failure blocks the online show/edit path. Explicit offline viewing requires a fresh biometric for each secret action and shows its
 last verified state; offline edits remain drafts until a successful online refresh and
 review. Show is read-only. Newest means the verified state observed during that request,
 not a guarantee that another writer cannot advance it immediately afterward.

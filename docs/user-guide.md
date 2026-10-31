@@ -1,7 +1,7 @@
 # Install and use Petika
 
-Planned registration will let you protect a device credential with supported Touch ID,
-Face ID or a separate secret string. **Add device** in the web UI will show a QR code
+Planned registration requires supported Touch ID/fingerprint or Face ID. Each secret
+action requires a fresh biometric approval; no secret-string/PIN fallback or cached unlock. **Add device** in the web UI will show a QR code
 for pairing, followed by approval on an existing authorized device. These controls are
 not available yet; see [the planned flow](decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
 

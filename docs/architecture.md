@@ -33,10 +33,10 @@ all keys are not required together. Account enrollment alone does not grant a sh
 Device vault keys stay local. Mandatory server participation in every decrypt remains
 a separate undecided policy.
 
-Registration offers supported biometric/Face ID or secret-string protection for a locally
-generated device credential. Web **Add device** presents an expiring QR pairing session;
+Registration requires supported biometric-only protection for a locally generated device
+credential. Every secret action requires fresh approval; strings/PINs are not fallbacks. Web **Add device** presents an expiring QR pairing session;
 scanning generates keys on the new device, followed by existing-authority fingerprint
-approval and two-key possession proofs. The QR never contains vault/private keys and is
+approval, two-key possession proofs and verified biometric-only custody. The QR never contains vault/private keys and is
 not an automatic grant. See [registration protocol direction](decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
 This UI and pairing relay are planned, not implemented.
 
@@ -45,6 +45,60 @@ browser transport, durable device custody and complete recovery are release gate
 Branches do not isolate repository readers. The [implementation sequence](research/git-vault-sync.md)
 starts with a disposable private vault and two clients. Migrate per collection with one
 explicit authority; never independently accept writes through both Git and the legacy API.
+
+## Mandatory biometric authorization boundary
+
+The target online model is account password/session plus any permitted device credential,
+with **fresh biometric approval for every secret action**. Login, Git tokens, prior
+biometric success, QR scanning and ciphertext cache possession never authorize secret
+access. This supersedes the earlier string-unlock alternative. The current runtime does
+not enforce this target; existing CLI/browser/legacy recovery paths need explicit migration.
+
+```mermaid
+sequenceDiagram
+    participant UI as Web / extension / CLI / native UI
+    participant Broker as Trusted native credential broker
+    participant Server as Petika authorization
+    participant OS as Biometric-only protected key access
+    UI->>Broker: Typed secret action + target + nonce
+    Broker->>Server: Account session + device/action context (online)
+    Server-->>Broker: Fresh bounded challenge / authorization
+    Broker->>OS: New biometric-only approval for this operation
+    alt Fresh biometric succeeds and action authorized
+        OS-->>Broker: One protected key operation
+        Note over Broker: Verify state; unwrap/decrypt transiently; execute bound action
+        Broker-->>UI: Minimum intended output, never reusable keys
+        Note over Broker: Consume action; clear transient secrets
+    else Cancelled, unavailable, failed or unsupported
+        Broker-->>UI: Denied; no fallback
+    end
+```
+
+The same boundary covers reveal, copy, autofill, TOTP, secret-bearing previews/search,
+secret edits/saves, import/export and offline viewing. Ciphertext-only sync and public
+history verification can operate without a biometric. A new user action needs a new
+approval; secret actions cannot fan out into hidden batches. Edit/display lifetimes must
+be bounded; approving an editor does not approve later copy/export or a changed save.
+
+Put key access and secret processing in a trusted native broker. Avoid reusable decrypted
+bundles or epoch keys in the UI, browser worker, extension content scripts or an unlocked
+vault cache. Configure per-use biometric-only platform key protection, fresh contexts,
+current-set invalidation and denial on biometric lockout/cancellation. Return minimum
+outputs; clear buffers and end display/clipboard lifetimes with best-effort OS limits.
+
+Server challenges bind device, action, collection/entry scope, epoch/head, nonce and expiry.
+Their exact proof format, biometric evidence and atomic consumption/publication ordering
+remain implementation gates. A device signature or ordinary WebAuthn UV bit alone does
+not establish biometric-only use. Browser access requires an enforceable native bridge
+or independently reviewed equivalent; unsupported devices cannot process secrets.
+A string or recovery kit may not become a hidden bypass: recovery must provision an
+approved biometric-protected device under an explicit reviewed ceremony.
+
+Hardware-specific policy, browser distributions, per-action custody and negative-path
+coverage must pass the [acceptance plan](testing/git-authoritative-sync.md) before enablement.
+Read the [full enforcement contract and platform sources](decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+This policy assumes trusted client/OS execution; once plaintext is revealed it can be
+copied, and compromised processes remain outside an absolute no-extraction guarantee.
 
 ## Current boundaries
 

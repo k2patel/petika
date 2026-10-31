@@ -1,5 +1,11 @@
 # Petika · पेटिका — self-hosted password manager
 
+Target policy update (2026-10-31): every secret action requires fresh biometric-only
+approval on an authorized device; account passwords, secret strings/PINs, prior approvals
+and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
+broker and verified platform support. Existing runtime/probes do not implement this policy.
+See [the enforcement design](docs/decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/brand/petika-icon-dark.png">
   <img src="assets/brand/petika-icon-light.png" alt="Petika — Indian-patterned open chest with rising Devanagari binary digits" width="140">

@@ -1,5 +1,11 @@
 # Candidate account device API
 
+Target policy update (2026-10-31): every secret action requires fresh biometric-only
+approval on an authorized device; account passwords, secret strings/PINs, prior approvals
+and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
+broker and verified platform support. Existing runtime/probes do not implement this policy.
+See [the enforcement design](decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+
 The [Git-authoritative target](decisions/0006-git-authoritative-sync.md) can reuse this experimental device admission foundation. Password plus any one authorized device key remains the planned online access policy; this API does not yet issue temporary upstream Git credentials or enforce direct Git publication authorization.
 
 Status: experimental implementation for [draft ADR 0005](decisions/0005-independent-device-keys.md).

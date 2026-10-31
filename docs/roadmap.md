@@ -112,8 +112,10 @@ parallel. Feature backlog items remain open but do not replace these security ga
   atomic publication/authorization ordering; validate against independent fixtures.
 - [ ] Add provider-neutral SSH/HTTPS and optional host API/gateway adapters, capability
   checks and password plus any one authorized device key.
-- [ ] Implement registration method selection for platform biometrics/Face ID or a
-  distinct secret string protecting generated device keys, with custody/recovery checks.
+- [ ] Implement mandatory fresh biometric approval for every secret action through a trusted
+  native broker; no string/PIN fallback, reusable unlocked session or unguarded offline path.
+  Validate per-use key protection, one-use action binding, browser/native constraints and
+  biometric invalidation/recovery before enabling device registration.
 - [ ] Add web QR pairing: expiring session, origin/account binding, new-device key
   generation, existing-authority fingerprint confirmation, two-key possession proof,
   single-use publication and authorized per-vault package delivery. Scanning alone grants

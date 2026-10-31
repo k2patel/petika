@@ -19,8 +19,8 @@ rotation for future exclusion; historical copies remain accessible. See
 
 ## Registration UX direction
 
-Register each device credential with a supported local method: Touch ID/fingerprint,
-Face ID or a distinct secret string/passphrase. These protect generated cryptographic
+Register each device credential with biometric-only local protection: Touch ID/fingerprint
+or Face ID. Every secret action requires fresh approval; a string/PIN cannot replace it. These protect generated cryptographic
 keys; biometric data is never encryption material. The web UI will offer QR-based
 pairing followed by existing-authority confirmation and encryption/signing possession
 checks. Scanning alone grants no access. See the [QR flow and custody rules](0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).

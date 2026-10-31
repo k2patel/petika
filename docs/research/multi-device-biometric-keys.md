@@ -1,5 +1,11 @@
 # Multiple device keys and biometric vault unlock
 
+Target policy update (2026-10-31): every secret action requires fresh biometric-only
+approval on an authorized device; account passwords, secret strings/PINs, prior approvals
+and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
+broker and verified platform support. Existing runtime/probes do not implement this policy.
+See [the enforcement design](../decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+
 Research date: 2026-10-18. Repository baseline: `9fc3520`.
 Status: researched proposal with isolated synthetic local-unlock probes (2026-10-31);
 no protocol approval or production device-key implementation.
