@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-31",
+  "scope": "in-process synthetic software model for draft ADR 0005",
+  "production_format_or_runtime_changes": false,
+  "rust": "1.90.0",
+  "platform": "macOS arm64",
+  "profiles": ["HPKE X25519 Standard", "HPKE experimental X-Wing draft-06"],
+  "checks": [
+    "Two distinct encryption/signing identities under the same immutable account",
+    "Both devices open one encrypted synthetic collection",
+    "Retained device opens fresh epoch after removal; retired device fails",
+    "Retired private key fails new recipient package even bypassing roster policy checks",
+    "Historical ciphertext and packages remain readable at the old pin",
+    "Signing and both encryption keys require proof of possession",
+    "Wrong fingerprints, substituted keys, forged proofs and signatures rejected",
+    "Expired/replayed/concurrent enrollment and stale revocation rejected without state changes",
+    "Revocation invalidates a pending enrollment",
+    "Retained separate authority can enroll after every ordinary device is removed",
+    "Rollback, conflicting parent, forged roster and wrong collection/epoch rejected",
+    "Ciphertext, wrapper, signature and delivery-profile tampering rejected",
+    "Existing independent X-Wing adapter vectors pass"
+  ],
+  "hardware": "not used by this model; separate Touch ID evidence exists",
+  "recovery_limit": "Re-enrollment via retained authority is tested; lost collection-secret recovery is not implemented by this model",
+  "remaining": [
+    "Independent protocol review and frozen canonical wire formats",
+    "Production account/device APIs, group permissions and atomic journal/CAS integration",
+    "Actual vault-format and hardware-wrapper integration",
+    "Versioned migration and old-client cutover",
+    "Recovery custody and complete device lifecycle validation"
+  ]
+}

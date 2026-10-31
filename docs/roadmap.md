@@ -236,6 +236,10 @@ the existing single-response export and scheduled push formats retain their limi
    Isolated [Apple and browser local-unlock probes](../experiments/biometric-unlock/README.md)
    now exercise synthetic wrappers; actual device lifecycle and multi-device protocol
    work remain open.
+   [Draft ADR 0005](decisions/0005-independent-device-keys.md) and an isolated software
+   model now cover proposed signed device-roster enrollment and fresh-key exclusion in
+   both delivery profiles. Wire-format review, production integration and migration
+   remain open; these tests do not add multiple identities to the account API.
    Same-account authority-identity replacement is now implemented experimentally with
    the retained old signing key, a newly enrolled key, two signatures and independent
    fingerprint confirmation. CLI/API and full-server/client-kit checks cover replacement

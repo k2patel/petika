@@ -166,10 +166,14 @@ Software wrapper and mock ceremony tests are separate from actual hardware evide
 see [recorded results](../testing/biometric-unlock-2026-10-31.json). These probes do not
 enroll Petika identities or complete the device-lifecycle criteria below.
 
-Research establishes feasibility, not production readiness. The next bounded work is
-an isolated Apple-device and browser-PRF capability spike with synthetic keys only,
-followed by Android/Windows validation when suitable test hardware is available.
-Do not change production formats or enroll real vault keys during the spike.
+The next step now has a [draft protocol and migration ADR](../decisions/0005-independent-device-keys.md)
+and an [executable software model](../../experiments/device-keys/README.md). The model
+checks two independent same-account keys, encryption/signing possession, signed roster
+transitions and exclusion from a fresh synthetic epoch in both delivery profiles.
+It is separate from production vault formats and the hardware wrapping probes.
+Next: review/freeze enrollment and package encodings with independent fixtures, then
+implement the gated client/server integration and migration. Platform lifecycle tests
+and Android/Windows validation remain open. No real vault enrollment during the spikes.
 
 - [ ] Record OS/browser/app/authenticator versions, actual hardware security level,
   key export behavior, PRF support, credential sync properties and fallback behavior.
@@ -182,8 +186,9 @@ Do not change production formats or enroll real vault keys during the spike.
   enroll/revoke, restored old state and loss of every ordinary device.
 - [ ] Confirm no PRF output, key or plaintext appears in requests, logs, diagnostics
   or backups outside its intended encrypted wrapper; inspect unlocked-memory limits.
-- [ ] Draft a separate protocol ADR and migration specification, including authority
-  and group-sharing rules, authenticated formats, rollback limits and recovery.
+- [x] Draft a separate protocol ADR and migration specification, including authority
+  and group-sharing rules, authenticated-format requirements, rollback limits and recovery
+  ([draft 0005](../decisions/0005-independent-device-keys.md)); final byte encodings remain open.
 - [ ] Obtain independent protocol review before claiming per-device cryptographic
   revocation or promoting the design beyond experimental status.
 

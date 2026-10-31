@@ -46,8 +46,15 @@ jobs:
       - name: Apple synthetic local-wrapper checks
         if: runner.os == 'macOS'
         run: |
-          swiftc experiments/biometric-unlock/apple.swift -o "$RUNNER_TEMP/petika-apple-probe"
-          "$RUNNER_TEMP/petika-apple-probe" --software-test
+          swift build --package-path experiments/biometric-unlock --scratch-path "$RUNNER_TEMP/petika-swift"
+          "$RUNNER_TEMP/petika-swift/debug/petika-apple-probe" --software-test
+      - name: Independent device-key software model
+        if: runner.os == 'Linux'
+        run: |
+          cargo fmt --manifest-path experiments/device-keys/Cargo.toml -- --check
+          cargo test --manifest-path experiments/device-keys/Cargo.toml --locked
+          cargo run --manifest-path experiments/device-keys/Cargo.toml --locked
+          cargo clippy --manifest-path experiments/device-keys/Cargo.toml --all-targets --locked -- -D warnings
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test

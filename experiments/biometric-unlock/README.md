@@ -17,6 +17,10 @@ swiftc experiments/biometric-unlock/apple.swift -o /tmp/petika-apple-probe
 /tmp/petika-apple-probe --hardware-roundtrip
 ```
 
+The directory also contains a Swift package for CodeQL autobuild and CI:
+`swift build --package-path experiments/biometric-unlock`. Both build paths compile
+the same probe, with no third-party Swift dependencies.
+
 The default command checks capabilities without authentication or creating keys.
 The interactive command seals random bytes to an enclave P-256 public key using
 ephemeral ECDH, HKDF-SHA256 and AES-GCM. Recipient and ephemeral public keys bind
