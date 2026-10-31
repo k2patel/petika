@@ -50,7 +50,10 @@ transport key and remove it on completion/expiry via host management APIs. This 
 a durable cleanup/reconciliation ledger; ordinary deploy keys do not enforce expiry
 themselves. Strict expiry requires a host-validated certificate or lease-checking gateway.
 Private transport keys stay on devices; secret access still requires per-action biometrics.
-This adapter is planned, not part of the current broker implementation.
+The [cleanup engine](git-key-lease-cleanup.md) now provides a durable lease inventory,
+scoped revocation, restart retries and late-registration reconciliation under the
+experimental device feature. Host adapters and scheduler/account integration are still
+pending; no live key issuance/deletion is enabled.
 
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
 browser transport, durable device custody and complete recovery are release gates.

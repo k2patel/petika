@@ -76,6 +76,7 @@ jobs:
       - name: Experimental authenticated device API
         run: |
           cargo test --locked -p petika-server --features experimental-device-keys --lib accounts::device_keys
+          cargo test --locked -p petika-server --features experimental-device-keys --lib git_key_leases
           cargo test --locked -p petika-server --features experimental-device-keys --bin petika-server web::device_keys
           cargo clippy --locked -p petika-server --features experimental-entry-format,experimental-device-keys --all-targets -- -D warnings
       - name: Experimental entry history transport

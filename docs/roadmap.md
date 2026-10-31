@@ -14,6 +14,10 @@ slice (G01/G02, K01, A01), then QR enrollment/browser integration, hosted transp
 removal/rotation/recovery and explicit migration. Existing crypto/API experiments are
 reusable foundations; they do not complete these packages.
 
+A gated [temporary Git-key cleanup engine](git-key-lease-cleanup.md) now covers durable
+lease intent, managed-key inventory, scoped cleanup, retry/restart and late registrations.
+Real host registration/adapters, scheduler and account-event wiring remain T01 work.
+
 ## Implemented
 
 - [x] Rust core, offline CLI password management, standard and experimental hybrid encryption.

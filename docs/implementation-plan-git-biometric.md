@@ -113,3 +113,9 @@ reconciliation, restart-safe cleanup and orphan auditing. Test cleanup-worker fa
 explicitly. Plain API-deleted keys have cleanup-dependent lifetime; strict expiration
 requires remote certificate enforcement or a lease-checking gateway. See
 [credential architecture](decisions/0006-git-authoritative-sync.md#password-plus-any-one-authorized-key).
+
+The native [lease cleanup engine](git-key-lease-cleanup.md) is now an implemented T01
+subcomponent: durable ownership intent, session/device/all cleanup, all matching copies,
+restart retry and late-registration scans. Nine deterministic host-interface tests pass.
+T01 remains open: real host adapters, issuance, scheduler, logout/removal atomic wiring,
+rate limiting and user-visible status/auditing have not been implemented.

@@ -9,6 +9,8 @@ pub mod entry_journal;
 pub mod entry_replication;
 #[cfg(feature = "experimental-entry-format")]
 pub mod entry_transaction;
+#[cfg(feature = "experimental-device-keys")]
+pub mod git_key_leases;
 pub mod maintenance_gate;
 use petika_core::{StoreFile, validate_envelope};
 use serde::{Deserialize, Serialize};
