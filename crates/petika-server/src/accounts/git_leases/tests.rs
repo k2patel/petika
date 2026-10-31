@@ -57,6 +57,20 @@ fn run(
 #[test]
 fn admitted_device_and_ssh_proof_register_once_status_and_completion_cleanup_work() {
     let (mut f, device, current, mut host) = fixture();
+    let context = run(
+        &mut f,
+        GitLeaseOperation::Context,
+        Value::Null,
+        &mut host,
+        100,
+    )
+    .unwrap();
+    assert_eq!(context["user_id"], f.bootstrap.legacy_identity.user_id);
+    assert_eq!(
+        context["deployment_id"],
+        f.bootstrap.legacy_identity.deployment_id
+    );
+    assert!(valid_id(context["session_id"].as_str().unwrap()));
     let input = request(&device);
     let response = run(
         &mut f,
@@ -71,6 +85,52 @@ fn admitted_device_and_ssh_proof_register_once_status_and_completion_cleanup_wor
     assert_eq!(
         run(&mut f, GitLeaseOperation::Challenge, input, &mut host, 101).unwrap(),
         response
+    );
+    let found = run(
+        &mut f,
+        GitLeaseOperation::LookupOperation(challenge.operation_id.clone()),
+        Value::Null,
+        &mut host,
+        101,
+    )
+    .unwrap();
+    assert_eq!(found["lease_id"], challenge.lease_id);
+    assert_eq!(found["state"], "pending_registration");
+    assert_eq!(
+        found["challenge"],
+        serde_json::to_value(&challenge).unwrap()
+    );
+    // Public metadata dispatcher must work without loading host credentials.
+    assert_eq!(
+        f.accounts
+            .git_lease_operation(&f.token, GitLeaseOperation::Context, &[])
+            .unwrap(),
+        context
+    );
+    assert_eq!(
+        f.accounts
+            .git_lease_operation(
+                &f.token,
+                GitLeaseOperation::LookupOperation(challenge.operation_id.clone()),
+                &[]
+            )
+            .unwrap(),
+        found
+    );
+    assert_eq!(
+        f.accounts
+            .git_lease_operation("invalid synthetic token", GitLeaseOperation::Context, &[]),
+        Err(KeyError::Unauthenticated)
+    );
+    assert_eq!(
+        run(
+            &mut f,
+            GitLeaseOperation::LookupOperation("invalid".into()),
+            Value::Null,
+            &mut host,
+            101
+        ),
+        Err(KeyError::Invalid)
     );
     let proof = device
         .authorize_git_lease(
@@ -233,7 +293,17 @@ fn proof_cannot_move_to_another_session_or_a_changed_roster() {
     assert_eq!(
         run(
             &mut f,
-            GitLeaseOperation::Status(challenge.lease_id),
+            GitLeaseOperation::Status(challenge.lease_id.clone()),
+            Value::Null,
+            &mut host,
+            101
+        ),
+        Err(KeyError::NotFound)
+    );
+    assert_eq!(
+        run(
+            &mut f,
+            GitLeaseOperation::LookupOperation(challenge.operation_id.clone()),
             Value::Null,
             &mut host,
             101

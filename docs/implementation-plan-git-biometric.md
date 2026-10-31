@@ -133,3 +133,11 @@ repository policy and server session binding. It persists intent before the only
 create attempt, reconciles unknown outcomes and queues completion cleanup. Independent
 Python fixtures and fake-host tests cover the candidate protocol; native SSH agent/custody,
 real-host trials and biometric product integration remain open.
+
+Native client update: a gated [lease coordinator](native-git-lease-client.md) now persists
+operation intent and encrypted private-key drafts through an injected custody interface,
+compares all challenge bindings, reconciles lost replies through own-session operation
+lookup and records transfer attempts before use. A new isolated system SSH agent accepts
+the temporary key through a socket and is killed after success/error; generated-data
+tests verify signatures, local expiry and cleanup. No production custodian or pinned-host
+Git runner is supplied. B02/B03, G01/G02 and T01 remain open.

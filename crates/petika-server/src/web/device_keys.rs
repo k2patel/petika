@@ -31,6 +31,9 @@ pub fn device_key_route(mut request: Request, accounts: &mut Accounts, enabled: 
     }
     let operation = match (request.url(), request.method().as_str()) {
         ("/v1/device-keys", "GET") => DeviceKeyOperation::Own,
+        ("/v1/device-keys/git-leases/context", "GET") => {
+            DeviceKeyOperation::GitLease(GitLeaseOperation::Context)
+        }
         ("/v1/device-keys/git-leases/challenges", "POST") => {
             DeviceKeyOperation::GitLease(GitLeaseOperation::Challenge)
         }
@@ -39,6 +42,13 @@ pub fn device_key_route(mut request: Request, accounts: &mut Accounts, enabled: 
         }
         ("/v1/device-keys/git-leases" | "/v1/device-keys/git-leases/challenges", _) => {
             return fail(request, KeyError::MethodNotAllowed);
+        }
+        (path, "GET") if path.starts_with("/v1/device-keys/git-leases/operations/") => {
+            DeviceKeyOperation::GitLease(GitLeaseOperation::LookupOperation(
+                path.strip_prefix("/v1/device-keys/git-leases/operations/")
+                    .unwrap()
+                    .into(),
+            ))
         }
         (path, "GET") if path.starts_with("/v1/device-keys/git-leases/") => {
             DeviceKeyOperation::GitLease(GitLeaseOperation::Status(

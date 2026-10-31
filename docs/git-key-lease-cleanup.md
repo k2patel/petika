@@ -171,3 +171,8 @@ and connects explicit per-lease completion to cleanup. Wrong permissions on an o
 authorization cause revocation. Backend host policy adds `owner_user_id`, `allow_write`
 and `max_lease_seconds`; absent owner assignment remains cleanup-only. Native SSH use
 and actual-host validation remain open; no live keys were changed.
+
+The subsequent [native client coordinator](native-git-lease-client.md) durably records
+transfer/cleanup intent, reconciles its own operation ID after lost replies and retains
+an encrypted private-key draft until removal is observed. Its isolated-agent seam is
+tested with generated data; production custody and pinned-host Git execution remain open.

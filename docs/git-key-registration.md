@@ -2,7 +2,9 @@
 
 Date: 2026-10-31. Implemented behind `experimental-device-keys`, the device API runtime
 gate and `PETIKA_EXPERIMENTAL_GIT_KEY_LEASES=1`. No production deployment, real provider
-key mutation, native SSH-agent integration or product biometric-enforcement claim.
+key mutation or product biometric-enforcement claim. A subsequent
+[native coordinator](native-git-lease-client.md) adds a tested isolated-agent seam; product
+custody and Git execution remain open.
 Extends [cleanup wiring](git-key-lease-cleanup.md) and
 [ADR 0006](decisions/0006-git-authoritative-sync.md). Independent review remains required.
 
@@ -26,7 +28,8 @@ groups; the owner mapping does not filter Git objects. Shared repository authori
 Use HTTPS GitHub/Gitea key APIs with the existing protected management credential.
 The new public SSH key is `ssh-ed25519`; its independent private seed stays on the client.
 Do not reuse the device/authority signing key as an SSH credential. Client ephemeral SSH
-custody, native agent/export format and Git execution are later integration work.
+custody and Git execution remain integration work; the native coordinator now supplies
+an isolated-agent protocol without a private-key file.
 
 ## API and flow
 
@@ -36,9 +39,11 @@ bounded to 16 KiB and typed objects reject duplicate/unknown fields.
 
 | Method / path | Contract |
 | --- | --- |
+| `GET /v1/device-keys/git-leases/context` | Authenticated non-bearer session ID and user/deployment context; no management configuration required |
+| `GET /v1/device-keys/git-leases/operations/<operation_id>` | Own-session lookup with exact original public challenge, for lost challenge/registration replies |
 | `POST /v1/device-keys/git-leases/challenges` | `{current_password, operation_id, device_id, repository, ssh_public_key, read_only, ttl}` → `{challenge}` |
 | `POST /v1/device-keys/git-leases` | `{current_password, proof}` → verified active lease/public SSH descriptor |
-| `GET /v1/device-keys/git-leases/<lease_id>` | Own-session status, operation ID, expiry and error; no grant or private key |
+| `GET /v1/device-keys/git-leases/<lease_id>` | Own-session status, operation ID, exact public challenge, expiry and error; no grant or private key |
 | `POST /v1/device-keys/git-leases/<lease_id>/complete` | Strict `{}` → durable cleanup intent for that one lease |
 
 `repository` is the configured `{provider, management_origin, repository}` descriptor.
@@ -143,7 +148,8 @@ GitHub/Gitea HTTP servers exercise create/list/delete and a create-side-effect f
 by a 503 response. Actual hosted permissions, SSH use and platform key custody remain
 untested. Existing account, identity, entry and cleanup regressions remain required.
 
-Next: native SSH credential custody/agent integration, hosted disposable-repository trials,
+Next: protected platform custody and pinned-host Git execution beyond the
+[native lease coordinator](native-git-lease-client.md), hosted disposable-repository trials,
 status/QR UI and cryptographic device-removal/rotation. Operator assignment changes and
 feature shutdown must explicitly drain/revoke existing leases; stopping cleanup does not
 make remote deploy keys expire. No production flag was enabled by this implementation.

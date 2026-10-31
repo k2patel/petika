@@ -18,7 +18,9 @@ A gated [temporary Git-key cleanup engine](git-key-lease-cleanup.md) now covers 
 lease intent, managed-key inventory, scoped cleanup, retry/restart and late registrations.
 GitHub/Gitea list/delete adapters, the worker and durable session/account hooks are now
 wired and tested against local fake hosts. [Authorized registration](git-key-registration.md), own-session status and completion
-cleanup are now wired with device/SSH proof checks. Native SSH custody, cryptographic
+cleanup are now wired with device/SSH proof checks. A [native coordinator](native-git-lease-client.md)
+adds encrypted draft/recovery contracts, bounded HTTP and an isolated-agent seam, tested
+with generated data. Protected platform custody, pinned-host Git execution, cryptographic
 device removal, real-host validation and a status UI remain T01 work.
 
 ## Implemented

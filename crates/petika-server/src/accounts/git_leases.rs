@@ -10,9 +10,11 @@ use zeroize::Zeroizing;
 type Result<T> = std::result::Result<T, KeyError>;
 
 pub enum GitLeaseOperation {
+    Context,
     Challenge,
     Register,
     Status(String),
+    LookupOperation(String),
     Complete(String),
 }
 fn password<'de, D: serde::Deserializer<'de>>(
@@ -61,7 +63,10 @@ impl Accounts {
         }
         if matches!(
             &operation,
-            GitLeaseOperation::Status(_) | GitLeaseOperation::Complete(_)
+            GitLeaseOperation::Context
+                | GitLeaseOperation::Status(_)
+                | GitLeaseOperation::LookupOperation(_)
+                | GitLeaseOperation::Complete(_)
         ) {
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -111,13 +116,25 @@ impl Accounts {
             .parent()
             .unwrap_or(std::path::Path::new("."))
             .to_path_buf();
+        if matches!(operation, GitLeaseOperation::Context) {
+            return Ok(
+                json!({"deployment_id":db.deployment_id,"user_id":user.id,"session_id":session_id}),
+            );
+        }
         match &operation {
-            GitLeaseOperation::Status(id) | GitLeaseOperation::Complete(id) if !valid_id(id) => {
+            GitLeaseOperation::Status(id)
+            | GitLeaseOperation::LookupOperation(id)
+            | GitLeaseOperation::Complete(id)
+                if !valid_id(id) =>
+            {
                 return Err(KeyError::Invalid);
             }
             _ => {}
         }
-        if let GitLeaseOperation::Status(id) | GitLeaseOperation::Complete(id) = &operation {
+        if let GitLeaseOperation::Status(id)
+        | GitLeaseOperation::LookupOperation(id)
+        | GitLeaseOperation::Complete(id) = &operation
+        {
             let store = LeaseStore::lock(data.join("git-key-leases.json"))
                 .map_err(|_| KeyError::Unavailable)?;
             let lease = store
@@ -125,8 +142,13 @@ impl Accounts {
                 .map_err(|_| KeyError::Unavailable)?
                 .into_iter()
                 .find(|l| {
-                    l.id == *id
-                        && l.session == session_id
+                    (if matches!(operation, GitLeaseOperation::LookupOperation(_)) {
+                        l.authorization
+                            .as_ref()
+                            .is_some_and(|a| a.operation_id == *id)
+                    } else {
+                        l.id == *id
+                    }) && l.session == session_id
                         && l.authorization.as_ref().is_some_and(|a| {
                             a.user_id == user.id && a.deployment_id == db.deployment_id
                         })
@@ -141,7 +163,8 @@ impl Accounts {
             }
             return Ok(
                 json!({"lease_id":lease.id,"operation_id":lease.authorization.as_ref().map(|a|&a.operation_id),
-                "state":lease.state,"expires_at":lease.expires_at,"last_error":lease.last_error}),
+                "state":lease.state,"expires_at":lease.expires_at,"last_error":lease.last_error,
+                "challenge":lease.authorization}),
             );
         }
         // Keep account and signed-roster locks through admission/host creation. This
@@ -269,7 +292,10 @@ impl Accounts {
                     "expires_at":result.expires_at,"read_only":auth.read_only,"ssh_public_key":auth.openssh_public_key().map_err(|_|KeyError::Invalid)?}),
                 )
             }
-            GitLeaseOperation::Status(_) | GitLeaseOperation::Complete(_) => unreachable!(),
+            GitLeaseOperation::Context
+            | GitLeaseOperation::Status(_)
+            | GitLeaseOperation::LookupOperation(_)
+            | GitLeaseOperation::Complete(_) => unreachable!(),
         }
     }
 }

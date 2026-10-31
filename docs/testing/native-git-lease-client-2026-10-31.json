@@ -1,0 +1,45 @@
+{
+  "date": "2026-10-31",
+  "scope": "default-off native lease coordinator, own-session recovery APIs and isolated SSH-agent seam",
+  "production_enabled": false,
+  "live_provider_keys_modified": false,
+  "real_account_or_vault_used": false,
+  "validation": {
+    "platform": "macOS arm64",
+    "rust": "1.90.0",
+    "native_library_tests": 9,
+    "combined_server_library_tests": 62,
+    "server_http_route_tests": 4,
+    "account_integration_tests": 7,
+    "entry_history_integration_tests": 7,
+    "sharing_integration_tests": 3,
+    "focused_account_tests_after_metadata_dispatch_assertions": 4,
+    "default_and_combined_desktop_server_clippy": "passed with warnings denied",
+    "system_ssh_agent": "generated Ed25519 signature independently verified, lifetime expiry observed, socket removed after successful and failed jobs",
+    "native_http": "loopback fake services only; no live management credentials"
+  },
+  "coverage": [
+    "Fresh operation/key and exact request retained in an authenticated encrypted draft before HTTP",
+    "All retained account/session/roster/device/remote/key/permission/TTL bindings checked before proof generation",
+    "Lost challenge response recovered by own-session operation ID without another challenge request",
+    "Lost successful registration response recovered without another registration call",
+    "Unknown registering state never blindly resubmitted; already active phase cannot regress to pending issuance",
+    "Durable transfer marker prevents automatic replay after reopen",
+    "Durable cleanup intent and encrypted seed retained until remote removed observed",
+    "Custody failure poisons in-memory operation; altered ciphertext rejected on reopen",
+    "Bounded fixed-origin HTTP, no redirects or proxies, CSRF header, public-only key material, ephemeral password callbacks",
+    "Metadata dispatcher works without host configuration and rejects invalid session/operation IDs; cross-session lookup denied",
+    "One private short-lived system SSH agent receives the key through a socket, with no private key file",
+    "System-agent Ed25519 signing, key expiry, teardown and cleanup after failed transfer callback"
+  ],
+  "limits": [
+    "No production DraftCustody implementation or persistent real DeviceIdentity custody; software wrapping key exists only in tests",
+    "Signatures and Rust custody traits do not prove biometric-only execution or a trusted native IPC boundary",
+    "Transport callback is trusted and must enforce host pins and bounded ciphertext-only Git execution; no production Git runner supplied",
+    "No actual SSH login, Git fetch/push, host-key verification or hosted-permission trial",
+    "No general rollback-resistant journal or secure erasure of old encrypted backups",
+    "Parent crash may leave an isolated agent process; its key has a local lifetime constraint",
+    "Remote ordinary deploy-key expiry still depends on cleanup; strict remote TTL needs certificates or a gateway",
+    "No browser/QR/status UI, device removal/rotation, shared-vault contract or Git-authority migration completed"
+  ]
+}

@@ -1,7 +1,10 @@
-//! Future Chromium/Firefox native messaging and OS authentication integration.
-//! No native messaging host or biometric authentication is implemented yet.
+//! Native integration candidates. Product native messaging and biometric custody
+//! are not implemented yet; experimental transport coordination requires a custodian.
 
-/// Reports overall project status; this crate does not implement native platform support.
+#[cfg(all(feature = "experimental-git-client", not(target_arch = "wasm32")))]
+pub mod git_lease;
+
+/// Reports overall project status; product platform authentication remains pending.
 pub fn status() -> &'static str {
     petika_core::STATUS
 }

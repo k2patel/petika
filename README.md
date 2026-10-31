@@ -207,7 +207,7 @@ CI checks Rust on Linux, macOS, and Windows, plus web workflows and the distrole
 | `crates/petika-cli` | Native CLI and managed-account transport |
 | `crates/petika-server` | API, accounts, authorization, and Git mirroring |
 | `crates/petika-web` | Rust encryption compiled to WebAssembly |
-| `crates/petika-desktop` | Desktop integration scaffold |
+| `crates/petika-desktop` | Desktop scaffold and gated [native Git lease coordinator](docs/native-git-lease-client.md) |
 | `clients/web` | Web UI, shared CSS, and browser worker |
 | `deploy` | Kubernetes and Podman manifests |
 | `assets/brand` | Light/dark branding assets |

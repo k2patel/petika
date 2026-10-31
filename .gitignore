@@ -21,6 +21,9 @@ session.json
 session.json.lock
 *.session.json
 *.session.json.lock
+# Encrypted native lease drafts contain temporary SSH private material.
+*.git-lease-draft
+*.git-lease-draft.lock
 
 /clients/web/wasm/*
 

@@ -55,7 +55,10 @@ scoped revocation, restart retries and late-registration reconciliation under th
 experimental device feature. GitHub/Gitea list/delete adapters and an opt-in bounded worker now drain durable account
 session cleanup events. The [registration API](git-key-registration.md) now verifies password, admitted device
 and independent SSH-key proofs, persists intent before creation and supports completion
-cleanup. Native SSH custody, cryptographic device-removal admission and actual-host
+cleanup. A gated [native coordinator](native-git-lease-client.md) now retains encrypted
+lease drafts through an injected custody boundary, reconciles own-session operation
+lookups and supplies one isolated short-lived SSH agent per transport job. Actual platform
+custody, pinned-host Git execution, cryptographic device-removal admission and actual-host
 validation remain pending; no deployment or live key mutation occurred in this milestone.
 
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
@@ -131,7 +134,7 @@ and client integration remain pending. See [evidence](testing/device-broker-2026
 | `petika` | Rust CLI | Offline password management, GPG import, managed login, live API reads/writes with passphrase or recipient unlock, encrypted collection pull/push |
 | `petika-server` | Self-hosted API and web hosting | Accounts, permissions, provisioning, revision checks, snapshot journals, Git mirrors |
 | `petika-web` and `clients/web` | Browser password manager | Rust/WASM encryption worker and JavaScript/CSS interface |
-| `petika-desktop` | Native messaging and platform authentication | Library placeholder |
+| `petika-desktop` | Native messaging and platform authentication | Gated lease coordinator/isolated SSH-agent seam; production platform custody and IPC pending |
 | Chromium extension | Password generation, approved-site autofill and TOTP | Unsigned preview; local WASM crypto, API access |
 | Firefox/mobile apps | Platform autofill and biometric unlock | Not implemented |
 
