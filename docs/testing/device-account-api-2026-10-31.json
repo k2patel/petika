@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-31",
+  "scope": "experimental own-account device-authority bootstrap, add-only roster publication, history and receipts",
+  "feature": "petika-server/experimental-device-keys plus PETIKA_EXPERIMENTAL_DEVICE_KEYS=1",
+  "default_enabled": false,
+  "deployed": false,
+  "validation": {
+    "platform": "macOS arm64",
+    "rust": "1.90.0",
+    "combined_core_library_tests_passed": 31,
+    "existing_device_format_integration_tests_passed": 8,
+    "combined_server_library_tests_passed": 30,
+    "new_account_tests_included": 7,
+    "new_bootstrap_tests_included": 2,
+    "new_history_pagination_tests_included": 1,
+    "experimental_real_loopback_http_tests_passed": 2,
+    "default_feature_gate_http_test_passed": 1,
+    "independent_python_device_enrollment_and_bootstrap_vectors": "passed",
+    "default_and_combined_core_server_clippy": "passed with warnings denied",
+    "combined_core_wasm_compilation": "passed; native journal excluded"
+  },
+  "coverage": [
+    "Independent legacy-signature bootstrap transcript and empty initial roster binding",
+    "Current legacy identity/revision, fingerprint confirmation, password and account scope checks",
+    "Real HTTP cookie and approved CLI sessions, static bearer rejection, CSRF, content type, methods, body limits and no-store responses",
+    "Enrollment proof through authenticated publication, restart, history verification and historical exact retry",
+    "Conflicting operation IDs, stale candidates, forged signatures and attempted removals rejected",
+    "Both compile-time and runtime gates required",
+    "Legacy identity replacement cannot overwrite an already committed authority",
+    "Expired/disabled sessions and shared account/key rate limits rechecked",
+    "Interrupted bootstrap resumes only an identical empty journal",
+    "Corrupt or missing committed state never triggers reinitialization",
+    "Bounded adjacent history paging requires an existing digest",
+    "Owner-only Unix files and no persisted password or encrypted identity bundle in device metadata"
+  ],
+  "limits": [
+    "Synthetic accounts only; no real account, vault or signing credential used",
+    "Loopback HTTP testing is not a hosted HTTPS deployment test",
+    "Existing legacy identity replacement policy is unchanged; bootstrap consistency does not replace independent trust confirmation",
+    "Server trusts the authority client to perform the possession/confirmation ceremony",
+    "No device-bound sessions, removal/rotation integration, collection delivery or vault migration",
+    "No durable client authority/device custody, draft UI or biometric product integration",
+    "Device metadata is not integrated into supported export/restore, replication or recovery kits",
+    "Independent newer client pins are needed to detect coherent server rollback",
+    "No physical power-loss certification or journal compaction"
+  ]
+}

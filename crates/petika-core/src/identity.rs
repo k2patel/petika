@@ -3,6 +3,10 @@
 //! This module supplies the local foundation, not enrollment, group-key delivery, or
 //! a trust directory. An enrollment self-signature does not verify a person's identity.
 mod contacts;
+#[cfg(feature = "experimental-device-keys")]
+mod device_authority;
+#[cfg(feature = "experimental-device-keys")]
+pub use device_authority::{DeviceAuthorityBootstrap, MAX_DEVICE_BOOTSTRAP_BYTES};
 #[cfg(feature = "experimental-entry-format")]
 mod entry_handoff;
 #[cfg(feature = "experimental-entry-format")]

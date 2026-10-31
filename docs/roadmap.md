@@ -245,8 +245,11 @@ the existing single-response export and scheduled push formats retain their limi
    fixtures. The [candidate enrollment ceremony](device-enrollment-format.md) now verifies
    both encryption keys and signing possession before preparing a signed successor;
    a [native publication journal](device-roster-journal.md) now persists signed updates
-   and exact retry receipts with CAS and interruption checks. Authenticated account
-   transport, session/rotation integration and durable client drafts remain open.
+   and exact retry receipts with CAS and interruption checks. The separately gated
+   [account device API](device-account-api.md) now supports legacy-key-authorized
+   bootstrap, authenticated additions, adjacent history and exact receipt reconciliation.
+   Durable client custody/drafts, device-bound sessions, removal/rotation, device-package
+   delivery and supported backup/restore integration remain open; no vault cutover yet.
    Same-account authority-identity replacement is now implemented experimentally with
    the retained old signing key, a newly enrolled key, two signatures and independent
    fingerprint confirmation. CLI/API and full-server/client-kit checks cover replacement

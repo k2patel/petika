@@ -12,6 +12,7 @@ publish = false
 [features]
 default = []
 experimental-entry-format = ["petika-core/experimental-entry-format"]
+experimental-device-keys = ["petika-core/experimental-device-keys"]
 
 [dependencies]
 chacha20poly1305.workspace = true

@@ -1,6 +1,54 @@
 use super::*;
 use std::fs;
 
+#[test]
+fn history_pages_require_an_existing_pin_and_keep_adjacent_order() {
+    let f = Fixture::new();
+    let journal = f.lock();
+    journal.initialize(&f.baseline).unwrap();
+    let baseline_digest = f.baseline.roster().digest().unwrap();
+    let mut current = f.baseline;
+    for index in 1..=17 {
+        let device = DeviceIdentity::generate(&"a".repeat(64), &"b".repeat(64)).unwrap();
+        let mut devices = current.roster().devices.clone();
+        devices.push(device.public_record().unwrap());
+        devices.sort_by(|a, b| a.device_id.cmp(&b.device_id));
+        let candidate = f
+            .authority
+            .sign_roster(
+                current.roster().generation + 1,
+                current.roster().digest().unwrap(),
+                devices,
+                vec![],
+            )
+            .unwrap();
+        journal
+            .publish(
+                &format!("{index:064x}"),
+                &candidate.parent_digest,
+                &candidate,
+            )
+            .unwrap();
+        current.accept(candidate).unwrap();
+    }
+    let first = journal.successors(&baseline_digest).unwrap();
+    assert_eq!(first.len(), 16);
+    assert_eq!(first[0].parent_digest, baseline_digest);
+    for pair in first.windows(2) {
+        assert_eq!(pair[1].parent_digest, pair[0].digest().unwrap());
+    }
+    let last = journal.successors(&first[15].digest().unwrap()).unwrap();
+    assert_eq!(last, vec![current.roster().clone()]);
+    assert!(
+        journal
+            .successors(&last[0].digest().unwrap())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(journal.successors(&"f".repeat(64)).is_err());
+    assert!(journal.successors("bad pin").is_err());
+}
+
 struct Fixture {
     directory: tempfile::TempDir,
     authority: DeviceAuthorityKey,

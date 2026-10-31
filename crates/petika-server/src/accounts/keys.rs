@@ -197,7 +197,7 @@ impl Accounts {
             .ok_or(KeyError::Unauthenticated)?;
         Ok((file, db, user))
     }
-    fn reauthenticate_key(&mut self, user: &User, password: &str) -> Result<()> {
+    pub(super) fn reauthenticate_key(&mut self, user: &User, password: &str) -> Result<()> {
         self.reserve_reauthentication()?;
         if !(12..=1024).contains(&password.chars().count()) {
             return Err(KeyError::Invalid);

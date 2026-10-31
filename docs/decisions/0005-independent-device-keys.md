@@ -46,8 +46,11 @@ the exact candidate bytes, limits and adjacent add/remove rules. The
 [candidate enrollment format](../device-enrollment-format.md) adds independently checked
 request/challenge/proof bytes and client-side encryption/signing possession verification.
 A [native reference journal](../device-roster-journal.md) now provides bounded durable
-publication and retry receipts. Collection-package encodings, authenticated integration
-and independent review remain open.
+publication and retry receipts. The separately gated [account device API](../device-account-api.md)
+now connects own-account session/reauthentication checks to legacy-key-authorized
+bootstrap, additions, receipt lookup and adjacent history. Removal stays blocked pending
+session/rotation integration. Collection-package encodings, durable client custody,
+supported backup/restore, production integration and independent review remain open.
 
 Enrollment requires all of the following:
 

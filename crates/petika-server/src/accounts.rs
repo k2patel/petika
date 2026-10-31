@@ -1,6 +1,10 @@
 //! Local identities and collection authorization. Plaintext private and collection keys never enter this module.
 mod backups;
 mod delivery;
+#[cfg(feature = "experimental-device-keys")]
+mod device_keys;
+#[cfg(feature = "experimental-device-keys")]
+pub use device_keys::{DeviceKeyOperation, MAX_DEVICE_KEY_BODY};
 mod git_sync;
 mod keys;
 use crate::Result;

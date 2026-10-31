@@ -27,6 +27,7 @@ jobs:
           python scripts/generate_entry_handoff_vectors.py --check
           python scripts/generate_device_key_vectors.py --check
           python scripts/generate_device_enrollment_vectors.py --check
+          python scripts/generate_device_bootstrap_vectors.py --check
       - name: Validate proposed API contracts and schema fixtures
         run: python scripts/check_api_contracts.py
 
@@ -69,7 +70,13 @@ jobs:
         run: |
           cargo test --locked -p petika-core --features experimental-device-keys --test device_keys
           cargo test --locked -p petika-core --features experimental-device-keys --lib device_keys
+          cargo test --locked -p petika-core --features experimental-device-keys --lib identity::device_authority
           cargo clippy --locked -p petika-core --features experimental-entry-format,experimental-device-keys --all-targets -- -D warnings
+      - name: Experimental authenticated device API
+        run: |
+          cargo test --locked -p petika-server --features experimental-device-keys --lib accounts::device_keys
+          cargo test --locked -p petika-server --features experimental-device-keys --bin petika-server web::device_keys
+          cargo clippy --locked -p petika-server --features experimental-entry-format,experimental-device-keys --all-targets -- -D warnings
       - name: Experimental entry history transport
         run: cargo test --locked -p petika-server --features experimental-entry-format --lib --test entry_history
       - name: Experimental entry history Clippy

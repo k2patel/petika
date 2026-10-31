@@ -72,11 +72,12 @@ impl StoreFile {
     pub fn read(&self) -> Result<Vec<u8>> {
         self.read_limited(MAX_FILE_BYTES)
     }
-    pub(crate) fn read_limited(&self, limit: usize) -> Result<Vec<u8>> {
+    /// Read at most the caller's format limit, rejecting a larger file.
+    pub fn read_limited(&self, limit: usize) -> Result<Vec<u8>> {
         check_file(&self.path)?;
         let mut bytes = Vec::new();
         File::open(&self.path)?
-            .take(limit as u64 + 1)
+            .take((limit as u64).saturating_add(1))
             .read_to_end(&mut bytes)?;
         if bytes.len() > limit {
             return Err(Error::Format);

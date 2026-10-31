@@ -151,6 +151,31 @@ impl DeviceRosterJournal {
     pub fn current(&self) -> Result<TrustedDeviceRoster> {
         Ok(self.read()?.1)
     }
+    /// Adjacent history after a previously pinned digest, bounded to sixteen updates.
+    /// Unknown or conflicting pins fail instead of returning a replacement baseline.
+    pub fn successors(&self, after_digest: &str) -> Result<Vec<DeviceRoster>> {
+        if !id(after_digest) {
+            return Err(Error::Format);
+        }
+        let (record, _) = self.read()?;
+        let start = if record.baseline.digest()? == after_digest {
+            0
+        } else {
+            record
+                .publications
+                .iter()
+                .position(|p| p.roster.digest().ok().as_deref() == Some(after_digest))
+                .ok_or(Error::Authentication)?
+                + 1
+        };
+        Ok(record
+            .publications
+            .into_iter()
+            .skip(start)
+            .take(16)
+            .map(|p| p.roster)
+            .collect())
+    }
     /// None means absent from this verified retained journal, not global absence.
     pub fn lookup(&self, operation_id: &str) -> Result<Option<PublicationReceipt>> {
         if !id(operation_id) {

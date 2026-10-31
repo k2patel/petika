@@ -5,6 +5,8 @@ use petika_server::{
 use std::{io::Read, path::Path};
 use subtle::ConstantTimeEq;
 use tiny_http::{Header, Method, Request, Response};
+mod device_keys;
+pub use device_keys::device_key_route;
 
 pub fn json(request: Request, status: u16, value: serde_json::Value, cookie: Option<String>) {
     let mut response = Response::from_string(value.to_string())

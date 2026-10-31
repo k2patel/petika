@@ -3,7 +3,8 @@
 Date: 2026-10-31. Native-only reference implementation under
 `petika-core/experimental-device-keys`, disabled by default. It connects the
 [candidate enrollment proof](device-enrollment-format.md) to durable signed-roster
-publication. It is not yet used by the Petika server or account APIs.
+publication. The separately gated [account device API](device-account-api.md) now uses
+it for authenticated additions and retry/history reconciliation; production remains disabled.
 
 ## Workflow
 
@@ -82,7 +83,11 @@ exclusive locking, wrong initialization anchors, owner-only Unix mode, all four 
 boundaries, corrupted/truncated/duplicate journals, and rollback against a retained
 newer pin. Candidate checks and both independent fixture generators remain in CI.
 
-Next: authenticated account API integration, durable client draft/receipt reconciliation,
-session revocation and rotation-required state, device-package delivery and migration.
+`successors(after_digest)` returns at most sixteen verified adjacent successors after a
+retained digest, or rejects an unknown pin. Continue from the last returned digest to
+reconcile longer histories without substituting a new baseline.
+
+Next: durable client draft/receipt reconciliation, device-session revocation and
+rotation-required state, device-package delivery, supported backup/restore and migration.
 The native journal is not compiled into WASM; browser persistence needs its own reviewed
 transaction/storage adapter. No production account or vault format changes occur here.

@@ -320,6 +320,12 @@ fn run() -> Result<()> {
             web::backup_route(request, &mut accounts);
         } else if path.starts_with("/v1/keys/") {
             web::key_route(request, &mut accounts);
+        } else if path == "/v1/device-keys" || path.starts_with("/v1/device-keys/") {
+            web::device_key_route(
+                request,
+                &mut accounts,
+                env::var("PETIKA_EXPERIMENTAL_DEVICE_KEYS").as_deref() == Ok("1"),
+            );
         } else if path.starts_with("/v1/auth/")
             || path.starts_with("/v1/admin/")
             || path == "/v1/profile"
@@ -515,6 +521,7 @@ fn run() -> Result<()> {
                         "accepted": accepted,
                         "experimental": true,
                         "entry_api_enabled": cfg!(feature = "experimental-entry-format") && env::var("PETIKA_EXPERIMENTAL_ENTRIES").as_deref() == Ok("1"),
+                        "device_key_api_enabled": cfg!(feature = "experimental-device-keys") && env::var("PETIKA_EXPERIMENTAL_DEVICE_KEYS").as_deref() == Ok("1"),
                         "capabilities": ["bounded-history", "exact-root-entry-read", "writer-scoped-receipts", "same-epoch-transactions", "anchored-epoch-rotation", "adjacent-epoch-read", "recipient-roster"],
                         "migration": "already-active",
                         "replication": replication
