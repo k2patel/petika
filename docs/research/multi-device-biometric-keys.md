@@ -1,7 +1,8 @@
 # Multiple device keys and biometric vault unlock
 
 Research date: 2026-10-18. Repository baseline: `9fc3520`.
-Status: researched proposal; no protocol approval, hardware prototype or implementation.
+Status: researched proposal with isolated synthetic local-unlock probes (2026-10-31);
+no protocol approval or production device-key implementation.
 Related plan: [security alignment](../security-alignment-plan.md), SEC-04–09.
 
 ## Finding and recommendation
@@ -158,6 +159,12 @@ server-delivered JavaScript can misuse unlocked browser secrets/PRF outputs. Ver
 native distribution reduces that delivery threat but does not solve client compromise.
 
 ## Next work and acceptance evidence
+
+The [local-unlock experiment](../../experiments/biometric-unlock/README.md) now provides
+an Apple Secure Enclave capability/round-trip command and an isolated browser PRF page.
+Software wrapper and mock ceremony tests are separate from actual hardware evidence;
+see [recorded results](../testing/biometric-unlock-2026-10-31.json). These probes do not
+enroll Petika identities or complete the device-lifecycle criteria below.
 
 Research establishes feasibility, not production readiness. The next bounded work is
 an isolated Apple-device and browser-PRF capability spike with synthetic keys only,

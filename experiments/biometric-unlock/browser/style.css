@@ -1,0 +1,13 @@
+:root { font-family: system-ui, sans-serif; color-scheme: light dark; }
+body { margin: 0; padding: 2rem 1.25rem; background: light-dark(#faf8f3, #171a19); color: light-dark(#1e302c, #edf4ee); }
+main { max-width: 42rem; margin: 4vh auto; }
+h1 { font-size: clamp(1.8rem, 5vw, 2.8rem); line-height: 1.15; }
+p, li { line-height: 1.6; }
+li { margin: .7rem 0; }
+.eyebrow { letter-spacing: .13em; font-size: .8rem; font-weight: 650; }
+.actions { display: flex; gap: .75rem; flex-wrap: wrap; margin: 2rem 0; }
+button { font: inherit; padding: .85rem 1rem; border: 1px solid #718b80; border-radius: .5rem; cursor: pointer; }
+button:focus-visible { outline: 3px solid #be862a; outline-offset: 3px; }
+button:disabled { opacity: .55; cursor: default; }
+#result { border-left: 3px solid #be862a; padding-left: 1rem; min-height: 3rem; }
+.note { font-size: .9rem; }

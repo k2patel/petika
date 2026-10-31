@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>Petika • Local unlock experiment</title>
+<link rel="stylesheet" href="style.css">
+<main>
+  <p class="eyebrow">PETIKA / EXPERIMENT</p>
+  <h1>Can this browser unlock with a passkey?</h1>
+  <p>This isolated test wraps generated data. It does not connect to your Petika account or vault.</p>
+  <p id="capability" role="status">Checking browser capabilities…</p>
+  <ol>
+    <li>Create a test passkey. Your authenticator may keep or sync it.</li>
+    <li>Approve once to seal random test data.</li>
+    <li>Approve again to verify that the same passkey opens it.</li>
+  </ol>
+  <div class="actions">
+    <button id="create" disabled>Create test passkey</button>
+    <button id="run" disabled>Seal test data</button>
+    <button id="reset">Reset / cancel</button>
+  </div>
+  <p id="result" role="status" aria-live="polite">No test credential created.</p>
+  <p class="note">Your browser may allow a device PIN instead of biometrics. This test cannot prove
+    hardware protection or independent device identity. Nothing is saved by this page;
+    leaving the tab clears its test state. Reset does not delete the passkey from your
+    authenticator—remove “Petika synthetic probe” there after testing.</p>
+</main>
+<script type="module" src="ui.mjs"></script>
+</html>

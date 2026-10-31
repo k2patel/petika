@@ -233,6 +233,9 @@ the existing single-response export and scheduled push formats retain their limi
 ### Broader entry-format and release backlog
 
 1. **Remaining recovery paths:** independently enrolled hardware-backed device recovery.
+   Isolated [Apple and browser local-unlock probes](../experiments/biometric-unlock/README.md)
+   now exercise synthetic wrappers; actual device lifecycle and multi-device protocol
+   work remain open.
    Same-account authority-identity replacement is now implemented experimentally with
    the retained old signing key, a newly enrolled key, two signatures and independent
    fingerprint confirmation. CLI/API and full-server/client-kit checks cover replacement

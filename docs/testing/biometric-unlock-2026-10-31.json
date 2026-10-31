@@ -1,0 +1,50 @@
+{
+  "date": "2026-10-31",
+  "scope": "isolated synthetic local-unlock experiment; no production vaults or account enrollment",
+  "apple": {
+    "os": "macOS 27.0.1 (26A434)",
+    "architecture": "arm64",
+    "swift": "6.4.2",
+    "compiled": true,
+    "software_wrapper_roundtrip": "passed",
+    "wrong_key_context_and_ciphertext_tamper": "rejected",
+    "normal_process_capabilities": {
+      "secure_enclave": true,
+      "biometrics": true,
+      "biometry_type": "Touch ID",
+      "error_code": 0
+    },
+    "sandbox_capabilities": {
+      "secure_enclave": false,
+      "biometrics": false,
+      "error_code": 4099,
+      "interpretation": "sandbox access failure; not evidence of absent hardware"
+    },
+    "physical_biometric_roundtrip": "not run; requires interactive user verification",
+    "key_export_behavior": "not hardware-tested; implementation keeps opaque representation in memory only",
+    "ios": "not tested"
+  },
+  "browser": {
+    "node": "26.12.1",
+    "playwright": "1.60.0",
+    "chromium": "148.0.7778.96",
+    "authenticator": "Chromium virtual CTAP2.1 with PRF, resident key and user verification enabled",
+    "virtual_prf_seal_then_reopen": "passed",
+    "virtual_unsupported_prf": "rejected with no fallback",
+    "cancel_pending_assertion": "passed",
+    "desktop_and_mobile_layout": "passed; 1100x850 and 390x844",
+    "requests": "only local static GET assets; no key/plaintext transport",
+    "local_and_session_storage": "empty",
+    "physical_authenticator_and_biometrics": "not tested",
+    "synced_credential_properties": "not tested"
+  },
+  "production_changes": false,
+  "remaining": [
+    "Physical Apple biometric roundtrip and lifecycle validation",
+    "Physical browser/authenticator PRF and fallback/sync validation",
+    "Android and Windows hardware probes",
+    "Independent device identities, signed enrollment and revocation protocol",
+    "Standard and Hybrid package/recovery integration",
+    "Independent protocol review"
+  ]
+}
