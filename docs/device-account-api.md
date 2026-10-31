@@ -1,5 +1,7 @@
 # Candidate account device API
 
+The [Git-authoritative target](decisions/0006-git-authoritative-sync.md) can reuse this experimental device admission foundation. Password plus any one authorized device key remains the planned online access policy; this API does not yet issue temporary upstream Git credentials or enforce direct Git publication authorization.
+
 Status: experimental implementation for [draft ADR 0005](decisions/0005-independent-device-keys.md).
 Both the server Cargo feature `experimental-device-keys` and runtime variable
 `PETIKA_EXPERIMENTAL_DEVICE_KEYS=1` are required. Otherwise every endpoint below returns

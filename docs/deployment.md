@@ -1,5 +1,7 @@
 # Container and source deployment
 
+Current deployment instructions enable the existing API and outbound Git mirror. [ADR 0006](decisions/0006-git-authoritative-sync.md) defines the next Git-authoritative target; no environment setting here enables it. Host-neutral SSH/HTTPS, optional API/gateway credentials and browser compatibility require implementation and capability testing.
+
 Experimental web UI and local managed accounts, with personal/group encrypted collections.
 Verified group-key delivery and explicit rotation are implemented; native biometrics and
 mobile clients remain planned. An experimental Chromium toolbar extension

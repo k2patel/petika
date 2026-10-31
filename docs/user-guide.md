@@ -1,5 +1,7 @@
 # Install and use Petika
 
+The new [Git-authoritative sync direction](decisions/0006-git-authoritative-sync.md) is planned. Its online show/edit flow refreshes first and preserves encrypted drafts when a competing save requires review/re-edit. The steps below describe the currently available application.
+
 Use this guide to sign in, save logins, set up verification codes, install the
 Chromium preview, and protect your recovery copies. Your administrator installs
 and operates the Petika server. You do not need Rust, Docker, or command-line tools

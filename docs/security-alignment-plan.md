@@ -1,5 +1,7 @@
 # Security and compliance alignment plan
 
+Architecture update (2026-10-31): [ADR 0006](decisions/0006-git-authoritative-sync.md) selects Git-authoritative sync. Extend the validation gates to signed Git publication, atomic expected-head and authorization checks, ciphertext-only object storage, conflict draft retention, uncertain-push reconciliation, host credential capabilities, password-plus-any-authorized-key access and per-device encrypted vault-secret packages, repository isolation and explicit migration/recovery. Direction acceptance does not close existing security-review gates.
+
 Date: 2026-10-18. Baseline: `b55fad4`. Status: implementation plan.
 
 Petika will pursue the strongest practical alignment with recognized security and

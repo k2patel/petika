@@ -8,7 +8,10 @@ and snapshot synchronization have since been implemented; see the current
 
 ## Architecture
 
-The user selected API-authoritative synchronization with a one-way encrypted Git mirror.
+The original milestone selected API-authoritative synchronization with a one-way encrypted
+Git mirror. That synchronization target is superseded by [ADR 0006](0006-git-authoritative-sync.md)
+as of 2026-10-31. Local cryptography and persistence decisions below remain applicable;
+the deployed API/mirror implementation remains current until explicit migration.
 The mirror will be a separate data repository, never the Petika source repository.
 Build and test local encryption first. No remote login, sharing, or sync is implied by
 this milestone. The local snapshot format will need migration before per-record sharing.

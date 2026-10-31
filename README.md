@@ -32,6 +32,13 @@ app at `http://localhost:8080`, or use a custom HTTPS domain for remote access.
 For encrypted Git backups, choose your own private repository on GitHub, GitLab,
 Codeberg, or a Git server you operate; see [Git hosting choices](docs/deployment.md#choose-your-git-host).
 
+The accepted next architecture uses **Git-authoritative, on-demand encrypted sync**:
+refresh before showing/editing, edit locally in memory, and condition each push on the
+fetched head. Concurrent updates require refresh and review/re-edit. It supports any
+compatible SSH/HTTPS Git host, with optional API/gateway adapters. Online access requires an account password plus
+any one authorized device key; each device normally holds its own independent key. This target is not implemented or
+deployed; see [architecture](docs/architecture.md) and [ADR 0006](docs/decisions/0006-git-authoritative-sync.md).
+
 ## What works today
 
 - **Rust CLI:** local encrypted storage, password generation, GPG password-store import,

@@ -1,9 +1,21 @@
 # 0005: Independent device keys per account
 
+Integration update: [ADR 0006](0006-git-authoritative-sync.md) moves the target data commit point to Git. Device roster authority and local custody remain separate from account login and transport credentials. Binding roster/membership evidence atomically to Git publication remains an implementation gate.
+
 Date: 2026-10-31. Status: **draft for review**, not an accepted wire protocol.
 Evidence: [synthetic executable model](../../experiments/device-keys/README.md).
 Extends [0002](0002-per-user-group-key-delivery.md) and preserves
 [0003](0003-security-and-recovery-baseline.md). No production format changes yet.
+
+## Password and multiple keys clarification (2026-10-31)
+
+The target online access policy is account password plus any one active device key
+permitted for the vault. Each device normally holds one logical credential with separate
+encryption/signing roles. Each authorized recipient opens its own encrypted package for
+the same collection epoch secret; all recipient keys are not required together. Password
+reset or account enrollment alone does not grant decryption. Key removal requires fresh
+rotation for future exclusion; historical copies remain accessible. See
+[ADR 0006](0006-git-authoritative-sync.md#password-plus-any-one-authorized-key).
 
 ## Proposed decision
 

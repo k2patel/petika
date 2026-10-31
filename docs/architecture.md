@@ -1,5 +1,44 @@
 # Architecture
 
+## Accepted target: Git-authoritative sync
+
+[ADR 0006](decisions/0006-git-authoritative-sync.md), accepted as direction on
+2026-10-31, makes a private Git data repository the authoritative accepted encrypted
+history. Implementation and migration are pending; the current runtime below still
+uses the API and outbound mirrors.
+
+```mermaid
+flowchart LR
+    device[Device: encrypted cache and drafts] -->|Account password plus one authorized device key| auth[Petika authentication / device access]
+    auth -->|Temporary scoped access| device
+    device <-->|On-demand encrypted Git objects| transport[SSH / HTTPS / optional host API or gateway]
+    transport <-->|Fetch and conditional publication| git[Any compatible private Git host]
+    device --> local[Verify history; decrypt and edit in memory]
+    local -->|Encrypt fresh candidate bound to fetched head| device
+    git --> recovery[Encrypted history; independent keys and pins required for recovery]
+```
+
+Before online show/edit, fetch and verify from the retained checkpoint. A save commits
+only when the destination atomically accepts the candidate against its expected head.
+A competing update discards the stale submission, retains an encrypted user draft and
+requires fetch, review/re-edit and a fresh encrypted candidate. Lost acknowledgements
+require operation reconciliation before retry. No automatic ciphertext merging or force
+updates. Cache-only viewing is an explicit offline mode.
+
+Standard Git transports provide host independence; temporary credentials directly usable
+at a host depend on that host's capabilities. An optional gateway retains protected
+upstream credentials and offers temporary Petika access. Online access requires the account password and proof from any one authorized device
+credential. Each device can open its own encrypted package for the same vault secret;
+all keys are not required together. Account enrollment alone does not grant a shared vault.
+Device vault keys stay local. Mandatory server participation in every decrypt remains
+a separate undecided policy.
+
+Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
+browser transport, durable device custody and complete recovery are release gates.
+Branches do not isolate repository readers. The [implementation sequence](research/git-vault-sync.md)
+starts with a disposable private vault and two clients. Migrate per collection with one
+explicit authority; never independently accept writes through both Git and the legacy API.
+
 ## Current boundaries
 
 | Component | Purpose | Current state |
@@ -12,7 +51,7 @@
 | Chromium extension | Password generation, approved-site autofill and TOTP | Unsigned preview; local WASM crypto, API access |
 | Firefox/mobile apps | Platform autofill and biometric unlock | Not implemented |
 
-## Full software diagram
+## Current software diagram
 
 Solid arrows describe implemented data flows. Dashed arrows and nodes marked
 **planned** describe the agreed target, not available functionality.
@@ -40,17 +79,16 @@ flowchart TB
     cli -->|Bearer session and ciphertext| proxy
     subgraph host[Self-hosted Petika server]
         api[API / web asset hosting]
-        auth[Accounts / sessions / MFA / collection permissions]
+        auth[Accounts / sessions / collection permissions]
         cas[Revision-checked snapshot writes]
         data[Durable snapshot pointer and revision journal]
         accounts[Account metadata / memberships / public keys / encrypted key packages]
         mirror[Serialized local Git mirror writer]
         git[Local ciphertext Git repositories]
-        push[Homelab Git push sidecar — every 60 seconds]
+        push[Configured outbound Git worker / legacy sidecar]
         backup[Backup job capture and restic push worker]
         creds[Encrypted destination credentials / server backup master key]
         pull[User-scoped backup download API]
-        target[Planned: entry/index transactions and configurable Git replication]
         api --> auth
         auth --> accounts
         api --> cas
@@ -65,11 +103,9 @@ flowchart TB
         git --> backup
         api --> pull
         data --> pull
-        cas -.-> target
     end
     proxy --> api
-    push -->|Fast-forward ciphertext history| remote[GitHub / Gitea vault repository]
-    target -.->|On change / scheduled / manual| remote
+    push -->|Fast-forward ciphertext history| remote[Configured private Git data repository]
     backup -->|Server push| offsite[Off-site S3 / SSH restic repositories]
     external[External backup software] -->|User-scoped API key; pull only| proxy
     pull -->|Encrypted user backup| external
@@ -121,14 +157,12 @@ crash/concurrency hardening remain necessary before a production-readiness claim
 The Chromium preview uses local WASM; native messaging and mobile platform autofill
 and biometric bindings remain planned. Platform packaging preserves the no-npm requirement.
 
-The [Git sync design](research/git-vault-sync.md) makes the API the single write
-authority for all managed clients. Entry-granular encrypted storage and selectable remote replication triggers
-remain implementation gaps. The [candidate entry format](research/encrypted-entry-format.md)
-and [acceptance plan](testing/encrypted-entry-format.md) define the next review gates.
-An off-by-default [checkpoint/recipient prototype](research/entry-checkpoints.md) now
-verifies explicit epoch transitions. [Index validation and native pins](research/entry-index.md)
-are available as opt-in core APIs; client wiring and API
-transactions are still pending integration.
+The [Git sync target](research/git-vault-sync.md) and [ADR 0006](decisions/0006-git-authoritative-sync.md)
+now supersede the sole-server-writer target. Existing gated entry/index transactions,
+verified history, CLI drafts and ordered server replication remain reusable implemented
+foundations; they do not yet make Git authoritative. See the current
+[entry transport contract](research/entry-history-transport.md) and
+[device account API](device-account-api.md) for exact implemented boundaries.
 
 A revoked user/device may retain downloaded ciphertext, keys, and plaintext. Git history
 retains old ciphertext. Rotation cannot erase passwords already disclosed. The server's

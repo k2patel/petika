@@ -1,5 +1,7 @@
 # Rust CLI client
 
+Commands below describe current local and API-backed workflows. The [Git-authoritative target](decisions/0006-git-authoritative-sync.md) will add on-demand verified fetch and conditional publication; existing pull/push commands are not silently repurposed.
+
 Petika builds into a native `petika` executable. Rust is needed to build it, not
 to run the resulting binary. Build separately for each operating system/architecture;
 this repository does not yet publish signed CLI installers.

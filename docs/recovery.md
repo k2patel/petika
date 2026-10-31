@@ -1,6 +1,10 @@
 # Sync, backup, and recovery
 
-The API is authoritative; Git is a one-way ciphertext mirror. A full disaster restore
+For the current runtime, the API is authoritative and Git is a one-way ciphertext mirror.
+The accepted [Git-authoritative target](decisions/0006-git-authoritative-sync.md) has not
+been implemented or migrated. Its recovery must retain authority/device keys, account
+policy and independent newest pins as well as Git history; a clone alone is insufficient.
+The procedures below describe the existing runtime. A full disaster restore
 and recovery of a historical collection are different operations. The operator tool
 [`scripts/backup_recovery.py`](../scripts/backup_recovery.py) supports both using Python 3
 and Git. Historical recovery also requires the matching native `petika` CLI.

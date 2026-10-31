@@ -1,8 +1,9 @@
 # Implementation roadmap
 
-Status reviewed against the repository on 2026-10-18. This is the central checklist;
-feature guides describe current behavior. Checked items are implemented experimental
-capabilities, not a production-readiness certification.
+Implementation baseline reviewed on 2026-10-18; sync architecture direction updated
+on 2026-10-31. This is the central checklist;
+feature guides describe current behavior. Checked items record implemented experimental capabilities or explicitly labeled
+completed decisions, not a production-readiness certification.
 
 ## Implemented
 
@@ -101,10 +102,20 @@ parallel. Feature backlog items remain open but do not replace these security ga
 - [x] Opt-in identity-authorized epoch checkpoints, explicit authority handover,
   active-wrapper binding and entry-root recipient packages in both existing profiles
   ([trust model and pending integration](research/entry-checkpoints.md)).
-- [ ] Implement API-authoritative Git-backed encrypted-entry sync: all managed
-  clients use revision-checked API writes; Petika is the sole Git writer, with
-  on-change/scheduled/manual replication, encrypted folder index and per-entry
-  updates. No normal two-way Git merging ([design proposal](research/git-vault-sync.md)).
+- [x] Select [Git-authoritative on-demand sync](decisions/0006-git-authoritative-sync.md)
+  as the new architecture direction (2026-10-31); legacy runtime still uses API authority.
+- [ ] Prototype one private vault/two clients: refresh before online show/edit, verify
+  history, edit in memory, encrypt changed entries and condition publication on the
+  exact fetched head. On conflict preserve an encrypted draft, fetch, review/re-edit
+  and retry; reconcile uncertain pushes before retrying.
+- [ ] Specify signed Git tree/ref, operation receipts, crash-safe client pins and
+  atomic publication/authorization ordering; validate against independent fixtures.
+- [ ] Add provider-neutral SSH/HTTPS and optional host API/gateway adapters, capability
+  checks and password plus any one authorized device key.
+- [ ] Validate browser transport, shared-vault isolation, removal/rotation and full
+  recovery; implement explicit per-collection migration with a single write authority.
+  See [delivery sequence](research/git-vault-sync.md) and
+  [acceptance plan](testing/git-authoritative-sync.md).
 
 - [x] Rust CLI `show` with local unlock, interactive TOTP expiry, encrypted TOTP setup,
   password-store-style aliases, and non-secret `~/.petikarc` defaults.

@@ -1,5 +1,7 @@
 # Per-user group access
 
+These instructions describe current API-authorized sharing. The [Git-authoritative target](decisions/0006-git-authoritative-sync.md) requires repository permission isolation or a gateway, signed writer/membership evidence, and atomic publication/revocation ordering before shared-vault migration. Branches are not read-access boundaries.
+
 Petika supports recipient identities, verified encrypted group-key delivery, and explicit
 fresh-key rotation in Standard and experimental X-Wing draft-06 modes. These are
 experimental capabilities, not an independently audited cryptographic system.

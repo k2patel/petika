@@ -1,5 +1,7 @@
 # Experimental history transport contract
 
+This is the current API-authoritative experimental implementation contract. The new [Git-authoritative target](../decisions/0006-git-authoritative-sync.md) reuses its encrypted objects, verified history and retry concepts, but requires a new Git publication/receipt contract and explicit migration.
+
 Status: core wire contract, durable journal with entry deltas, account-authorized
 HTTP routes, encrypted CLI drafts/submission, index-history sync and ordered Git replication implemented behind
 `experimental-entry-format`. HTTP additionally requires `PETIKA_EXPERIMENTAL_ENTRIES=1`.

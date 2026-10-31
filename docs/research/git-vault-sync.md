@@ -1,138 +1,103 @@
-# Git-backed encrypted vault synchronization
+# Git-authoritative encrypted vault synchronization
 
-Status: requirements clarified on 2026-10-18; implementation in progress. The
-entry-granular format and selectable Git triggers remain unimplemented.
+Status: architecture direction updated 2026-10-31; implementation pending.
+[ADR 0006](../decisions/0006-git-authoritative-sync.md) replaces the former
+API-authoritative, sole-server-writer target. Existing API/mirror code remains implemented
+behavior and is not automatically converted. No production deployment changed.
 
-## User-requested behavior
+## Target workflow
 
-Git is part of the normal vault workflow, with a configurable GitHub/Gitea remote.
-Users choose synchronization on changes, on a schedule, or manually. A vault's
-logical folder structure and entries are encrypted and replicated. Normal edits
-should update only the affected encrypted entries and necessary metadata, rather
-than replacing the entire encrypted collection.
+On request, and before online show/edit, fetch from the configured private Git data
+repository. Verify missing signed history from the last independently trusted checkpoint.
+Show decrypts the requested data in client memory. Edit retains the fetched base,
+decrypts/edits in memory, encrypts changed entries with fresh nonces and promptly submits
+a candidate against that exact base. The destination atomically checks and updates its
+head. Git acceptance, not a local draft or API enqueue acknowledgement, commits sync.
 
-All clients use the Petika API for managed vault reads and writes. The API is the
-single write authority, and the Petika service is the sole writer to the vault's
-Git backend. Clients never push directly to Git. Normal synchronization is outbound;
-importing remote history is an explicit recovery operation, not two-way sync.
-GitHub Actions is not required: the service can trigger replication after an
-accepted save or on the configured schedule.
+If a competing push wins, discard the obsolete submission, preserve the user's encrypted
+draft, fetch and verify, review/re-edit, and try a fresh candidate. No automatic ciphertext
+merge/rebase or force update. Bound retries. For a lost response, reconcile operation ID,
+candidate digest and authenticated history first: a push may already have succeeded.
 
-```text
-Web / extension / CLI (encrypt and decrypt locally)
-                     |
-                     v
-Petika API (authorize, check revisions, durably accept changes)
-                     |
-                     v
-Serialized Git writer -> GitHub / Gitea remote
+```mermaid
+sequenceDiagram
+    participant C as Device
+    participant P as Petika auth / optional gateway
+    participant G as Any compatible Git host
+    C->>P: Account password plus one authorized device key
+    P-->>C: Scoped temporary sync access
+    C->>G: Fetch missing objects (direct or through gateway)
+    G-->>C: Encrypted objects and signed history
+    Note over C: Verify pin, decrypt/edit in memory, encrypt candidate
+    C->>G: Publish candidate conditional on fetched head
+    alt Head unchanged and publication authorized
+        G-->>C: Accepted
+        Note over C: Verify acceptance and durably advance pin
+    else Another writer advanced head
+        G-->>C: Conflict
+        Note over C: Keep encrypted draft; fetch, review/re-edit, retry
+    end
 ```
 
-API authentication permits access; local vault unlocking permits decryption. A
-client does not need Git credentials. Optional local caches/offline drafts must
-return through the same revision-checked API before becoming accepted changes.
+## Delta storage and host independence
 
-## Existing implementation
+One encrypted object per entry, opaque IDs, encrypted index/folders, authenticated
+tombstones and signed head metadata. Unchanged objects retain their exact bytes. Updates
+transfer missing objects; fresh ciphertext need not compress into small binary patches.
+Initial sync, migration and rotation may be large. Metadata sizes/timing remain visible.
 
-The API accepts revision-checked whole-collection encrypted snapshots and maintains
-local Git history. The homelab `deploy/homelab/mirror.sh` sidecar pushes that history
-every 60 seconds using fast-forward-only pushes. The remote has collection-specific
-branches. This is outbound recovery replication, not a configurable two-way Git
-backend. CLI `--collection` reads and writes use the API with local passphrase or
-recipient-identity unlock; writes preserve encrypted drafts on conflicts or uncertain
-acknowledgements. Commands without `--collection` remain local; pull/push is explicit.
+Use standard SSH or HTTPS Git transport. Host APIs are optional adapters, not a required
+common API. Host capability checks cover conditional updates, permissions and credential
+expiry. An arbitrary Petika-issued token is not automatically accepted by an external
+host. A Petika gateway can provide temporary client access while protecting the upstream
+credential; direct access requires compatible host-issued tokens or trusted SSH certificates.
+Browser transport/CORS and SSH compatibility require explicit adapters or a gateway.
 
-### Implementation gap checklist
+## Authentication, authorization and recovery
 
-- [x] API-authorized, revision-checked snapshot writes and durable journal.
-- [x] Local Git mirror serialization and fast-forward-only homelab remote pushes.
-- [x] Live CLI passphrase-based `show --collection`, with no stale local fallback.
-- [x] Live recipient-identity unlock and managed CLI snapshot mutation transactions,
-  with encrypted draft preservation and no automatic stale-write retry.
-- [ ] Entry/index format, authenticated deletion and migration/restore validation.
-- [ ] Per-entry revisions with atomic shared-index changes and preserved stale drafts.
-- [ ] Provider-neutral remote configuration and selectable replication triggers.
-- [ ] Durable remote replication status, retry handling and divergence reporting.
-- [ ] Validate single-writer enforcement and crash consistency end to end; do not
-  infer multi-replica support from local file locks.
+Online access requires an account password plus any one active enrolled device key
+authorized for that vault. Each device normally holds an independent key. Each allowed
+key opens its own encrypted package for the same vault epoch secret, which encrypts and
+decrypts entries. All keys are not required together. An authorized client creates these
+packages; password knowledge alone cannot grant a new key vault access. Temporary Git
+credentials are transport access, independent of the vault keys. Biometric unlock protects
+local device key use. Account password reset cannot recover lost vault keys. Provisioned
+keys can decrypt retained ciphertext offline; server participation in every decrypt is
+a separate, undecided cryptographic policy.
 
-See the [full software diagram](../architecture.md#full-software-diagram) for
-current components and planned boundaries.
+Repo readers can obtain its history across branches; branches are not vault ACLs. Shared
+vault permissions require repository separation or a gateway, plus verifiable writer,
+membership/device and epoch policy. Publication and revocation need atomic ordering.
+Git hashes alone do not authenticate vault policy or prevent rollback. Retain independent
+pins and recovery keys. Token revocation cannot erase already downloaded secrets.
 
-Re-encrypting a whole snapshot changes ciphertext broadly. Git object transfer does
-not make this an efficient per-entry update format. Do not describe the existing
-snapshot mirror as incremental encrypted-entry synchronization.
+Online refresh failure is explicit; cached viewing is a separate offline choice. Only
+ciphertext is persisted in caches/drafts/Git. Git history is not a substitute for account,
+device authority, recovery kits and newest-pin backups. Exact formats and migration remain
+review gates in ADR 0006.
 
-## Proposed storage model
+## Existing implementation to reuse
 
-The [entry format and transaction specification](encrypted-entry-format.md) and
-[acceptance matrix](../testing/encrypted-entry-format.md) now detail this proposal.
-They are not implemented or independently reviewed. The first version retains a
-collection-wide encrypted-index CAS: per-entry files reduce ciphertext churn, but
-do not yet eliminate conflicts between different-entry edits.
+- Default managed API: revision-checked encrypted snapshots, preserved conflict drafts,
+  serialized local Git mirrors and configurable outbound SSH/HTTPS copies.
+- Experimental entry feature: per-entry ciphertext, encrypted index, bounded verified
+  history, atomic journal transactions, deletion/rotation, encrypted CLI drafts and
+  receipt reconciliation, plus ordered outbound Git replication.
+- Experimental device feature: separate recipient identities, signed rosters, two-key
+  enrollment proofs, native publication journal and gated authenticated account API.
 
-- Keep stable opaque identifiers for collections, folders, and entries. Never use
-  plaintext website names, usernames, or folder names as Git paths.
-- Encrypt each entry independently with fresh nonces on writes. An authenticated,
-  encrypted index describes the logical folder tree and entry revisions; Git's
-  physical directories need not expose that tree.
-- Authenticate collection ID, entry ID, format version, revision and key epoch as
-  part of the format. Specify rollback and substitution defenses before coding.
-- A normal edit changes its entry ciphertext and required index/commit metadata.
-  Unchanged entries retain their ciphertext. Deletions need explicit authenticated
-  records so an offline client cannot silently resurrect a removed entry.
-- Folder changes affect the index. Key rotation or a format migration may require
-  many/all entries to be rewritten; do not promise entry-only updates in those cases.
-- Git can still reveal object counts, approximate sizes and change timing. Hiding
-  plaintext folder names is not complete metadata privacy.
+These are foundations, not a completed Git-authoritative client. See the
+[entry transport contract](entry-history-transport.md) and [device API](../device-account-api.md).
 
-## Sync controls and service responsibilities
+## Implementation order
 
-Expose remote, branch, sync mode (on changes / scheduled / manual), interval,
-last successful remote commit, pending changes, errors and Retry. Distinguish local
-save, API acceptance and successful remote replication in the UI and CLI.
+1. Isolated single-vault/two-client prototype using a private local bare remote; test
+   atomic races, on-demand refresh, fresh re-edit candidates and uncertain acknowledgements.
+2. Freeze signed Git tree/ref, authorization, operation-ID, receipt and pin-persistence
+   contracts with independent vectors. Test ciphertext-only storage and object reuse.
+3. Add native SSH/HTTPS adapters, password-plus-device-key authentication/gateway capabilities and actual host tests.
+4. Connect durable device custody and interactive conflict review, then browser transport.
+5. Validate shared-vault authorization/revocation/rotation, recovery and explicit per-vault
+   migration. Keep old stores and backups; enforce one authority after cutover.
 
-A durable queue should coalesce replication work, retry transient failures and
-survive restarts without dropping accepted revisions. API acceptance and enqueueing
-must be crash-consistent. A Git outage leaves accepted saves durable and visibly
-pending replication, rather than reporting them as remotely synced.
-Serialize writes per repository/branch, including across service replicas and
-retries; use idempotent operations and preserve accepted revision ordering.
-The server can push encrypted objects without vault-decryption keys. Git credentials
-remain separate from vault keys and API tokens. Repository writers must be authorized;
-if several users share a repository, Git access itself is not per-user vault ACLs.
-A repo-scoped credential granting read access can expose all ciphertext in that repo.
-
-Concurrent clients can still edit the same entry. Require an expected revision on
-every mutation and reject stale writes before acceptance; never silently overwrite
-or merge ciphertext. Preserve the client's draft so it can fetch the latest state
-and explicitly resolve the edit after unlocking. Independent entry edits should
-not conflict unnecessarily; changes to the encrypted shared index require their own
-transaction/revision checks. Define those checks in the format and API protocol.
-
-Push fast-forward-only. Unexpected external remote commits stop replication and
-surface an actionable error; never auto-merge or force-push. Restrict remote write
-credentials to the service. Explicit recovery/import must validate authenticity,
-key epochs, membership and rollback policy before restoring authoritative state.
-
-GitHub Actions could optionally orchestrate work after events or on a schedule,
-but a runner still needs authenticated access to the source. No workflow needs a
-vault passphrase merely to replicate ciphertext. Scheduling must not be treated as
-an exact-time durability guarantee.
-
-## Delivery sequence
-
-1. Implement the agreed API-authoritative protocol: managed CLI operations use the
-   API, with explicit local/offline behavior. Define revision checks, repository
-   ownership, serialized writes and durable replication status. Existing local CLI
-   commands must not silently change meaning during migration.
-2. Specify and review the encrypted entry/index format and a reversible migration
-   from current snapshots. Retain the current restore path until a new round-trip
-   recovery test passes.
-3. Implement and test entry-level changes, encrypted folder metadata, deletions,
-   conflicts, interrupted writes, key rotation, access revocation and offline clients.
-4. Add provider-neutral Git transport, durable queues, selectable triggers and status.
-   Keep snapshot/full-server backup requirements distinct from synchronization.
-
-See [current architecture](../architecture.md), [recovery](../recovery.md), and
-[CLI behavior](../cli-accounts.md) for what is implemented today.
+No code, runtime flag, migration or deployment is enabled by this document update.

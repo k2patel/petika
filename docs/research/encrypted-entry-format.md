@@ -1,7 +1,10 @@
 # Encrypted entry format and atomic API transactions
 
 Status: **candidate with partial, gated implementations; no independent security review**.
-The API-authoritative workflow is agreed; the full format below remains a review candidate.
+The API-authoritative workflow below describes the existing prototype. The accepted
+[Git-authoritative direction](../decisions/0006-git-authoritative-sync.md) supersedes its
+future transport/commit authority. The per-entry format remains a review candidate;
+Git publication bindings and migration require a separate contract.
 Existing vaults and deployments are not automatically converted or enabled.
 Acceptance criteria are in [the validation plan](../testing/encrypted-entry-format.md).
 An [opt-in core primitive prototype](entry-format-prototype.md) now implements

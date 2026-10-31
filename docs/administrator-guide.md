@@ -1,5 +1,7 @@
 # Install and administer Petika
 
+These procedures operate the current API/mirror runtime. The accepted [Git-authoritative architecture](decisions/0006-git-authoritative-sync.md) is pending implementation and explicit per-vault migration; it adds password-plus-any-authorized-device-key access and host-dependent temporary Git access.
+
 This guide covers server installation, user onboarding, bucket/SSH preparation,
 backup operations, upgrades, and recovery. Give everyday users the
 [user guide](user-guide.md). Petika remains experimental and unaudited; these
