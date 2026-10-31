@@ -22,3 +22,19 @@ session.json.lock
 /clients/web/wasm/*
 
 /output/
+
+# Signing and service credentials stay in CI secrets or private local storage.
+*.p8
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+keystore.properties
+.keystore_pass
+keystore-backups/
+service-account*.json
+*-service-account.json
+google-services.json
+GoogleService-Info.plist

@@ -1,0 +1,39 @@
+title = "Petika public repository secret scanning"
+
+[extend]
+useDefault = true
+
+# Exceptions require both the exact fixture path and the exact public test value.
+# Never exempt whole test directories or use this list for real credentials.
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Deterministic synthetic HKDF output; scripts/generate_entry_vectors.py"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)crates/petika-core/tests/fixtures/entry\-format\-v1\.json$''']
+regexes = ['''"object_key"\s*:\s*"Paoqy/81D7Xesteo2CcXkO4acrcRFpkPRGjkEDpuI7U="''']
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Deterministic synthetic HKDF output; scripts/generate_entry_vectors.py"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)crates/petika-core/tests/fixtures/entry\-format\-v1\.json$''']
+regexes = ['''"object_key"\s*:\s*"u6vGypQwDguIdbEbQ5itehe80GSmHw/XyiEjIBY6VZI="''']
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Public RFC 7748 section 6.1 vector; docs/identity-format.md"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)crates/petika-core/tests/fixtures/identity\-v1\.json$''']
+regexes = ['''"standard_secret_hex"\s*:\s*"77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"''']
+
+[[allowlists]]
+targetRules = ["generic-api-key"]
+description = "Public upstream X-Wing draft-06 vector; scripts/generate_package_vectors.py"
+condition = "AND"
+regexTarget = "line"
+paths = ['''(?:^|/)crates/petika-core/tests/fixtures/key\-packages\-v1\.json$''']
+regexes = ['''"private_key_hex"\s*:\s*"7f9c2ba4e88f827d616045507605853ed73b8093f6efbc88eb1a6eacfa66ef26"''']

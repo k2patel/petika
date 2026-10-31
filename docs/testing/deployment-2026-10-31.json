@@ -1,0 +1,52 @@
+{
+  "verified_on": "2026-10-31",
+  "release": "9b47fdfc57613eac516df265cf03192b637e70fe",
+  "image_digest": "sha256:f0297100a431f9ac86cd6dec314c810053e0ede2d124ed583e40e613b4f003b8",
+  "containers_ready": "3/3",
+  "https_health": 200,
+  "https_readyz": 200,
+  "experimental_runtime_flags": {},
+  "rollback_archive_retained": true,
+  "rollback_capture": {
+    "writers_stopped": true,
+    "data_file_modes_private": true,
+    "archive_members": 83,
+    "includes_data_and_mirror": true,
+    "secrets_retained_privately": true
+  },
+  "previous_runtime_incident": {
+    "reason": "ImagePullBackOff: previous application digest no longer present in registry",
+    "observed_unavailable_since": "2026-10-28T13:07:58Z",
+    "registry_deletion_cause": "not established",
+    "old_image_rollback_available": false
+  },
+  "github_ci": {
+    "run": 39897475230,
+    "conclusion": "success",
+    "jobs_passed": 6
+  },
+  "gitea_image_build": {
+    "run": 383,
+    "conclusion": "success"
+  },
+  "git_settings": {
+    "available": true,
+    "legacy_push": true,
+    "credentials_configured": false,
+    "enabled": false,
+    "status": "not_configured",
+    "legacy_destination_prefilled": true
+  },
+  "secure_login_cookie": true,
+  "mirror": {
+    "enabled": true,
+    "revision_matches_api": true,
+    "legacy_sidecar_remote_push": "success",
+    "ui_takeover": "pending administrator credentials and first save"
+  },
+  "validation_limits": [
+    "Production Git settings read over authenticated HTTPS; no production destination or credentials changed.",
+    "Local adapter tests do not establish hosted SSH coverage.",
+    "Legacy HTTPS sidecar replication remains active."
+  ]
+}

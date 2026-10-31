@@ -96,6 +96,11 @@ Do not scale beyond one replica: the current store is a filesystem-backed single
 implementation. Expose it remotely only behind HTTPS with request timeouts, body limits, and
 rate limits. No public ingress is installed automatically.
 
+Retain the registry manifests and layers for the active image digest and any rollback
+release. Digest pinning prevents tag drift but cannot recover an image deleted by
+registry cleanup. Verify a pull of the exact digest before rollout and after changing
+retention rules; node caches alone do not ensure a replacement pod can start.
+
 ## Rootless Podman kube play
 
 Requires a recent Podman with kube Secret volumes and PVC ownership annotations.
@@ -172,8 +177,9 @@ in each committed tree. Inspect it externally with `git --git-dir=/mirror/reposi
 Managed collections use `/mirror/{opaque-collection-id}/repository.git`; their revisions
 are available through `petika status --collection ID`. Account and group metadata is
 not included in these mirrors. Entry names and folder hierarchy are encrypted; ciphertext sizes, revision counts,
-and commit times remain visible. Pushing it to a remote Git server is
-currently an operator task. Back up both persistent volumes and client recovery material.
+and commit times remain visible. Administrators can configure outbound transfers in
+the push-runtime Git settings UI or use an operator-managed job. Back up both
+persistent volumes and client recovery material.
 A mirror on the same physical disk is not an independent disaster-recovery backup.
 
 Rotate the API token by replacing its secret and restarting the process. This does not
