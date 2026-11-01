@@ -1,0 +1,74 @@
+{
+  "verified_on": "2026-10-31",
+  "verified_utc": "2026-11-01T02:40:58.879879+00:00",
+  "release": "4c415255697eeecd80b38a33ebd6ede75dee7625",
+  "image_digest": "sha256:c51cc243e407cd223ab04cbbc7e334a198bd6566abfeb000f6f090439e84e827",
+  "linux_amd64_digest": "sha256:d57e5ac4f996671a4de36aba2f06ddfe7da129a65e4b9bd15527ac44627171c1",
+  "gitea_image_build": {
+    "run": 395,
+    "conclusion": "success"
+  },
+  "source_publication": {
+    "github_main": "4c415255697eeecd80b38a33ebd6ede75dee7625",
+    "gitea_main": "4c415255697eeecd80b38a33ebd6ede75dee7625",
+    "gitea_pull_mirror_preserved": true,
+    "direct_gitea_push": false
+  },
+  "factory_reset": {
+    "active_data_claim": "petika-data-fresh-20261101-021204",
+    "active_mirror_claim": "petika-mirror-fresh-20261101-021204",
+    "original_claims_retained": true,
+    "offline_archive_verified": true,
+    "rollback_configuration_retained_privately": true,
+    "new_auth_secret": "petika-auth-fresh-20261101-021204",
+    "old_credentials_rejected": true,
+    "bootstrap_username": "owner",
+    "empty_personal_revision": 0,
+    "enrolled_passkeys": 0
+  },
+  "runtime": {
+    "containers_ready": "3/3",
+    "https_health": 200,
+    "https_readiness": 200,
+    "canonical_endpoint": "https://petika.k2patel.in",
+    "browser_passkeys_enabled": true,
+    "fresh_vault_policy": "browser-passkey",
+    "strict_biometric_provider_available": false
+  },
+  "verification": {
+    "fresh_owner_login": true,
+    "secure_http_only_cookie": true,
+    "personal_revision": 0,
+    "personal_vault_empty": true,
+    "registered_passkeys": 0,
+    "old_api_token_rejected": true,
+    "old_password_rejected": true,
+    "verification_session_logged_out": true
+  },
+  "browser_verification": {
+    "fresh_setup_visible": true,
+    "browser_passkey_default": true,
+    "strict_mode_fails_closed": true,
+    "no_device_or_vault_created": true,
+    "session_logged_out": true
+  },
+  "hosted_checks_at_last_observation": {
+    "codeql": "success",
+    "secret_scanning": "success",
+    "distroless_runtime": "success",
+    "api_contracts": "success",
+    "full_ci": "in_progress",
+    "dependabot_alert_recalculation": "pending"
+  },
+  "dependency_updates": {
+    "gix": "0.90.0",
+    "rustls": "0.23.46",
+    "test_only_cryptography": "50.0.0"
+  },
+  "limits": [
+    "No production passkey or biometric credential was enrolled by verification.",
+    "Original volumes and encrypted Git histories remain retained backups; this resets the active installation.",
+    "Prior browser/local copies and independent backups cannot be erased by a server reset.",
+    "Full hosted CI completion and Dependabot alert closure are recorded separately from runtime readiness."
+  ]
+}

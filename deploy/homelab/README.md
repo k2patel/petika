@@ -83,6 +83,16 @@ Do not configure an automatic Gitea → GitHub mirror for this cadence. Continue
 the full outgoing commit range for secrets before either publication, including when
 the Gitea development repository itself is private.
 
+## Fresh-start deployment record
+
+The [October 31 fresh-start deployment](../../docs/testing/deployment-fresh-start-2026-10-31.json)
+runs the passkey-enabled release on new data/mirror claims, with fresh owner credentials.
+The original claims are retained for rollback and are no longer the active installation.
+For future image updates, preserve the live deployment's claim and Secret references.
+Do not reapply the base `petika-data` / `petika-mirror` references: that would reconnect
+the retired installation. Credential and offline-backup files are private operator
+artifacts outside this public repository; none are included in this record.
+
 ## Deployment helper limitations
 
 `scripts/deploy_homelab.py` renders this overlay and can apply it with `--apply`.
