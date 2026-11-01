@@ -437,6 +437,19 @@ impl UnlockedStore {
         Ok(())
     }
 
+    /// Explicit personal-vault migration: preserve entries and mode, replace all
+    /// encryption secret material so legacy wrappers cannot decrypt new history.
+    pub fn fresh_bound_draft(&self, context: CollectionContext, passphrase: &str) -> Result<Self> {
+        if self.context().is_some() {
+            return Err(Error::Format);
+        }
+        let mut next = Self::create_with_mode(passphrase, self.encryption())?;
+        next.bind_collection(context, passphrase)?;
+        let bytes = Zeroizing::new(serde_json::to_vec(&self.entries).map_err(|_| Error::Format)?);
+        next.entries = serde_json::from_slice(&bytes).map_err(|_| Error::Format)?;
+        Ok(next)
+    }
+
     /// Fresh secret material and a fresh recovery wrapper for the next epoch.
     /// Returns a separate draft so a failed server transaction preserves this session.
     pub fn rotated(&self, recovery_passphrase: &str) -> Result<Self> {
@@ -524,4 +537,48 @@ pub fn generate_password(length: usize) -> Result<Zeroizing<String>> {
         }
     }
     Ok(password)
+}
+
+#[cfg(test)]
+mod passkey_migration_tests {
+    use super::*;
+    #[test]
+    fn migration_replaces_secret_material_and_preserves_mode_and_entries() {
+        for mode in [EncryptionMode::Standard, EncryptionMode::HybridPostQuantum] {
+            let mut old =
+                UnlockedStore::create_with_mode("public old synthetic passphrase", mode).unwrap();
+            old.put(
+                "Example".into(),
+                crate::Entry {
+                    username: "fixture".into(),
+                    password: "synthetic secret".into(),
+                    url: String::new(),
+                    notes: String::new(),
+                    otp: None,
+                },
+                false,
+            )
+            .unwrap();
+            let original = old.seal().unwrap();
+            let context = CollectionContext {
+                deployment_id: "a".repeat(64),
+                collection_id: "b".repeat(64),
+                key_epoch: 1,
+            };
+            let mut next = old
+                .fresh_bound_draft(context.clone(), "public new synthetic random seed")
+                .unwrap();
+            assert_ne!(*old.key, *next.key);
+            assert_ne!(*old.secret_material, *next.secret_material);
+            assert_eq!(next.encryption(), mode);
+            assert_eq!(next.get("Example").unwrap().password, "synthetic secret");
+            let encrypted = next.seal().unwrap();
+            assert!(UnlockedStore::open(&encrypted, "public old synthetic passphrase").is_err());
+            assert!(UnlockedStore::open(&original, "public old synthetic passphrase").is_ok());
+            assert!(
+                next.fresh_bound_draft(context, "public new synthetic random seed")
+                    .is_err()
+            );
+        }
+    }
 }

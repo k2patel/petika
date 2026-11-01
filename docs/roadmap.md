@@ -10,7 +10,8 @@ completed decisions, not a production-readiness certification.
 - [x] Explicit browser-passkey and strict-biometric setup choices; strict creation fails closed without a provider.
 - [x] Personal browser vaults: verified WebAuthn registration, PRF key wrappers, independent additional keys, fresh per-action workers and one-use CAS publication grants.
 - [ ] Hardware/browser-engine matrix, public-ledger restore drill and security review before broad release.
-- [ ] Legacy migration, cryptographic passkey removal/rotation, shared-vault browser support and QR enrollment.
+- [x] Explicit legacy personal-vault migration with fresh encryption material, preserved original snapshot, CAS and interrupted-write reconciliation.
+- [ ] Shared/recipient migration, cryptographic passkey removal/rotation, shared-vault browser support and QR enrollment.
 - [ ] Production strict biometric provider, native bridge and per-use hardware lifecycle coverage.
 
 See [implemented browser flow and limits](browser-passkeys.md). The strict sequence below

@@ -67,3 +67,9 @@ clients. `passkeys.json` version 1 stores public WebAuthn credentials, labels, o
 and monotonic ceremony revisions. Full server backup must retain it along with the
 account database, deployment ID and collection journals. It contains no PRF outputs
 or private authenticator/vault keys. No legacy collection is automatically migrated.
+
+Legacy personal version-1 vaults support [explicit browser-passkey migration](passkey-migration.md).
+It requires the working vault passphrase, creates fresh encryption secret material,
+preserves the Standard/Hybrid mode and exact original snapshot, and uses a one-use
+CAS publication grant. Shared/recipient vaults are excluded. Older encrypted history
+remains accessible with its old passphrase; current passkey ciphertext does not.

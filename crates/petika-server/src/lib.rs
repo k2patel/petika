@@ -93,7 +93,15 @@ impl Repository {
     /// Called only after a session-bound WebAuthn write grant was consumed.
     #[cfg(feature = "browser-passkeys")]
     pub(crate) fn update_browser(&self, expected: u64, encrypted: String) -> Result<Update> {
-        petika_core::passkey_vault::BrowserVault::parse(encrypted.as_bytes())?;
+        self.store_browser(expected, encrypted, false)
+    }
+    #[cfg(feature = "browser-passkeys")]
+    pub(crate) fn migrate_browser(&self, expected: u64, encrypted: String) -> Result<Update> {
+        self.store_browser(expected, encrypted, true)
+    }
+    #[cfg(feature = "browser-passkeys")]
+    fn store_browser(&self, expected: u64, encrypted: String, migration: bool) -> Result<Update> {
+        let browser = petika_core::passkey_vault::BrowserVault::parse(encrypted.as_bytes())?;
         let file = StoreFile::lock(&self.path)?;
         if self
             .path
@@ -102,18 +110,54 @@ impl Repository {
         {
             return Err("Collection has another authority".into());
         }
+        let mut original = None;
         let current = if file.exists() {
-            let saved: Snapshot = serde_json::from_slice(&file.read()?)?;
+            let bytes = file.read()?;
+            let saved: Snapshot = serde_json::from_slice(&bytes)?;
             if saved.delivery.is_some() {
                 return Err("Recipient collection cannot be replaced".into());
             }
-            petika_core::passkey_vault::BrowserVault::parse(saved.encrypted.as_bytes())?;
+            if migration {
+                if petika_core::envelope_metadata(saved.encrypted.as_bytes())?.0
+                    != petika_core::envelope_metadata(browser.encrypted_snapshot.as_bytes())?.0
+                {
+                    return Err("Migration cannot change encryption mode".into());
+                }
+                if saved.schema_version != 1
+                    || petika_core::envelope_metadata(saved.encrypted.as_bytes())?
+                        .1
+                        .is_some()
+                {
+                    return Err("Only legacy personal snapshots can migrate".into());
+                }
+                original = Some(bytes);
+            } else {
+                petika_core::passkey_vault::BrowserVault::parse(saved.encrypted.as_bytes())?;
+            }
             saved.revision
         } else {
+            if migration {
+                return Err("Migration requires an existing snapshot".into());
+            }
             0
         };
         if current != expected {
             return Ok(Update::Conflict(current));
+        }
+        if let Some(original) = original {
+            let backup = StoreFile::lock(
+                self.path
+                    .parent()
+                    .ok_or("Missing snapshot parent")?
+                    .join("snapshot.passphrase-backup.json"),
+            )?;
+            if backup.exists() {
+                if backup.read()? != original {
+                    return Err("Conflicting original snapshot backup".into());
+                }
+            } else {
+                backup.write(&original, true)?;
+            }
         }
         let revision = current
             .checked_add(1)

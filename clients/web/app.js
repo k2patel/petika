@@ -286,7 +286,7 @@ async function loadCollection() {
   state.snapshot = null;
   state.status = null;
   state.revision = 0;
-  state.browserVault=null;state.browserPending=null;state.browserRows=null;state.browserInfo=null;state.browserCredentialId=null;
+  state.browserMigration=false;state.browserVault=null;state.browserPending=null;state.browserRows=null;state.browserInfo=null;state.browserCredentialId=null;
   const draft = getDraft();
   try {
   const response = await fetch(apiUrl(`/v1/collections/${state.collection.id}/snapshot`), {
@@ -304,13 +304,13 @@ async function loadCollection() {
       state.conflict = draft.revision !== state.revision;
       state.snapshot = draft.encrypted;
       state.revision = draft.revision;
-      state.dirty = true;
+      state.dirty = true;state.browserMigration=draft.migration===true;
     }
   } catch (e) {
     if (draft) {
       state.snapshot = draft.encrypted;
       state.revision = draft.revision;
-      state.dirty = Boolean(draft.dirty);
+      state.dirty = Boolean(draft.dirty);state.browserMigration=draft.migration===true;
       toast('Using the encrypted copy on this device.')
     } else throw e;
   }
@@ -431,12 +431,12 @@ function bindBrowserUnlock() {
     if(!state.browserCredentialId)throw new Error('Choose an authorized passkey.');
     if(state.dirty)await saveBrowserVault();
     state.rows=await browserRpc('open');state.browserRows=null;
-    assertBrowserContext(collection,generation);state.unlocked=true;state.mode='standard';lastActivity=Date.now();shell();
+    assertBrowserContext(collection,generation);state.unlocked=true;state.mode=browserVaultMode();lastActivity=Date.now();shell();
   });
 }
 async function browserRpc(action,...args) {
   const collection=state.collection.id,generation=passkeyClient.generation;
-  if(action==='mode')return 'standard';
+  if(action==='mode')return browserVaultMode();
   if(action==='seal')return state.snapshot;
   if(state.dirty&&['put','remove','add-key'].includes(action))throw new Error('Resolve the retained encrypted changes before making another edit.');
   await browserInfo();assertBrowserContext(collection,generation);
@@ -447,16 +447,16 @@ async function browserRpc(action,...args) {
   return result.value;
 }
 function stashBrowserDraft() {
-  try{localStorage.setItem(draftKey(),JSON.stringify({encrypted:state.snapshot,revision:state.revision,dirty:state.dirty}));}catch{throw new Error('This device cannot retain the encrypted draft. Download an encrypted backup before leaving.');}
+  try{localStorage.setItem(draftKey(),JSON.stringify({encrypted:state.snapshot,revision:state.revision,dirty:state.dirty,migration:state.browserMigration===true}));}catch{throw new Error('This device cannot retain the encrypted draft. Download an encrypted backup before leaving.');}
 }
 async function saveBrowserVault() {
   if(!state.dirty)return;
   const collection=state.collection.id,generation=passkeyClient.generation;
   const candidate=state.browserPending?.vault||JSON.parse(state.snapshot);
-  const current=await api(`/v1/passkey-vaults/${state.collection.id}`);
+  const current=await api(`/v1/${state.browserMigration?'passkey-migrations':'passkey-vaults'}/${state.collection.id}`);
   assertBrowserContext(collection,generation);
   if(current.vault?.operation_id===candidate.operation_id&&canonical(current.vault)===canonical(candidate)) {
-    state.browserVault=current.vault;state.snapshot=JSON.stringify(current.vault);state.revision=current.revision;state.dirty=false;state.conflict=false;state.browserPending=null;stashBrowserDraft();return;
+    state.browserVault=current.vault;state.snapshot=JSON.stringify(current.vault);state.revision=current.revision;state.dirty=false;state.conflict=false;state.browserPending=null;state.browserMigration=false;stashBrowserDraft();return;
   }
   if(current.revision!==state.revision){state.conflict=true;throw new Error('Another device changed the vault. Your encrypted draft is preserved. Download it before refreshing and reviewing the latest version.');}
   let pending=state.browserPending;
@@ -464,7 +464,7 @@ async function saveBrowserVault() {
     await browserInfo();assertBrowserContext(collection,generation);const id=state.browserCredentialId||candidate.protection.wrappers[0].credential_id;
     const wrapper=candidate.protection.wrappers.find(w=>w.credential_id===id);
     if(!wrapper)throw new Error('Choose a passkey authorized for the retained draft.');
-    const action=current.vault?(candidate.protection.wrappers.length>current.vault.protection.wrappers.length?'add-key':'put'):'create';
+    const action=state.browserMigration?'migrate':current.vault?(candidate.protection.wrappers.length>current.vault.protection.wrappers.length?'add-key':'put'):'create';
     const newId=action==='add-key'?candidate.protection.wrappers.at(-1).credential_id:null;
     const approval=await passkeyClient.verify(state.collection.id,id,action,state.revision,wrapper.prf_input,newId);
     const checked=await passkeyClient.worker({scope:browserScope(),action:'open',args:[],vault:candidate,credentialId:id,prf:approval.prf.buffer});
@@ -476,7 +476,7 @@ async function saveBrowserVault() {
   try {
     const result=await api(`/v1/passkey-vaults/${state.collection.id}`,{method:'PUT',body:pending});
     assertBrowserContext(collection,generation);state.revision=result.revision;state.browserVault=candidate;state.snapshot=JSON.stringify(candidate);
-    state.dirty=false;state.browserPending=null;state.conflict=false;stashBrowserDraft();
+    state.dirty=false;state.browserPending=null;state.browserMigration=false;state.conflict=false;stashBrowserDraft();
   } catch(e) {if(state.collection?.id===collection&&passkeyClient.generation===generation)state.browserPending={vault:candidate,grant_id:null};throw e;}
 }
 async function addBrowserKey() {
@@ -504,6 +504,38 @@ async function preserveBrowserDraftAndRefresh() {
   return loadCollection();
 }
 
+async function migrateBrowserVault() {
+  if(state.demo||state.collection.group||state.dirty||!state.snapshot||JSON.parse(state.snapshot).version!==1||!passkeySettings.enabled||passkeySettings.fresh_policy==='strict-biometric')throw new Error('Migration requires a saved legacy personal vault and an available browser-passkey policy.');
+  const collection=state.collection.id;
+  const info=await browserInfo();
+  if(state.collection.id!==collection)throw new Error('Collection changed.');
+  dialog('Move Personal to passkey protection',`<form id="migrate-passkey-form"><p>This replaces protection for future saves. Your original encrypted snapshot and its old passphrase remain necessary for historical recovery. Legacy clients cannot open the migrated vault.</p>${field('Current vault passphrase','vault-passphrase','password','','required autocomplete="off"')}<div class="field"><label for="migration-credential">Passkey</label><select id="migration-credential" name="credential"><option value="new">Create a new passkey</option>${info.credentials.map(key=>`<option value="${esc(key.id)}">${esc(key.label)}</option>`).join('')}</select></div><div id="migration-new-key">${field('Confirm account password','account-password','password','','required autocomplete="current-password"')}${field('Passkey name','key-label','text','My passkey','required maxlength="80"')}</div><label class="check"><input name="confirm" type="checkbox" required>I understand that older clients cannot unlock the new vault.</label><div class="form-error" role="alert"></div><button type="submit" class="btn primary">Migrate with passkey</button></form>`);
+  let finished=false;
+  $('#dialog').addEventListener('close',()=>{if(!finished)passkeyClient.cancel();},{once:true});
+  const el=$('#migrate-passkey-form');
+  el.elements.credential.onchange=()=>{const isNew=el.elements.credential.value==='new';$('#migration-new-key').hidden=!isNew;el.elements['account-password'].disabled=!isNew;el.elements['key-label'].disabled=!isNew;};
+  form('#migrate-passkey-form',async(data,formEl)=>{
+    if(state.dirty||state.collection.id!==collection)throw new Error('Collection changed; refresh before migrating.');
+    discardWorker();state.unlocked=false;state.rows=[];state.selected=null;
+    const generation=passkeyClient.generation;let id=data.get('credential');
+    try {
+      if(id==='new')id=(await passkeyClient.enroll(data.get('account-password'),data.get('key-label'))).credential_id;
+      assertBrowserContext(collection,generation);formEl.elements['account-password'].value='';
+      await browserInfo();assertBrowserContext(collection,generation);
+      const source=state.snapshot;
+      const result=await passkeyClient.run(source,browserScope(),id,'migrate',[data.get('vault-passphrase')]);
+      assertBrowserContext(collection,generation);
+      state.browserMigration=true;state.browserVault=result.vault;state.browserPending=result.pending;state.browserCredentialId=id;
+      state.snapshot=JSON.stringify(result.vault);state.dirty=true;state.browserRows=result.rows;
+      stashBrowserDraft();await saveBrowserVault();assertBrowserContext(collection,generation);
+      state.rows=result.rows;state.browserRows=null;state.unlocked=true;state.mode=browserVaultMode();lastActivity=Date.now();
+      finished=true;closeDialog();shell();toast('Personal now requires a passkey for each secret action');
+    } finally {formEl.elements['vault-passphrase'].value='';data.delete('vault-passphrase');data.delete('account-password');}
+  });
+}
+function browserVaultMode() {
+  return JSON.parse(state.browserVault.encrypted_snapshot).encryption==='hybrid-post-quantum'?'hybrid-post-quantum':'standard';
+}
 function browserSecuritySettings() {
   return `<section class="panel readable"><div class="panel-header"><h2>Security & recovery</h2><span class="pill">Browser passkey</span></div><p>Each secret action requires a new passkey verification. Your OS may use Touch ID, Face ID, a security key, or its device PIN.</p><p>Biometric-only protection is a separate policy and is never inferred from a browser verification result.</p><div class="actions">${button('Add an authorized passkey','browser-add-key','plus')}${button('Download encrypted backup','export','download')}</div><p>Keep another working passkey. A login-password reset cannot recover a vault after every authorized key is lost.</p></section>`;
 }
@@ -514,13 +546,14 @@ function securitySettings() {
   return `<section class="panel readable settings-security" aria-labelledby="security-settings-title">
     <div class="panel-header"><div><h2 id="security-settings-title">Security & recovery</h2><p>For ${esc(state.collection.name)}. Your account password and vault passphrase have different jobs.</p></div></div>
     <div class="settings-row"><div><h3>Vault protection</h3><p>Your saved passwords are encrypted on your device before they sync.</p></div><span class="pill neutral">${protection}</span></div>
+    ${!state.demo&&!state.collection.group&&state.snapshot&&!state.dirty&&JSON.parse(state.snapshot).version===1&&passkeySettings.enabled&&passkeySettings.fresh_policy!=='strict-biometric'?`<div class="settings-row"><div><h3>Passkey protection</h3><p>Move this personal vault to per-action browser passkeys. Your current vault passphrase is required.</p></div>${button('Move to passkey protection','browser-migrate','key')}</div>`:''}
     <div class="settings-row"><div><h3>Recovery & sharing</h3><p>Manage your encrypted recipient identity${state.collection.group?' and this group’s access':''}. Keep recovery material somewhere safe.</p></div><div class="actions">${button('Recipient identity','identity','key')}${state.collection.group?button('Group access','sharing','users'):''}</div></div>
     <div class="settings-row"><div><h3>Off-site backups</h3><p>Send encrypted copies to S3 or SSH storage, or create a download key for your backup software.</p></div>${button('Off-site backups','backups','download')}</div>
     ${state.user.admin?`<div class="settings-row"><div><h3>Git repository</h3><p>Manage this server’s encrypted Git copies, connection, and sync schedule.</p></div>${button('Git repository','git-settings','refresh')}</div>`:''}<div class="settings-row"><div><h3>Account access</h3><p>Changing your sign-in password does not change your vault passphrase.</p></div><div class="actions">${button('Connected clients','clients','browser')}${button('Change account password','account-password','key')}</div></div>
     <details class="settings-details"><summary>Encryption details & upcoming options</summary><div class="settings-details-body">
       <p>${!state.unlocked?'Unlock this collection to see which protection it uses.':state.mode==='standard'?'This collection uses XChaCha20-Poly1305 with Argon2id passphrase protection.':'This collection uses experimental X-Wing key protection and XChaCha20-Poly1305 encryption.'}</p>
       <p>GPG is an import tool, not a vault protection setting. ${button('Open import tools','transfer','upload','ghost')}</p>
-      <p>Separate device keys, biometric unlock, trusted-person recovery and new encryption profiles are being researched. They are not available to configure in this release.</p>
+      <p>Browser passkey protection is available for saved personal passphrase vaults on compatible installations. Strict biometric-only access, QR pairing and shared-vault migration still need implementation.</p>
     </div></details>
   </section>`;
 }
@@ -1124,6 +1157,7 @@ async function action(name, el) {
       break;
     case 'browser-view': await renderDetail();break;
     case 'browser-refresh': await preserveBrowserDraftAndRefresh();break;
+    case 'browser-migrate': await migrateBrowserVault();break;
     case 'browser-add-key': await addBrowserKey();break;
     case 'select':
       state.selected = state.rows[Number(el.dataset.index)].name;

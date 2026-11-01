@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-31",
+  "scope": "Explicit legacy version-1 personal-vault migration to browser-passkey protection; generated data only",
+  "checks": {
+    "core": "Both encryption modes preserve entries/mode while replacing data key and secret material; old passphrase still opens original and cannot open new ciphertext",
+    "server": "Seven passkey tests passed, including migration-specific stale approval/publication rejection, exact original backup, replay denial, conflicting backup preservation, wrong owner, recipient/entry authority and mode-downgrade denial; existing server regressions passed",
+    "browser": "Standard and Hybrid UI flows passed wrong-passphrase denial, dialog cancellation with delayed authorization, explicit confirmation, fresh passkey reads, accepted write with lost reply, reload reconciliation, retained original and legacy-client rejection",
+    "regression": "Existing fresh-passkey/two-key/restart/Git-mirror browser suite and seven JavaScript crypto/client tests passed",
+    "build": "Release WASM build/bindings passed; default and combined-feature Clippy warnings denied; no-default-features server check and formatting passed"
+  },
+  "boundaries": [
+    "Migration is explicit and requires the working old passphrase locally; no forgotten-passphrase recovery",
+    "Old snapshots and Git history remain decryptable by their original passphrase",
+    "No shared/recipient migration, strict provider, QR pairing or cryptographic key-removal implementation",
+    "Virtual authenticators are not physical biometric evidence",
+    "No production vault, reset, push or deployment exercised"
+  ],
+  "reproduce": [
+    "cargo test --locked -p petika-core --lib passkey_migration_tests",
+    "cargo test --locked -p petika-server",
+    "node --test scripts/test_passkeys.mjs",
+    "sh scripts/build_web.sh",
+    "python scripts/test_passkey_migration.py",
+    "python scripts/test_browser_passkeys.py"
+  ]
+}

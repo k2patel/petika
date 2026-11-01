@@ -31,6 +31,9 @@ pub fn passkey_route(mut request: Request, accounts: &mut Accounts) {
         ("/v1/passkeys/registration/finish", "POST") => Operation::RegistrationFinish,
         ("/v1/passkeys/authentication/start", "POST") => Operation::AuthenticationStart,
         ("/v1/passkeys/authentication/finish", "POST") => Operation::AuthenticationFinish,
+        (path, "GET") if path.starts_with("/v1/passkey-migrations/") => {
+            Operation::MigrationSource(path.trim_start_matches("/v1/passkey-migrations/").into())
+        }
         (path, "GET") if path.starts_with("/v1/passkey-vaults/") => {
             Operation::Vault(path.trim_start_matches("/v1/passkey-vaults/").into())
         }

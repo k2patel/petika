@@ -19,6 +19,20 @@ impl Session {
         store.bind_collection(context, &passphrase).map_err(error)?;
         Ok(Session(store))
     }
+    pub fn migrate_bound(
+        encrypted: &[u8],
+        old_passphrase: String,
+        new_passphrase: String,
+        context: &str,
+    ) -> Result<Session, JsValue> {
+        let old_passphrase = Zeroizing::new(old_passphrase);
+        let new_passphrase = Zeroizing::new(new_passphrase);
+        let context = serde_json::from_str(context).map_err(error)?;
+        let old = UnlockedStore::open(encrypted, &old_passphrase).map_err(error)?;
+        old.fresh_bound_draft(context, &new_passphrase)
+            .map(Session)
+            .map_err(error)
+    }
     pub fn open_bound(
         encrypted: &[u8],
         passphrase: String,

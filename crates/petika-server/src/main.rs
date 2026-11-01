@@ -342,6 +342,7 @@ fn run() -> Result<()> {
         } else if path == "/v1/passkeys"
             || path.starts_with("/v1/passkeys/")
             || path.starts_with("/v1/passkey-vaults/")
+            || path.starts_with("/v1/passkey-migrations/")
         {
             web::passkey_route(request, &mut accounts);
         } else if path == "/v1/device-keys" || path.starts_with("/v1/device-keys/") {

@@ -654,3 +654,9 @@ decryptable with their original identity and pin. No client trust is automatical
 This closes the retained-key authority-replacement path. Lost-authority recovery,
 independent hardware device identities, biometric protection and production recovery
 objectives remain separate work. The fixed R01–R08 ledger remains 8/8 complete.
+
+Legacy personal version-1 vaults support [explicit browser-passkey migration](passkey-migration.md).
+It requires the working vault passphrase, creates fresh encryption secret material,
+preserves the Standard/Hybrid mode and exact original snapshot, and uses a one-use
+CAS publication grant. Shared/recipient vaults are excluded. Older encrypted history
+remains accessible with its old passphrase; current passkey ciphertext does not.

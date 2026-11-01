@@ -27,8 +27,10 @@ support produces an error rather than a passphrase fallback.
 To add another key, open **Settings → Security & recovery → Add an authorized passkey**.
 Create and verify the new key, then approve the existing authorized key. Either key
 can then open this vault. Keep another working key and a complete encrypted backup.
-A login-password reset cannot recover lost vault keys. Existing passphrase collections
-follow the legacy instructions below; migration is not automatic.
+A login-password reset cannot recover lost vault keys. Existing personal passphrase
+collections can use **Settings → Move to passkey protection** with their current vault
+passphrase; [review migration and historical recovery](passkey-migration.md). Migration
+is never automatic.
 
 ## What you need
 

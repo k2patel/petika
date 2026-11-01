@@ -20,7 +20,9 @@ PRF-encrypted independent key wrappers, personal-vault framing and transient WAS
 workers, add-key enrollment, encrypted conflict drafts and one-use CAS write grants.
 The virtual-authenticator browser test covers two keys, UI controls and restart.
 Hardware/browser-engine verification, strict provider, QR pairing, group support,
-legacy migration and key-removal rotation remain open. See [details](browser-passkeys.md).
+shared/recipient migration and key-removal rotation remain open.
+[Legacy personal migration](passkey-migration.md) is implemented separately with fresh
+encryption material, exact original backup and one-use CAS cutover. See [details](browser-passkeys.md).
 
 ## Existing foundations to reuse
 

@@ -12,6 +12,11 @@ which maps existing code to missing work and gives each package dependencies and
 criteria. The first code milestone is a persistent native credential with fresh biometric
 approval for every synthetic Show/Copy operation.
 
+Legacy personal version-1 collections can now [explicitly migrate to browser passkeys](passkey-migration.md).
+A dedicated worker replaces encryption secret material, preserves the selected encryption
+mode and publishes through a one-use migration grant and revision comparison. The server
+preserves the exact old snapshot before cutover; recipient and shared vaults are excluded.
+
 ## Accepted target: Git-authoritative sync
 
 [ADR 0006](decisions/0006-git-authoritative-sync.md), accepted as direction on

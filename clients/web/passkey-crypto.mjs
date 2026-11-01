@@ -40,11 +40,15 @@ export async function execute(Session,request,generate) {
   let seed,session;
   try {
     let vault=request.vault;
-    if(action==='create') {
+    if(action==='create'||action==='migrate') {
       if(vault)throw new Error('An existing vault cannot be replaced by setup.');
       const protection={version:1,policy:'browser-passkey',context:{deployment_id:scope.deployment_id,collection_id:scope.collection_id,key_epoch:1},owner_user_id:scope.user_id,origin:scope.origin,wrappers:[]};
       seed=random(32);protection.wrappers.push(await wrap(prf,seed,protection,credentialId,input));
-      session=Session.create_bound(encode(seed),JSON.stringify(protection.context));
+      if(action==='migrate') {
+        if(typeof request.legacy!=='string'||JSON.parse(request.legacy).version!==1)throw new Error('Only legacy personal vaults can migrate.');
+        session=Session.migrate_bound(utf8.encode(request.legacy),args[0],encode(seed),JSON.stringify(protection.context));
+        args[0]='';
+      } else session=Session.create_bound(encode(seed),JSON.stringify(protection.context));
       vault={version:3,kind:'petika-passkey-vault',protection,encrypted_snapshot:new TextDecoder().decode(session.seal()),operation_id:op};
       return {vault,rows:JSON.parse(session.list())};
     }
@@ -77,5 +81,5 @@ export async function execute(Session,request,generate) {
       return {vault,rows:JSON.parse(session.list())};
     }
     return {value};
-  } finally {session?.free();seed?.fill(0);prf.fill(0);newPrf?.fill(0);}
+  } finally {if(action==='migrate')args.fill('');session?.free();seed?.fill(0);prf.fill(0);newPrf?.fill(0);}
 }

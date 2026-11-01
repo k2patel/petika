@@ -25,7 +25,9 @@ when that endpoint is valid. `PETIKA_FRESH_VAULT_POLICY` accepts `legacy`,
 `browser-passkey`, or `strict-biometric`. Strict mode blocks creation until a
 compatible provider is available. Builds without the feature retain legacy setup.
 Existing collections retain their original protection and are never silently
-converted. Groups and QR enrollment are not implemented in this browser flow.
+converted. Legacy personal version-1 vaults can [explicitly migrate](passkey-migration.md)
+with their current passphrase and a fresh passkey ceremony. Groups and QR enrollment
+are not implemented in this browser flow.
 
 The JavaScript client uses standard `navigator.credentials.create/get` APIs,
 without browser-name detection or an extension. WebAuthn availability alone is
@@ -87,7 +89,7 @@ passphrase envelope.
 
 Keep another working enrolled passkey and a complete encrypted backup including
 wrappers. Back up the server's public credential ledger with accounts and snapshots.
-The legacy CLI cannot open version-3 vaults. Migration from a legacy collection,
+The legacy CLI cannot open version-3 vaults. Shared/recipient collection migration,
 passkey removal/rotation, strict provider integration and complete restore drills
 remain release gates. A lost passphrase is not recoverable by adding a new passkey;
 migration first requires a working method to decrypt the old collection.

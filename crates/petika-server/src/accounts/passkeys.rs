@@ -84,6 +84,7 @@ pub enum Operation {
     AuthenticationStart,
     AuthenticationFinish,
     Vault(String),
+    MigrationSource(String),
     Write(String),
 }
 struct Pending {
@@ -171,6 +172,7 @@ impl Ledger {
 #[serde(rename_all = "kebab-case")]
 pub enum Action {
     Create,
+    Migrate,
     PrepareKey,
     Generate,
     AuthorizeCopy,
@@ -188,7 +190,10 @@ pub enum Action {
 }
 impl Action {
     fn writes(&self) -> bool {
-        matches!(self, Self::Create | Self::Put | Self::Remove | Self::AddKey)
+        matches!(
+            self,
+            Self::Create | Self::Migrate | Self::Put | Self::Remove | Self::AddKey
+        )
     }
 }
 #[derive(Clone, Deserialize)]
@@ -252,6 +257,26 @@ fn current(repository: &Repository) -> Result<Option<(Snapshot, BrowserVault)>> 
                 .map_err(|_| KeyError::Conflict)
         })
         .transpose()
+}
+fn legacy(repository: &Repository) -> Result<Snapshot> {
+    let value = repository
+        .read()
+        .map_err(|_| KeyError::Unavailable)?
+        .ok_or(KeyError::Conflict)?;
+    if value.schema_version != 1
+        || value.delivery.is_some()
+        || repository
+            .path
+            .parent()
+            .is_some_and(|p| p.join("entries/committed-root").exists())
+        || petika_core::envelope_metadata(value.encrypted.as_bytes())
+            .map_err(|_| KeyError::Conflict)?
+            .1
+            .is_some()
+    {
+        return Err(KeyError::Conflict);
+    }
+    Ok(value)
 }
 impl Accounts {
     pub fn browser_passkeys_available(&self) -> bool {
@@ -402,13 +427,23 @@ impl Accounts {
                 {
                     return Err(KeyError::Forbidden);
                 }
-                if request.action == Action::Create
+                if matches!(request.action, Action::Create | Action::Migrate)
                     && settings(&self.passkeys.origin).map_err(|_| KeyError::Unavailable)?["fresh_policy"]
                         == "strict-biometric"
                 {
                     return Err(KeyError::Forbidden);
                 }
-                let stored = current(&snapshot(&data, &request.collection_id))?;
+                let repository = snapshot(&data, &request.collection_id);
+                let migrating = request.action == Action::Migrate;
+                let stored = if migrating {
+                    let source = legacy(&repository)?;
+                    if source.revision != request.revision {
+                        return Err(KeyError::Conflict);
+                    }
+                    None
+                } else {
+                    current(&repository)?
+                };
                 if let Some((ref saved, ref vault)) = stored {
                     if saved.revision != request.revision || request.action == Action::Create {
                         return Err(KeyError::Conflict);
@@ -428,7 +463,8 @@ impl Accounts {
                     {
                         return Err(KeyError::Forbidden);
                     }
-                } else if request.revision != 0 || request.action != Action::Create {
+                } else if !migrating && (request.revision != 0 || request.action != Action::Create)
+                {
                     return Err(KeyError::Conflict);
                 }
                 if request.action == Action::AddKey {
@@ -515,8 +551,15 @@ impl Accounts {
                     .update_credential(&result)
                     .ok_or(KeyError::Forbidden)?;
                 ledger.save(&ledger_file)?;
-                let saved = current(&snapshot(&data, &action.collection_id))?;
-                if saved.as_ref().map_or(0, |(s, _)| s.revision) != action.revision {
+                let repository = snapshot(&data, &action.collection_id);
+                let revision = if action.action == Action::Migrate {
+                    legacy(&repository)?.revision
+                } else {
+                    current(&repository)?
+                        .as_ref()
+                        .map_or(0, |(s, _)| s.revision)
+                };
+                if revision != action.revision {
                     return Err(KeyError::Conflict);
                 }
                 let grant_id = if action.action.writes() {
@@ -540,6 +583,18 @@ impl Accounts {
                 Ok(
                     json!({"verified":true,"operation_id":action.operation_id,"grant_id":grant_id,"policy":"browser-passkey"}),
                 )
+            }
+            Operation::MigrationSource(id) => {
+                if id != user.id {
+                    return Err(KeyError::Forbidden);
+                }
+                let repository = snapshot(&data, &id);
+                if let Ok(source) = legacy(&repository) {
+                    Ok(json!({"revision":source.revision,"legacy":source.encrypted,"vault":null}))
+                } else {
+                    let (saved, vault) = current(&repository)?.ok_or(KeyError::Conflict)?;
+                    Ok(json!({"revision":saved.revision,"legacy":null,"vault":vault}))
+                }
             }
             Operation::Vault(id) => {
                 if id != user.id {
@@ -584,12 +639,19 @@ impl Accounts {
                     return Err(KeyError::Forbidden);
                 }
                 let repository = snapshot(&data, &id);
-                let prior = current(&repository)?;
-                if prior.as_ref().map_or(0, |(s, _)| s.revision) != grant.request.revision {
+                let migrating = grant.request.action == Action::Migrate;
+                let (prior, revision) = if migrating {
+                    (None, legacy(&repository)?.revision)
+                } else {
+                    let prior = current(&repository)?;
+                    let revision = prior.as_ref().map_or(0, |(s, _)| s.revision);
+                    (prior, revision)
+                };
+                if revision != grant.request.revision {
                     return Err(KeyError::Conflict);
                 }
                 match (&grant.request.action, prior.as_ref()) {
-                    (Action::Create, None)
+                    (Action::Create | Action::Migrate, None)
                         if p.context.key_epoch == 1
                             && p.wrappers.len() == 1
                             && p.wrappers[0].credential_id == grant.request.credential_id => {}
@@ -630,13 +692,14 @@ impl Accounts {
                 }) {
                     return Err(KeyError::Forbidden);
                 }
-                match repository
-                    .update_browser(
-                        grant.request.revision,
-                        serde_json::to_string(&request.vault).map_err(|_| KeyError::Invalid)?,
-                    )
-                    .map_err(|_| KeyError::Unavailable)?
-                {
+                let encoded =
+                    serde_json::to_string(&request.vault).map_err(|_| KeyError::Invalid)?;
+                let updated = if migrating {
+                    repository.migrate_browser(grant.request.revision, encoded)
+                } else {
+                    repository.update_browser(grant.request.revision, encoded)
+                };
+                match updated.map_err(|_| KeyError::Unavailable)? {
                     Update::Saved(revision) => {
                         let replication = if let Some(root) = std::env::var_os("PETIKA_GIT_MIRROR")
                         {
@@ -858,14 +921,11 @@ mod tests {
             .expires = Instant::now() - Duration::from_secs(1);
         assert!(f.call(Operation::AuthenticationFinish, proof).is_err());
     }
-    #[test]
-    fn writes_require_one_use_grants_preserve_cas_and_deny_legacy_downgrade() {
+    fn candidate(f: &mut Fixture) -> BrowserVault {
         use petika_core::{
             CollectionContext, UnlockedStore,
             passkey_vault::{BrowserProtection, PasskeyWrapper},
         };
-        let mut f = Fixture::new();
-        f.register();
         let info = f.call(Operation::Info, json!({})).unwrap();
         let context = CollectionContext {
             deployment_id: info["deployment_id"].as_str().unwrap().into(),
@@ -876,7 +936,7 @@ mod tests {
         store
             .bind_collection(context.clone(), "public synthetic fixture passphrase")
             .unwrap();
-        let mut vault = BrowserVault {
+        BrowserVault {
             version: 3,
             kind: petika_core::passkey_vault::KIND.into(),
             operation_id: "c".repeat(64),
@@ -895,7 +955,14 @@ mod tests {
                     wrapped_key: URL_SAFE_NO_PAD.encode([4; 48]),
                 }],
             },
-        };
+        }
+    }
+    #[test]
+    fn writes_require_one_use_grants_preserve_cas_and_deny_legacy_downgrade() {
+        use petika_core::UnlockedStore;
+        let mut f = Fixture::new();
+        f.register();
+        let mut vault = candidate(&mut f);
         let id = f.id.clone();
         let start = f.start();
         let proof = f.assertion(&start, 5, 1, ORIGIN);
@@ -971,6 +1038,204 @@ mod tests {
             )
             .unwrap_err(),
             KeyError::Forbidden
+        );
+    }
+    #[test]
+    fn migration_is_explicit_cas_bound_and_retains_exact_original_snapshot() {
+        let mut f = Fixture::new();
+        f.register();
+        let vault = candidate(&mut f);
+        let id = f.id.clone();
+        let mut old =
+            petika_core::UnlockedStore::create("public old synthetic passphrase").unwrap();
+        let encrypted = String::from_utf8(old.seal().unwrap()).unwrap();
+        let repository = snapshot(f._dir.path(), &id);
+        repository.update(0, encrypted.clone()).unwrap();
+        assert!(
+            repository
+                .update_browser(1, serde_json::to_string(&vault).unwrap())
+                .is_err()
+        );
+        assert!(f.call(Operation::Vault(id.clone()), json!({})).is_err());
+        assert_eq!(
+            f.call(Operation::MigrationSource(id.clone()), json!({}))
+                .unwrap()["legacy"],
+            encrypted
+        );
+        let action = |revision| json!({"collection_id":id,"credential_id":URL_SAFE_NO_PAD.encode(&f.cred),"action":"migrate","revision":revision,"operation_id":"c".repeat(64)});
+        let body1 = action(1);
+        let body2 = action(2);
+        let body3 = action(3);
+        let start = f.call(Operation::AuthenticationStart, body1).unwrap();
+        let proof = f.assertion(&start, 5, 1, ORIGIN);
+        repository.update(1, encrypted.clone()).unwrap();
+        assert_eq!(
+            f.call(Operation::AuthenticationFinish, proof).unwrap_err(),
+            KeyError::Conflict
+        );
+        let start = f.call(Operation::AuthenticationStart, body2).unwrap();
+        let proof = f.assertion(&start, 5, 2, ORIGIN);
+        let grant = f.call(Operation::AuthenticationFinish, proof).unwrap();
+        repository.update(2, encrypted.clone()).unwrap();
+        assert_eq!(
+            f.call(
+                Operation::Write(id.clone()),
+                json!({"grant_id":grant["grant_id"],"vault":vault})
+            )
+            .unwrap_err(),
+            KeyError::Conflict
+        );
+        let backup = repository
+            .path
+            .parent()
+            .unwrap()
+            .join("snapshot.passphrase-backup.json");
+        assert!(!backup.exists());
+        let original = std::fs::read(&repository.path).unwrap();
+        let start = f
+            .call(Operation::AuthenticationStart, body3.clone())
+            .unwrap();
+        let proof = f.assertion(&start, 5, 3, ORIGIN);
+        let grant = f.call(Operation::AuthenticationFinish, proof).unwrap();
+        let write = json!({"grant_id":grant["grant_id"],"vault":vault});
+        assert_eq!(
+            f.call(Operation::Write(id.clone()), write.clone()).unwrap()["revision"],
+            4
+        );
+        assert_eq!(std::fs::read(&backup).unwrap(), original);
+        assert_eq!(repository.read().unwrap().unwrap().revision, 4);
+        assert!(repository.update(4, encrypted).is_err());
+        assert!(f.call(Operation::Write(id.clone()), write).is_err());
+        assert!(f.call(Operation::AuthenticationStart, body3).is_err());
+        let status = f.call(Operation::MigrationSource(id), json!({})).unwrap();
+        assert!(status["legacy"].is_null());
+        assert_eq!(status["vault"]["operation_id"], "c".repeat(64));
+    }
+    #[test]
+    fn migration_rejects_other_owners_recipient_authority_entry_authority_and_mode_downgrade() {
+        let mut f = Fixture::new();
+        f.register();
+        let vault = candidate(&mut f);
+        let id = f.id.clone();
+        let action = json!({"collection_id":"d".repeat(64),"credential_id":URL_SAFE_NO_PAD.encode(&f.cred),"action":"migrate","revision":1,"operation_id":"c".repeat(64)});
+        assert_eq!(
+            f.call(Operation::AuthenticationStart, action).unwrap_err(),
+            KeyError::Forbidden
+        );
+        let repository = snapshot(f._dir.path(), &id);
+        let mut old = petika_core::UnlockedStore::create_with_mode(
+            "public hybrid old passphrase",
+            petika_core::EncryptionMode::HybridPostQuantum,
+        )
+        .unwrap();
+        repository
+            .update(0, String::from_utf8(old.seal().unwrap()).unwrap())
+            .unwrap();
+        assert!(
+            repository
+                .migrate_browser(1, serde_json::to_string(&vault).unwrap())
+                .is_err()
+        );
+        assert!(
+            !repository
+                .path
+                .parent()
+                .unwrap()
+                .join("snapshot.passphrase-backup.json")
+                .exists()
+        );
+        std::fs::create_dir_all(repository.path.parent().unwrap().join("entries")).unwrap();
+        std::fs::write(
+            repository
+                .path
+                .parent()
+                .unwrap()
+                .join("entries/committed-root"),
+            b"test marker",
+        )
+        .unwrap();
+        assert!(legacy(&repository).is_err());
+        std::fs::remove_file(
+            repository
+                .path
+                .parent()
+                .unwrap()
+                .join("entries/committed-root"),
+        )
+        .unwrap();
+        let bound = old
+            .fresh_bound_draft(
+                petika_core::CollectionContext {
+                    deployment_id: "a".repeat(64),
+                    collection_id: id.clone(),
+                    key_epoch: 1,
+                },
+                "public bound synthetic passphrase",
+            )
+            .unwrap()
+            .seal()
+            .unwrap();
+        let file = StoreFile::lock(&repository.path).unwrap();
+        file.write(
+            &serde_json::to_vec(&Snapshot {
+                schema_version: 2,
+                revision: 1,
+                encrypted: String::from_utf8(bound).unwrap(),
+                delivery: Some(crate::DeliveryState {
+                    packages: vec![],
+                    rotation_generation: 0,
+                    transactions: vec![],
+                }),
+            })
+            .unwrap(),
+            false,
+        )
+        .unwrap();
+        drop(file);
+        assert!(legacy(&repository).is_err());
+    }
+    #[test]
+    fn conflicting_migration_backup_denies_cutover_without_overwriting_either_copy() {
+        let mut f = Fixture::new();
+        f.register();
+        let vault = candidate(&mut f);
+        let id = f.id.clone();
+        let encrypted = String::from_utf8(
+            petika_core::UnlockedStore::create("public synthetic old passphrase")
+                .unwrap()
+                .seal()
+                .unwrap(),
+        )
+        .unwrap();
+        let repository = snapshot(f._dir.path(), &id);
+        repository.update(0, encrypted).unwrap();
+        let original = std::fs::read(&repository.path).unwrap();
+        let backup = StoreFile::lock(
+            repository
+                .path
+                .parent()
+                .unwrap()
+                .join("snapshot.passphrase-backup.json"),
+        )
+        .unwrap();
+        backup.write(b"existing unrelated backup", true).unwrap();
+        drop(backup);
+        assert!(
+            repository
+                .migrate_browser(1, serde_json::to_string(&vault).unwrap())
+                .is_err()
+        );
+        assert_eq!(std::fs::read(&repository.path).unwrap(), original);
+        assert_eq!(
+            std::fs::read(
+                repository
+                    .path
+                    .parent()
+                    .unwrap()
+                    .join("snapshot.passphrase-backup.json")
+            )
+            .unwrap(),
+            b"existing unrelated backup"
         );
     }
     #[test]

@@ -29,3 +29,9 @@ sharing still requires a design for recipient accounts and cryptographic access 
 Decide whether recipients can edit, whether changes remain linked, invitation expiry,
 and how grants rotate when a recipient is removed. Do not assume a link alone safely
 implements sharing. Explain that revocation cannot retract a password already read.
+
+Legacy personal version-1 vaults support [explicit browser-passkey migration](passkey-migration.md).
+It requires the working vault passphrase, creates fresh encryption secret material,
+preserves the Standard/Hybrid mode and exact original snapshot, and uses a one-use
+CAS publication grant. Shared/recipient vaults are excluded. Older encrypted history
+remains accessible with its old passphrase; current passkey ciphertext does not.

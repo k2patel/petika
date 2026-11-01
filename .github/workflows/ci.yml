@@ -215,6 +215,8 @@ jobs:
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
       - name: Browser passkey vault and independent credentials
         run: /tmp/petika-browser-tests/bin/python scripts/test_browser_passkeys.py
+      - name: Explicit legacy personal-vault passkey migration
+        run: /tmp/petika-browser-tests/bin/python scripts/test_passkey_migration.py
       - name: Synthetic browser PRF with virtual authenticator
         run: /tmp/petika-browser-tests/bin/python experiments/biometric-unlock/test_browser.py
       - name: Chromium extension approval and autofill

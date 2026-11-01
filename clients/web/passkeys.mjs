@@ -75,19 +75,20 @@ export class PasskeyClient {
     this.busy=true;let approval;const generation=this.generation;
     vault=structuredClone(vault);scope=structuredClone(scope);args=structuredClone(args);
     try {
-      const current=await this.api(`/v1/passkey-vaults/${scope.collection_id}`);
+      const current=await this.api(`/v1/${action==='migrate'?'passkey-migrations':'passkey-vaults'}/${scope.collection_id}`);
       if(generation!==this.generation)throw new DOMException('Operation cancelled','AbortError');
       if(current.revision!==scope.revision)throw new Error('The vault changed. Refresh before trying again.');
-      if(vault&&canonical(current.vault)!==canonical(vault))throw new Error('The vault changed. Refresh before trying again.');
+      if(action==='migrate'&&(current.vault||current.legacy!==vault))throw new Error('The legacy vault changed. Refresh and review before migrating.');
+      if(action!=='migrate'&&vault&&canonical(current.vault)!==canonical(vault))throw new Error('The vault changed. Refresh before trying again.');
       const input=current.vault?.protection.wrappers.find(w=>w.credential_id===credentialId)?.prf_input||encode(random(32));
       approval=await this.verify(scope.collection_id,credentialId,action,scope.revision,input,extra.newCredentialId);
-      const result=await this.worker({scope,action,args:structuredClone(args),vault:current.vault,credentialId,input,operationId:approval.operationId,prf:approval.prf.buffer,newCredentialId:extra.newCredentialId,newPrf:extra.newPrf,newInput:extra.newInput});
+      const result=await this.worker({scope,action,args:structuredClone(args),vault:current.vault,legacy:action==='migrate'?current.legacy:null,credentialId,input,operationId:approval.operationId,prf:approval.prf.buffer,newCredentialId:extra.newCredentialId,newPrf:extra.newPrf,newInput:extra.newInput});
       this.controller.signal.throwIfAborted();if(generation!==this.generation)throw new DOMException('Operation cancelled','AbortError');
       if(result.vault) {
         result.pending={grant_id:approval.grantId,vault:result.vault};
         result.expectedRevision=scope.revision;
       }
       return result;
-    } finally {if(approval?.prf.byteLength)approval.prf.fill(0);this.busy=false;}
+    } finally {if(action==='migrate')args.fill('');if(approval?.prf.byteLength)approval.prf.fill(0);this.busy=false;}
   }
 }
