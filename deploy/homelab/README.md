@@ -34,6 +34,55 @@ hosts need their own build/publish workflow; GitHub, GitLab and Codeberg are not
 interchangeable CI APIs. No CI runner needs Kubernetes credentials when you deploy
 with local kubectl.
 
+## Gitea-first development and deployment
+
+For this deployment, development commits go to the existing Gitea source repository;
+GitHub publication is an explicit, separately requested end-of-day batch. Keep `origin`
+pointing to GitHub and add a named `gitea` remote for direct development pushes:
+
+```sh
+git remote add gitea ssh://git@git.k2patel.in:2222/k2patel/petika.git
+git config remote.pushDefault gitea
+git config branch.main.pushRemote gitea
+git push gitea main
+```
+
+Use your own remote when adapting this overlay. Gitea must be a **regular repository**:
+a pull mirror rejects direct pushes and its scheduled GitHub pulls can replace newer
+Gitea refs. Convert an existing mirror through repository Settings → Danger Zone →
+Convert to regular repository before the first direct push. Preserve its history,
+Actions variables/secrets and registry packages; do not delete/recreate it. Check that
+no automatic outbound push mirror publishes development work to GitHub.
+
+The existing image workflow builds `push-runtime` on a qualifying `main` push and
+publishes `git.k2patel.in/k2patel/petika:FULL_COMMIT_SHA`. Wait for that exact commit's
+successful Gitea Actions run and resolve the published image to its immutable digest.
+The build workflow does not automatically roll out Kubernetes. For an existing deployment,
+update only its application image, preserving the current TLS, service, storage and
+secret configuration:
+
+```sh
+kubectl -n petika set image deployment/petika \
+  petika=git.k2patel.in/k2patel/petika@sha256:VERIFIED_IMAGE_DIGEST
+kubectl -n petika rollout status deployment/petika --timeout=60s
+```
+
+Repeat the rollout check if still progressing, then verify `/readyz`, `/healthz` and the
+reported backup release against the intended commit. Record the previous image digest
+for rollback. Kubernetes credentials stay with the local operator rather than in Gitea
+Actions. Source publication and a standard runtime deployment do not enable the gated
+Git-authority/device/biometric prototypes or migrate existing vaults.
+
+Publish the accumulated branch to GitHub only when explicitly requested:
+
+```sh
+git push origin main
+```
+
+Do not configure an automatic Gitea → GitHub mirror for this cadence. Continue to scan
+the full outgoing commit range for secrets before either publication, including when
+the Gitea development repository itself is private.
+
 ## Deployment helper limitations
 
 `scripts/deploy_homelab.py` renders this overlay and can apply it with `--apply`.
