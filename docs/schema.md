@@ -8,7 +8,7 @@ These version numbers are independent:
 | --- | --- | --- |
 | Account database `schema_version` | 2 | Startup migration before requests; rejects newer schemas |
 | Snapshot/journal `schema_version` | 1 | Validated on read; legacy unversioned records decode as v1 |
-| Encrypted envelope `version` | 1 | Shared Rust parser; rejects unsupported encryption formats |
+| Encrypted envelope `version` | 1 / 2 / 3 | Legacy, bound recipient envelope, or browser-passkey outer framing; explicit readers reject incompatible formats |
 | Local recipient identity backup / encrypted bundle | 2 / 2 | Reads v1 without rewriting; explicit native save preserves `.v1.backup` before upgrading |
 | HTTP API | `/v1` | Explicit route version |
 
@@ -57,3 +57,13 @@ context and collection-state schema 2 with encrypted grants and retry receipts. 
 original current snapshot is preserved as `snapshot.v1.backup.json` before the journal and
 current pointer change. Schema-1 stores stay unchanged until migration; legacy snapshot
 uploads cannot undo it. See [wire format](key-package-format.md) and [recovery workflow](group-access.md).
+
+## Browser-passkey personal collections
+
+[Version-3 framing](browser-passkeys.md) contains the bound version-2 encrypted
+snapshot and per-credential PRF wrappers. It is stored inside the existing schema-1
+snapshot/journal transaction. It cannot be opened or replaced by legacy passphrase
+clients. `passkeys.json` version 1 stores public WebAuthn credentials, labels, owners
+and monotonic ceremony revisions. Full server backup must retain it along with the
+account database, deployment ID and collection journals. It contains no PRF outputs
+or private authenticator/vault keys. No legacy collection is automatically migrated.

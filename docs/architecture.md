@@ -1,5 +1,12 @@
 # Architecture
 
+> **Policy update, 2026-10-31:** Both browser passkey verification (biometric or OS PIN)
+> and strict biometric-only protection are supported as explicit policy choices.
+> The browser personal-vault implementation is described in [browser passkeys](browser-passkeys.md).
+> Strict biometric-only creation remains blocked until a production provider exists.
+> Earlier mandatory-biometric statements below apply to the strict policy; they do
+> not describe the browser-passkey policy. Existing vaults are not auto-migrated.
+
 Implementation is tracked in the [ordered work plan](implementation-plan-git-biometric.md),
 which maps existing code to missing work and gives each package dependencies and completion
 criteria. The first code milestone is a persistent native credential with fresh biometric

@@ -1,5 +1,12 @@
 # 0006: Git-authoritative, on-demand encrypted synchronization
 
+> **Policy update, 2026-10-31:** Both browser passkey verification (biometric or OS PIN)
+> and strict biometric-only protection are supported as explicit policy choices.
+> The browser personal-vault implementation is described in [browser passkeys](../browser-passkeys.md).
+> Strict biometric-only creation remains blocked until a production provider exists.
+> Earlier mandatory-biometric statements below apply to the strict policy; they do
+> not describe the browser-passkey policy. Existing vaults are not auto-migrated.
+
 Date: 2026-10-31. Status: accepted architecture direction; implementation and protocol review pending.
 Supersedes the API-authoritative / sole Git writer target in ADR 0001 and the former
 Git sync proposal. Existing deployed and experimental API paths remain current behavior

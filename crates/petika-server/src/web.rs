@@ -6,7 +6,9 @@ use std::{io::Read, path::Path};
 use subtle::ConstantTimeEq;
 use tiny_http::{Header, Method, Request, Response};
 mod device_keys;
+mod passkeys;
 pub use device_keys::device_key_route;
+pub use passkeys::passkey_route;
 
 pub fn json(request: Request, status: u16, value: serde_json::Value, cookie: Option<String>) {
     let mut response = Response::from_string(value.to_string())
@@ -304,11 +306,15 @@ pub fn public_endpoint(value: &str) -> Result<String> {
 
 pub fn static_file(request: Request, root: &Path, endpoint: &str) {
     if request.url().split('?').next() == Some("/config.json") {
+        #[cfg(feature="browser-passkeys")]
+        let passkeys=petika_server::accounts::passkeys::settings(endpoint).unwrap_or_else(|_|serde_json::json!({"enabled":false,"fresh_policy":"strict-biometric","strict_biometric_available":false}));
+        #[cfg(not(feature = "browser-passkeys"))]
+        let passkeys = serde_json::json!({"enabled":false,"fresh_policy":"legacy","strict_biometric_available":false});
         return if request.method() == &Method::Get {
             json(
                 request,
                 200,
-                serde_json::json!({"endpoint": endpoint}),
+                serde_json::json!({"endpoint": endpoint,"passkeys":passkeys}),
                 None,
             )
         } else {
@@ -326,6 +332,8 @@ pub fn static_file(request: Request, root: &Path, endpoint: &str) {
         "/app.js" => ("app.js", "text/javascript"),
         "/worker.js" => ("worker.js", "text/javascript"),
         "/otp.js" => ("otp.js", "text/javascript"),
+        "/passkeys.mjs" => ("passkeys.mjs", "text/javascript"),
+        "/passkey-crypto.mjs" => ("passkey-crypto.mjs", "text/javascript"),
         "/theme.js" => ("theme.js", "text/javascript"),
         "/brand.png" => ("brand.png", "image/png"),
         "/brand-dark.png" => ("brand-dark.png", "image/png"),

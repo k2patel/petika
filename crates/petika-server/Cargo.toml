@@ -10,11 +10,15 @@ repository.workspace = true
 publish = false
 
 [features]
-default = []
+default = ["browser-passkeys"]
+browser-passkeys = ["dep:webauthn-rs", "dep:openssl", "dep:base64"]
 experimental-entry-format = ["petika-core/experimental-entry-format"]
 experimental-device-keys = ["petika-core/experimental-device-keys", "dep:ureq", "dep:base64"]
 
 [dependencies]
+webauthn-rs = { version = "=0.5.5", optional = true }
+# Static OpenSSL avoids adding an implicit shared-library dependency to runtime images.
+openssl = { version = "0.10", features = ["vendored"], optional = true }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"], optional = true }
 base64 = { workspace = true, optional = true }
 chacha20poly1305.workspace = true
@@ -32,6 +36,7 @@ getrandom.workspace = true
 url = "=2.5.8"
 
 [dev-dependencies]
+serde_cbor_2 = "=0.13.0"
 tempfile.workspace = true
 
 [target.'cfg(unix)'.dependencies]

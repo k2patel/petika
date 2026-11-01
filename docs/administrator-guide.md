@@ -1,10 +1,9 @@
 # Install and administer Petika
 
-Target policy update (2026-10-31): every secret action requires fresh biometric-only
-approval on an authorized device; account passwords, secret strings/PINs, prior approvals
-and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
-broker and verified platform support. Existing runtime/probes do not implement this policy.
-See [the enforcement design](decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+Protection policy update (2026-10-31): browser passkeys permit biometric or OS PIN
+verification, with a fresh ceremony for each secret action. Strict biometric-only
+protection is a separate choice and stays blocked without a production provider.
+Existing vaults keep their protection. See [browser passkeys](browser-passkeys.md).
 
 These procedures operate the current API/mirror runtime. The accepted [Git-authoritative architecture](decisions/0006-git-authoritative-sync.md) is pending implementation and explicit per-vault migration; it adds password-plus-any-authorized-device-key access and host-dependent temporary Git access.
 

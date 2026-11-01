@@ -33,7 +33,9 @@ with tempfile.TemporaryDirectory(prefix='petika-endpoint-') as temporary:
             try:
                 with urlopen(direct + '/config.json', timeout=1) as response:
                     assert response.headers['Cache-Control'] == 'no-store'
-                    assert json.load(response) == {'endpoint': endpoint}
+                    config=json.load(response)
+                    assert config['endpoint']==endpoint
+                    assert config['passkeys']['fresh_policy']=='browser-passkey'
                 break
             except OSError:
                 time.sleep(.1)

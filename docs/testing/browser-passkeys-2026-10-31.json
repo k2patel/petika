@@ -1,0 +1,35 @@
+{
+  "date": "2026-10-31",
+  "scope": "Generated-data local browser-passkey personal vaults; API authority with optional outbound ciphertext Git mirror",
+  "policies": {
+    "browser-passkey": "WebAuthn user verification permits biometrics or OS PIN; PRF required for vault encryption",
+    "strict-biometric": "Explicit setup choice, unavailable without a production protected-key provider; fails closed"
+  },
+  "checks": {
+    "javascript_crypto_and_client": "7 tests passed: independent wrappers, authenticated binding/tampering, capability honesty, fresh ceremonies, PRF exclusion, denial and cancellation",
+    "core": "41 default core unit/integration tests passed, including two new version-3 framing/binding tests",
+    "server": "30 default regression tests passed; four passkey account tests include signature, UV, origin, counter rollback/races, challenge expiry/replay, session binding, one-use grants, CAS and legacy downgrade denial",
+    "http_boundary": "One additional focused test passed: cookie authentication, service-token denial, CSRF, cross-site and ceremony size limits",
+    "wasm": "Release wasm32 build and wasm-bindgen generation passed; native petika-web build/test passed",
+    "browser": "Chromium CTAP 2.1 virtual platform and USB authenticators passed fresh setup, strict-policy denial, UI save/reveal/lock/reopen, edit/view/OTP, two independent vault keys, grant replay denial and server restart; lost accepted-write reply reconciles without another approval or duplicate edit; local Git mirror retains both wrappers",
+    "legacy_browser": "Existing setup, sign-in, encryption, OTP, lock/unlock, CLI interoperability, users/groups, permissions, revocation, CSRF, themes and mobile layout passed",
+    "endpoint": "Canonical origin redirect, login and cookie restart checks passed",
+    "lint": "Default and combined experimental-entry-format/experimental-device-keys Clippy passed with warnings denied; formatting passed; no-default-features server check passed",
+    "licenses": "338 resolved package declarations accepted; exact-version unmodified WebAuthn MPL exceptions and corresponding source URLs recorded in generated distribution notices"
+  },
+  "not_evidence_for": [
+    "Actual hardware biometric prompts or biometric-only enforcement",
+    "Safari, Firefox, mobile or authenticator compatibility certification",
+    "Production strict provider, QR pairing, shared-vault support, legacy migration or cryptographic key removal",
+    "Git-authoritative publication, per-entry delta migration, complete restore drill or independent security review",
+    "Production deployment or any live vault reset"
+  ],
+  "reproduce": [
+    "node --test scripts/test_passkeys.mjs",
+    "cargo test --locked -p petika-core -p petika-server -p petika-web",
+    "sh scripts/build_web.sh",
+    "python scripts/test_browser_passkeys.py",
+    "python scripts/test_web_ui.py",
+    "python scripts/test_endpoint.py"
+  ]
+}

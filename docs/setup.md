@@ -1,5 +1,12 @@
 # First-run and unattended setup
 
+> **Policy update, 2026-10-31:** Both browser passkey verification (biometric or OS PIN)
+> and strict biometric-only protection are supported as explicit policy choices.
+> The browser personal-vault implementation is described in [browser passkeys](browser-passkeys.md).
+> Strict biometric-only creation remains blocked until a production provider exists.
+> Earlier mandatory-biometric statements below apply to the strict policy; they do
+> not describe the browser-passkey policy. Existing vaults are not auto-migrated.
+
 Setup initializes once. Restarting with bootstrap variables does not replace accounts,
 change passwords, reset memberships, or re-import a snapshot.
 

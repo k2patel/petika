@@ -25,10 +25,14 @@ ALLOWED.update({
 metadata = json.loads(subprocess.check_output(
     ["cargo", "metadata", "--locked", "--format-version", "1"], text=True
 ))
+# Unmodified WebAuthn verifier crates: MPL applies to their covered files, not
+# Petika's own MIT files. Shipped notices include the license and exact source URL.
+REVIEWED_MPL = {"webauthn-rs", "webauthn-rs-core", "webauthn-rs-proto", "webauthn-attestation-ca", "base64urlsafedata"}
 failures = []
 for package in metadata["packages"]:
     license_id = package.get("license")
-    if license_id not in ALLOWED:
+    reviewed_mpl = license_id == "MPL-2.0" and package['name'] in REVIEWED_MPL and package['version'] == '0.5.5'
+    if license_id not in ALLOWED and not reviewed_mpl:
         failures.append(f"{package['name']} {package['version']}: {license_id or 'missing license'}")
 if failures:
     print("License review required:\n" + "\n".join(failures), file=sys.stderr)

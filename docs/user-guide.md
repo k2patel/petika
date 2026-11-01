@@ -1,9 +1,11 @@
 # Install and use Petika
 
-Planned registration requires supported Touch ID/fingerprint or Face ID. Each secret
-action requires a fresh biometric approval; no secret-string/PIN fallback or cached unlock. **Add device** in the web UI will show a QR code
-for pairing, followed by approval on an existing authorized device. These controls are
-not available yet; see [the planned flow](decisions/0006-git-authoritative-sync.md#registration-methods-and-qr-device-enrollment).
+Fresh personal vault setup offers **Browser passkey** and **Biometric only**.
+Browser passkeys can use Touch ID, Face ID, a compatible security key or device PIN;
+each secret action asks again. Strict biometric-only setup stays blocked until a
+compatible protected-key provider is connected. It never falls back to PIN or a string.
+Existing vaults keep their current unlock method. QR device pairing remains planned.
+See [policy details and compatibility](browser-passkeys.md).
 
 The new [Git-authoritative sync direction](decisions/0006-git-authoritative-sync.md) is planned. Its online show/edit flow refreshes first and preserves encrypted drafts when a competing save requires review/re-edit. The steps below describe the currently available application.
 
@@ -14,6 +16,19 @@ to use the web app.
 
 Petika is experimental and unaudited. Use synthetic/test accounts for now. There
 are no published mobile apps, browser-store extension, or public binary installer.
+
+## Set up a browser-passkey vault
+
+On a fresh Personal collection, select **Browser passkey**, confirm your account
+password, name the key and approve the browser's registration request. Then approve
+its vault-creation request. Your authenticator must support WebAuthn PRF; unavailable
+support produces an error rather than a passphrase fallback.
+
+To add another key, open **Settings → Security & recovery → Add an authorized passkey**.
+Create and verify the new key, then approve the existing authorized key. Either key
+can then open this vault. Keep another working key and a complete encrypted backup.
+A login-password reset cannot recover lost vault keys. Existing passphrase collections
+follow the legacy instructions below; migration is not automatic.
 
 ## What you need
 
@@ -27,7 +42,7 @@ Open that address in your browser. No installation is needed for the web app.
 Do not use the administrator's account for everyday access. There is no public
 self-registration flow: an administrator creates additional users.
 
-## First sign-in and collection setup
+## Legacy passphrase collection setup
 
 1. Sign in with your assigned username and account password.
 2. If you received an initial password, open **Settings → Change account password**

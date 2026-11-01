@@ -90,6 +90,52 @@ impl Repository {
         }
         Ok(Some(serde_json::from_slice(&file.read()?)?))
     }
+    /// Called only after a session-bound WebAuthn write grant was consumed.
+    #[cfg(feature = "browser-passkeys")]
+    pub(crate) fn update_browser(&self, expected: u64, encrypted: String) -> Result<Update> {
+        petika_core::passkey_vault::BrowserVault::parse(encrypted.as_bytes())?;
+        let file = StoreFile::lock(&self.path)?;
+        if self
+            .path
+            .parent()
+            .is_some_and(|p| p.join("entries/committed-root").exists())
+        {
+            return Err("Collection has another authority".into());
+        }
+        let current = if file.exists() {
+            let saved: Snapshot = serde_json::from_slice(&file.read()?)?;
+            if saved.delivery.is_some() {
+                return Err("Recipient collection cannot be replaced".into());
+            }
+            petika_core::passkey_vault::BrowserVault::parse(saved.encrypted.as_bytes())?;
+            saved.revision
+        } else {
+            0
+        };
+        if current != expected {
+            return Ok(Update::Conflict(current));
+        }
+        let revision = current
+            .checked_add(1)
+            .filter(|v| *v < (1u64 << 53))
+            .ok_or("revision exhausted")?;
+        let bytes = serde_json::to_vec(&Snapshot {
+            schema_version: 1,
+            revision,
+            encrypted,
+            delivery: None,
+        })?;
+        let journal = StoreFile::lock(
+            self.path
+                .parent()
+                .ok_or("Missing snapshot parent")?
+                .join("revisions")
+                .join(format!("{revision:020}.json")),
+        )?;
+        journal.write(&bytes, false)?;
+        file.write(&bytes, !file.exists())?;
+        Ok(Update::Saved(revision))
+    }
     pub fn update(&self, expected: u64, encrypted: String) -> Result<Update> {
         validate_envelope(encrypted.as_bytes())?;
         if petika_core::envelope_metadata(encrypted.as_bytes())?

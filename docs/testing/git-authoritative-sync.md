@@ -1,5 +1,9 @@
 # Git-authoritative sync acceptance plan
 
+The [browser/strict policy update](../browser-passkeys.md) permits browser UV
+(biometrics or PIN) for browser-policy vaults. Strict biometric requirements below
+apply to the strict policy. Browser API-vault tests do not complete Git-authority gates.
+
 Date: 2026-10-31. Status: planned; rows below are not execution evidence.
 Direction: [ADR 0006](../decisions/0006-git-authoritative-sync.md).
 Use disposable synthetic vaults and private local remotes before actual host testing.

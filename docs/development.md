@@ -29,3 +29,12 @@ The license gate examines all resolved Cargo package license declarations agains
 small explicit allowlist. Unknown or compound expressions fail for human review.
 This is a metadata gate, not a source-code or legal audit. Review bundled assets,
 platform code, notices, and dependency provenance separately. Do not add GPL code.
+
+Browser-passkey checks use `node --test scripts/test_passkeys.mjs` and
+`python scripts/test_browser_passkeys.py` after building the server and WASM. The
+browser test needs Python Playwright/Chromium and uses generated data plus virtual
+platform/USB authenticators; it does not establish hardware-biometric or Firefox/Safari
+support. The server feature is enabled by default; verify `--no-default-features`
+when changing its boundaries. The maintained WebAuthn verifier's unmodified MPL-2.0
+files have a version-scoped license exception; distribution notices include their
+licenses and exact source download URLs. Petika's own code remains MIT.

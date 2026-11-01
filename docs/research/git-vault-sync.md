@@ -1,5 +1,9 @@
 # Git-authoritative encrypted vault synchronization
 
+The [browser/strict policy update](../browser-passkeys.md) permits browser UV
+(biometrics or PIN) for browser-policy vaults. Strict biometric requirements below
+apply to the strict policy. Browser API-vault tests do not complete Git-authority gates.
+
 Status: architecture direction updated 2026-10-31; implementation pending.
 [ADR 0006](../decisions/0006-git-authoritative-sync.md) replaces the former
 API-authoritative, sole-server-writer target. Existing API/mirror code remains implemented

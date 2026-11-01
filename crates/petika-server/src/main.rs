@@ -95,6 +95,21 @@ fn handle(
     if request.method() != &Method::Put {
         return respond(request, 405, "{\"error\":\"method not allowed\"}", None);
     }
+    #[cfg(feature = "browser-passkeys")]
+    if authenticated && repository.read().ok().flatten().is_none() {
+        let policy = petika_server::accounts::passkeys::settings(
+            &env::var("PETIKA_ENDPOINT").unwrap_or_default(),
+        );
+        if policy.as_ref().is_err() || policy.as_ref().is_ok_and(|p| p["fresh_policy"] != "legacy")
+        {
+            return respond(
+                request,
+                403,
+                "{\"error\":\"Use the configured protected-vault setup; passphrase initialization is disabled\"}",
+                None,
+            );
+        }
+    }
     let expected = header(&request, "If-Match")
         .and_then(|s| s.strip_prefix('"'))
         .and_then(|s| s.strip_suffix('"'))
@@ -166,6 +181,8 @@ fn run() -> Result<()> {
         return Err("token must contain 32–256 ASCII letters/digits; generate it randomly".into());
     }
     let endpoint = web::public_endpoint(&env::var("PETIKA_ENDPOINT").unwrap_or_default())?;
+    #[cfg(feature = "browser-passkeys")]
+    petika_server::accounts::passkeys::settings(&endpoint).map_err(|e| e.to_string())?;
     let listen = env::var("PETIKA_LISTEN").unwrap_or_else(|_| "127.0.0.1:8080".into());
     let data =
         PathBuf::from(env::var_os("PETIKA_DATA_DIR").unwrap_or_else(|| "./petika-data".into()));
@@ -322,6 +339,11 @@ fn run() -> Result<()> {
             web::backup_route(request, &mut accounts);
         } else if path.starts_with("/v1/keys/") {
             web::key_route(request, &mut accounts);
+        } else if path == "/v1/passkeys"
+            || path.starts_with("/v1/passkeys/")
+            || path.starts_with("/v1/passkey-vaults/")
+        {
+            web::passkey_route(request, &mut accounts);
         } else if path == "/v1/device-keys" || path.starts_with("/v1/device-keys/") {
             web::device_key_route(
                 request,

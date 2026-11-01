@@ -11,6 +11,8 @@ mod git_sync;
 #[cfg(feature = "experimental-device-keys")]
 pub use git_leases::GitLeaseOperation;
 mod keys;
+#[cfg(feature = "browser-passkeys")]
+pub mod passkeys;
 use crate::Result;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 pub use delivery::DeliveryOperation;
@@ -156,6 +158,8 @@ struct DeviceGrant {
     denied: bool,
 }
 pub struct Accounts {
+    #[cfg(feature = "browser-passkeys")]
+    passkeys: passkeys::State,
     path: PathBuf,
     sessions: HashMap<String, Session>,
     attempts: Vec<Instant>,
@@ -265,6 +269,10 @@ impl Accounts {
     }
     pub fn new(path: PathBuf) -> Self {
         Self {
+            #[cfg(feature = "browser-passkeys")]
+            passkeys: passkeys::State::for_origin(
+                &std::env::var("PETIKA_ENDPOINT").unwrap_or_default(),
+            ),
             path,
             sessions: HashMap::new(),
             attempts: Vec::new(),

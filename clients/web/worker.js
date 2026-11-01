@@ -7,6 +7,7 @@ import {
   parseOtp,
   totp
 } from './otp.js';
+import {execute as executePasskey} from './passkey-crypto.mjs';
 let session, identity, accessDraft;
 const ready = init();
 let queue = Promise.resolve();
@@ -23,6 +24,9 @@ self.onmessage = ({
       await ready;
       let value;
       switch (action) {
+        case 'passkey-execute':
+          value = await executePasskey(Session,args[0],generate);
+          break;
         case 'create':
           session?.free();
           session = Session.create(...args);

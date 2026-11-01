@@ -7,6 +7,7 @@ pub mod device_keys;
 #[cfg(feature = "experimental-entry-format")]
 pub mod entry_format;
 pub mod identity;
+pub mod passkey_vault;
 #[cfg(not(target_arch = "wasm32"))]
 mod storage;
 

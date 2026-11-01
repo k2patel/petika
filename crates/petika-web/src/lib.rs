@@ -12,6 +12,27 @@ pub struct Session(UnlockedStore);
 
 #[wasm_bindgen]
 impl Session {
+    pub fn create_bound(passphrase: String, context: &str) -> Result<Session, JsValue> {
+        let passphrase = Zeroizing::new(passphrase);
+        let context = serde_json::from_str(context).map_err(error)?;
+        let mut store = UnlockedStore::create(&passphrase).map_err(error)?;
+        store.bind_collection(context, &passphrase).map_err(error)?;
+        Ok(Session(store))
+    }
+    pub fn open_bound(
+        encrypted: &[u8],
+        passphrase: String,
+        context: &str,
+    ) -> Result<Session, JsValue> {
+        let expected: petika_core::CollectionContext =
+            serde_json::from_str(context).map_err(error)?;
+        expected.validate().map_err(error)?;
+        let store = UnlockedStore::open(encrypted, &Zeroizing::new(passphrase)).map_err(error)?;
+        if store.context() != Some(&expected) {
+            return Err(error("Vault context mismatch"));
+        }
+        Ok(Session(store))
+    }
     pub fn create(passphrase: String, hybrid: bool) -> Result<Session, JsValue> {
         let passphrase = Zeroizing::new(passphrase);
         UnlockedStore::create_with_mode(

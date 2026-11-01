@@ -1,5 +1,12 @@
 # Petika web UI
 
+> **Policy update, 2026-10-31:** Both browser passkey verification (biometric or OS PIN)
+> and strict biometric-only protection are supported as explicit policy choices.
+> The browser personal-vault implementation is described in [browser passkeys](browser-passkeys.md).
+> Strict biometric-only creation remains blocked until a production provider exists.
+> Earlier mandatory-biometric statements below apply to the strict policy; they do
+> not describe the browser-passkey policy. Existing vaults are not auto-migrated.
+
 The Rust server serves the web app at `/`. Encryption runs in a dedicated browser
 worker using the same Rust core as the CLI, compiled to WebAssembly. The UI uses
 plain JavaScript and shared CSS tokens; there is no npm build or runtime dependency.

@@ -1,3 +1,5 @@
+import {PasskeyClient,capabilities as passkeyCapabilities,canonical} from './passkeys.mjs';
+import {encode as encodePasskey,random as randomPasskey} from './passkey-crypto.mjs';
 // getRandomValues is available on HTTP demo origins; randomUUID is HTTPS-only.
 function randomId() {
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
@@ -82,6 +84,7 @@ let worker, sequence = 0,
   otpInterval, toastTimer;
 
 function rpc(action, ...args) {
+  if(state.browserVault) return browserRpc(action,...args);
   if (!worker) {
     worker = new Worker('/worker.js', {
       type: 'module'
@@ -119,6 +122,8 @@ function rpc(action, ...args) {
 }
 
 function discardWorker() {
+  passkeyClient?.cancel();
+  state.browserRows=null;
   state.identityUnlocked = false;
   worker?.terminate();
   worker = null;
@@ -138,6 +143,9 @@ function errorText(error) {
   return error?.message || String(error)
 }
 let apiEndpoint = location.origin;
+let passkeyClient;
+let passkeySettings={enabled:false,fresh_policy:'legacy',strict_biometric_available:false};
+let browserSupport={supported:false};
 const apiUrl = path => new URL(path, apiEndpoint).href;
 async function api(path, {
   method = 'GET',
@@ -278,6 +286,7 @@ async function loadCollection() {
   state.snapshot = null;
   state.status = null;
   state.revision = 0;
+  state.browserVault=null;state.browserPending=null;state.browserRows=null;state.browserInfo=null;state.browserCredentialId=null;
   const draft = getDraft();
   try {
   const response = await fetch(apiUrl(`/v1/collections/${state.collection.id}/snapshot`), {
@@ -305,6 +314,10 @@ async function loadCollection() {
       toast('Using the encrypted copy on this device.')
     } else throw e;
   }
+  if(state.snapshot) {
+    const candidate=JSON.parse(state.snapshot);
+    if(candidate.version===3 && candidate.kind==='petika-passkey-vault') {state.browserVault=candidate;if(state.dirty)state.browserPending={vault:candidate,grant_id:null};}
+  }
   shell();
 }
 
@@ -315,7 +328,7 @@ function nav(label, view, i, count = '') {
 function shell() {
   clearInterval(otpInterval);
   const user = state.user;
-  $('#app').innerHTML = `<div class="shell"><aside class="sidebar">${brand()}<div class="workspace-switch"><span class="initial">P</span>Private workspace<span class="pill neutral">${state.demo?'Demo':'Self-hosted'}</span></div><nav aria-label="Main navigation">${nav('All items','items','box',state.unlocked?state.rows.length:'')}${nav('Security check','security','shield')}${nav('Password generator','generator','key')}<div class="nav-label">Tools</div>${nav('Import & export','transfer','download')}${nav('GPG keys','gpg','key')}${nav('Browser autofill','autofill','browser')}${user.admin?`<div class="nav-label">Administration</div>${nav('Users','users','user')}${nav('Groups','groups','users')}`:''}</nav><div class="sidebar-bottom">${nav('Sync & backup','sync','refresh')}${nav('Settings','settings','settings')}<button class="profile-btn" data-action="profile"><span class="avatar">${esc(user.name.slice(0,2).toUpperCase())}</span><span>${esc(user.name)}<small>${user.admin?'Administrator':'Member'}</small></span></button></div></aside><section class="workspace"><header class="topbar"><div class="breadcrumb">${button('','menu','menu','icon-only mobile-menu')}<span>Workspace</span><span>/</span><strong>${({items:'My collection',security:'Security check',generator:'Password generator',transfer:'Import & export',gpg:'GPG keys',autofill:'Browser autofill',users:'Users',groups:'Groups',sync:'Sync & backup',settings:'Settings'})[state.view]}</strong></div><div class="actions"><span class="pill ${state.unlocked?'':'neutral'}">${icon(state.unlocked?'shield':'lock')}${state.unlocked?'Unlocked locally':'Locked'}</span>${button((state.unlocked||state.identityUnlocked)?'Lock':'Sign out',(state.unlocked||state.identityUnlocked)?'lock':'logout',(state.unlocked||state.identityUnlocked)?'lock':'logout','ghost')}</div></header>${state.demo?'<div class="demo-banner">Demo workspace — sample data only. Changes stay in memory and are never sent to the server.</div>':''}<main id="main" class="page"></main></section></div>`;
+  $('#app').innerHTML = `<div class="shell"><aside class="sidebar">${brand()}<div class="workspace-switch"><span class="initial">P</span>Private workspace<span class="pill neutral">${state.demo?'Demo':'Self-hosted'}</span></div><nav aria-label="Main navigation">${nav('All items','items','box',state.unlocked?state.rows.length:'')}${nav('Security check','security','shield')}${nav('Password generator','generator','key')}<div class="nav-label">Tools</div>${nav('Import & export','transfer','download')}${nav('GPG keys','gpg','key')}${nav('Browser autofill','autofill','browser')}${user.admin?`<div class="nav-label">Administration</div>${nav('Users','users','user')}${nav('Groups','groups','users')}`:''}</nav><div class="sidebar-bottom">${nav('Sync & backup','sync','refresh')}${nav('Settings','settings','settings')}<button class="profile-btn" data-action="profile"><span class="avatar">${esc(user.name.slice(0,2).toUpperCase())}</span><span>${esc(user.name)}<small>${user.admin?'Administrator':'Member'}</small></span></button></div></aside><section class="workspace"><header class="topbar"><div class="breadcrumb">${button('','menu','menu','icon-only mobile-menu')}<span>Workspace</span><span>/</span><strong>${({items:'My collection',security:'Security check',generator:'Password generator',transfer:'Import & export',gpg:'GPG keys',autofill:'Browser autofill',users:'Users',groups:'Groups',sync:'Sync & backup',settings:'Settings'})[state.view]}</strong></div><div class="actions"><span class="pill ${state.unlocked?'':'neutral'}">${icon(state.unlocked?'shield':'lock')}${state.unlocked?(state.browserVault?'Per-action verification':'Unlocked locally'):'Locked'}</span>${button((state.unlocked||state.identityUnlocked)?'Lock':'Sign out',(state.unlocked||state.identityUnlocked)?'lock':'logout',(state.unlocked||state.identityUnlocked)?'lock':'logout','ghost')}</div></header>${state.demo?'<div class="demo-banner">Demo workspace — sample data only. Changes stay in memory and are never sent to the server.</div>':''}<main id="main" class="page"></main></section></div>`;
   $('.mobile-menu').setAttribute('aria-label', 'Toggle navigation');
   bind();
   renderPage().catch(e => {
@@ -332,10 +345,12 @@ function collectionTabs() {
 }
 
 function unlockView() {
+  if(state.browserVault || (!state.snapshot&&passkeySettings.fresh_policy!=='legacy'&&!state.demo)) return browserUnlockView();
   return `${collectionTabs()}<div class="lock-panel"><div class="chest-tile">${mark()}</div><h2>${state.snapshot?'Unlock':'Set up'} ${esc(state.collection.name)}</h2><p>${state.snapshot?'Your passphrase stays on this device.':'Choose how to protect this collection.'}</p>${state.collection.group?'<div class="notice">Unlock with your verified recipient identity, or use the group recovery passphrase.</div>':''}${!state.snapshot&&!state.collection.edit?'<div class="notice">A member with edit access must initialize this collection.</div>':`${state.collection.group?button('Unlock with identity','identity-unlock','key','full'): ''}<form id="unlock-form">${field('Unlock passphrase','passphrase','password','','required autocomplete="'+(state.snapshot?'current-password':'new-password')+'"')}${!state.snapshot?field('Confirm passphrase','confirm','password','','required minlength="12" autocomplete="new-password"')+'<div class="choice-grid"><label class="choice"><input type="radio" name="mode" value="standard" checked><span><strong>Standard</strong><small>XChaCha20-Poly1305</small></span></label><label class="choice"><input type="radio" name="mode" value="hybrid"><span><strong>Hybrid</strong><small>Post-quantum · experimental</small></span></label></div>':''}<div class="form-error" role="alert"></div><button type="submit" class="btn primary full">${state.snapshot?'Unlock collection':'Create encrypted collection'}</button></form>${!state.snapshot?button('Import an encrypted Petika file','import','upload','full ghost'):''}`}<p class="auth-footer">Petika cannot recover a forgotten unlock passphrase.</p></div>`
 }
 
 function bindUnlock() {
+  if($('#passkey-setup-form')||$('#passkey-open-form')) {bindBrowserUnlock();return;}
   if (!$('#unlock-form')) return;
   form('#unlock-form', async (data, el) => {
     const pass = data.get('passphrase');
@@ -354,7 +369,147 @@ function bindUnlock() {
     shell()
   })
 }
+function assertBrowserContext(collection,generation) {
+  if(state.collection?.id!==collection||passkeyClient.generation!==generation)throw new DOMException('Operation cancelled','AbortError');
+}
+function browserScope() {
+  const info=state.browserInfo;
+  if(!info||info.user_id!==state.user.id||info.origin!==apiEndpoint)throw new Error('Refresh your account before continuing.');
+  return {...info,collection_id:state.collection.id,revision:state.revision};
+}
+async function browserInfo() {
+  const info=await api('/v1/passkeys');
+  if(info.user_id!==state.user.id||info.origin!==apiEndpoint)throw new Error('Passkey account mismatch.');
+  state.browserInfo=info;return info;
+}
+function browserUnlockView() {
+  const fresh=!state.snapshot;
+  const strict=passkeySettings.fresh_policy==='strict-biometric';
+  if(state.collection.group)return `${collectionTabs()}<div class="lock-panel"><h2>Protected shared collection</h2><p>Device-key enrollment for shared collections is not available yet. Ask the administrator to configure this collection.</p></div>`;
+  return `${collectionTabs()}<div class="lock-panel"><div class="chest-tile">${mark()}</div><h2>${fresh?'Set up':'Unlock'} ${esc(state.collection.name)}</h2>
+    <p>${fresh?'Choose the protection for this new vault.':'Verify an authorized passkey. Each secret action asks for fresh verification.'}</p>
+    ${fresh?`<form id="passkey-setup-form"><div class="choice-grid"><label class="choice"><input type="radio" name="policy" value="browser-passkey" ${strict?'disabled':'checked'}><span><strong>Browser passkey</strong><small>Touch ID, Face ID, security key, or device PIN</small></span></label><label class="choice"><input type="radio" name="policy" value="strict-biometric" ${strict?'checked':''}><span><strong>Biometric only</strong><small>No PIN or password fallback</small></span></label></div><p id="biometric-policy-status" class="notice" role="status"></p><div id="browser-passkey-fields"><div class="field"><label for="setup-credential">Passkey</label><select id="setup-credential" name="credential"><option value="new">Create a new passkey</option></select></div><div id="new-passkey-fields">${field('Confirm account password','account-password','password','','required autocomplete="current-password"')}${field('Passkey name','key-label','text','My passkey','required maxlength="80"')}</div></div><div class="form-error" role="alert"></div><button id="enable-passkey" type="submit" class="btn primary full">Set up passkey protection</button></form>`:
+    `<form id="passkey-open-form"><div class="field"><label for="open-credential">Authorized passkey</label><select id="open-credential" name="credential"></select></div><p class="small muted">This vault uses browser passkey verification. Your OS may offer biometrics or a device PIN.</p><div class="form-error" role="alert"></div><button type="submit" class="btn primary full">${state.dirty?'Verify and resume encrypted changes':'Verify passkey'}</button></form>`}
+    ${state.dirty?`<div class="actions">${button('Download encrypted draft','export','download')}${button('Keep draft and refresh','browser-refresh','refresh')}</div>`:''}
+    <p class="auth-footer">Your fingerprint stays with your device. Keep another authorized passkey and an encrypted backup.</p></div>`;
+}
+function bindBrowserUnlock() {
+  const collection=state.collection.id;
+  const setup=$('#passkey-setup-form');
+  if(setup) {
+    const update=()=>{
+      const strict=setup.elements.policy.value==='strict-biometric';
+      $('#browser-passkey-fields').hidden=strict;
+      $('#biometric-policy-status').textContent=strict?'Biometric-only protection requires a compatible protected-key provider. It is unavailable in this browser connection. No PIN fallback will be used.':browserSupport.supported?'Your browser will ask you to create or use a passkey. Vault encryption also requires support from the chosen authenticator.':'Passkeys require a supported browser and HTTPS or localhost.';
+      $('#enable-passkey').disabled=strict||!browserSupport.supported||!passkeySettings.enabled;
+      const isNew=$('#setup-credential').value==='new';$('#new-passkey-fields').hidden=!isNew;
+      setup.elements['account-password'].disabled=strict||!isNew;
+      setup.elements['key-label'].disabled=strict||!isNew;
+    };
+    setup.addEventListener('change',update);update();
+    browserInfo().then(info=>{if(state.collection.id!==collection||!setup.isConnected)return;for(const key of info.credentials){const option=document.createElement('option');option.value=key.id;option.textContent=key.label;$('#setup-credential').append(option)}}).catch(e=>{if(setup.isConnected)setup.querySelector('.form-error').textContent=errorText(e)});
+    form('#passkey-setup-form',async(data,el)=>{
+      if(data.get('policy')!=='browser-passkey')throw new Error('Biometric-only protection is unavailable. Choose it only with a compatible provider.');
+      const generation=passkeyClient.generation;await browserInfo();assertBrowserContext(collection,generation);let id=data.get('credential');
+      if(id==='new')id=(await passkeyClient.enroll(data.get('account-password'),data.get('key-label'))).credential_id;
+      assertBrowserContext(collection,generation);el.elements['account-password'].value='';
+      const result=await passkeyClient.run(null,browserScope(),id,'create');
+      assertBrowserContext(collection,generation);
+      state.browserVault=result.vault;state.browserPending=result.pending;state.browserCredentialId=id;
+      state.snapshot=JSON.stringify(result.vault);state.dirty=true;state.browserRows=result.rows;
+      stashBrowserDraft();await saveBrowserVault();assertBrowserContext(collection,generation);state.unlocked=true;state.mode='standard';await refreshRows();shell();
+    });
+    return;
+  }
+  const formEl=$('#passkey-open-form');
+  browserInfo().then(info=>{if(state.collection.id!==collection||!formEl?.isConnected)return;const select=$('#open-credential');
+    for(const wrapper of state.browserVault.protection.wrappers){const key=info.credentials.find(c=>c.id===wrapper.credential_id);if(!key)continue;const option=document.createElement('option');option.value=key.id;option.textContent=key.label;select.append(option)}
+    if(!select.options.length)throw new Error('No authorized passkey is registered for this account.');
+  }).catch(e=>{if(formEl?.isConnected)formEl.querySelector('.form-error').textContent=errorText(e)});
+  form('#passkey-open-form',async data=>{
+    const generation=passkeyClient.generation;state.browserCredentialId=data.get('credential');
+    if(!state.browserCredentialId)throw new Error('Choose an authorized passkey.');
+    if(state.dirty)await saveBrowserVault();
+    state.rows=await browserRpc('open');state.browserRows=null;
+    assertBrowserContext(collection,generation);state.unlocked=true;state.mode='standard';lastActivity=Date.now();shell();
+  });
+}
+async function browserRpc(action,...args) {
+  const collection=state.collection.id,generation=passkeyClient.generation;
+  if(action==='mode')return 'standard';
+  if(action==='seal')return state.snapshot;
+  if(state.dirty&&['put','remove','add-key'].includes(action))throw new Error('Resolve the retained encrypted changes before making another edit.');
+  await browserInfo();assertBrowserContext(collection,generation);
+  const id=state.browserCredentialId||state.browserVault.protection.wrappers[0]?.credential_id;
+  const result=await passkeyClient.run(state.browserVault,browserScope(),id,action,args);
+  assertBrowserContext(collection,generation);
+  if(result.vault){state.browserPending=result.pending;state.snapshot=JSON.stringify(result.vault);state.browserRows=result.rows;state.dirty=true;stashBrowserDraft();return;}
+  return result.value;
+}
+function stashBrowserDraft() {
+  try{localStorage.setItem(draftKey(),JSON.stringify({encrypted:state.snapshot,revision:state.revision,dirty:state.dirty}));}catch{throw new Error('This device cannot retain the encrypted draft. Download an encrypted backup before leaving.');}
+}
+async function saveBrowserVault() {
+  if(!state.dirty)return;
+  const collection=state.collection.id,generation=passkeyClient.generation;
+  const candidate=state.browserPending?.vault||JSON.parse(state.snapshot);
+  const current=await api(`/v1/passkey-vaults/${state.collection.id}`);
+  assertBrowserContext(collection,generation);
+  if(current.vault?.operation_id===candidate.operation_id&&canonical(current.vault)===canonical(candidate)) {
+    state.browserVault=current.vault;state.snapshot=JSON.stringify(current.vault);state.revision=current.revision;state.dirty=false;state.conflict=false;state.browserPending=null;stashBrowserDraft();return;
+  }
+  if(current.revision!==state.revision){state.conflict=true;throw new Error('Another device changed the vault. Your encrypted draft is preserved. Download it before refreshing and reviewing the latest version.');}
+  let pending=state.browserPending;
+  if(!pending?.grant_id) {
+    await browserInfo();assertBrowserContext(collection,generation);const id=state.browserCredentialId||candidate.protection.wrappers[0].credential_id;
+    const wrapper=candidate.protection.wrappers.find(w=>w.credential_id===id);
+    if(!wrapper)throw new Error('Choose a passkey authorized for the retained draft.');
+    const action=current.vault?(candidate.protection.wrappers.length>current.vault.protection.wrappers.length?'add-key':'put'):'create';
+    const newId=action==='add-key'?candidate.protection.wrappers.at(-1).credential_id:null;
+    const approval=await passkeyClient.verify(state.collection.id,id,action,state.revision,wrapper.prf_input,newId);
+    const checked=await passkeyClient.worker({scope:browserScope(),action:'open',args:[],vault:candidate,credentialId:id,prf:approval.prf.buffer});
+    assertBrowserContext(collection,generation);state.browserRows=checked.value;candidate.operation_id=approval.operationId;
+    pending={grant_id:approval.grantId,vault:candidate};state.browserPending=pending;state.snapshot=JSON.stringify(candidate);stashBrowserDraft();
+  }
+  // Keep only ciphertext in local storage. A lost reply reconciles before any
+  // new authorization; the one-use write grant is never persisted or replayed.
+  try {
+    const result=await api(`/v1/passkey-vaults/${state.collection.id}`,{method:'PUT',body:pending});
+    assertBrowserContext(collection,generation);state.revision=result.revision;state.browserVault=candidate;state.snapshot=JSON.stringify(candidate);
+    state.dirty=false;state.browserPending=null;state.conflict=false;stashBrowserDraft();
+  } catch(e) {if(state.collection?.id===collection&&passkeyClient.generation===generation)state.browserPending={vault:candidate,grant_id:null};throw e;}
+}
+async function addBrowserKey() {
+  if(state.dirty)throw new Error('Sync or review your encrypted changes before adding a passkey.');
+  dialog('Add an authorized passkey',`<form id="add-passkey-form">${field('Confirm account password','account-password','password','','required autocomplete="current-password"')}${field('Passkey name','key-label','text','Additional passkey','required maxlength="80"')}<p>Create and verify the new passkey, then approve with an existing authorized passkey to add it to this vault.</p><div class="form-error" role="alert"></div><button class="btn primary" type="submit">Add passkey</button></form>`);
+  form('#add-passkey-form',async(data,el)=>{
+    const collection=state.collection.id,generation=passkeyClient.generation;
+    await browserInfo();assertBrowserContext(collection,generation);const key=await passkeyClient.enroll(data.get('account-password'),data.get('key-label'));assertBrowserContext(collection,generation);el.elements['account-password'].value='';
+    const input=encodePasskey(randomPasskey(32));let proof;
+    try {
+      proof=await passkeyClient.verify(state.collection.id,key.credential_id,'prepare-key',state.revision,input);
+      const old=state.browserCredentialId||state.browserVault.protection.wrappers[0].credential_id;
+      const result=await passkeyClient.run(state.browserVault,browserScope(),old,'add-key',[],{newCredentialId:key.credential_id,newPrf:proof.prf.buffer,newInput:input});
+      assertBrowserContext(collection,generation);state.browserPending=result.pending;state.snapshot=JSON.stringify(result.vault);state.browserRows=result.rows;state.dirty=true;stashBrowserDraft();
+      await saveBrowserVault();assertBrowserContext(collection,generation);closeDialog();shell();toast('Additional passkey authorized');
+    } finally {if(proof?.prf.byteLength)proof.prf.fill(0);}
+  });
+}
+async function preserveBrowserDraftAndRefresh() {
+  const candidate=state.browserPending?.vault||JSON.parse(state.snapshot);
+  const key=`petika-retained-${state.collection.id}-${candidate.operation_id}`;
+  localStorage.setItem(key,state.snapshot); // Failure must leave the active draft untouched.
+  await exportFile();
+  localStorage.removeItem(draftKey());state.dirty=false;state.conflict=false;
+  return loadCollection();
+}
+
+function browserSecuritySettings() {
+  return `<section class="panel readable"><div class="panel-header"><h2>Security & recovery</h2><span class="pill">Browser passkey</span></div><p>Each secret action requires a new passkey verification. Your OS may use Touch ID, Face ID, a security key, or its device PIN.</p><p>Biometric-only protection is a separate policy and is never inferred from a browser verification result.</p><div class="actions">${button('Add an authorized passkey','browser-add-key','plus')}${button('Download encrypted backup','export','download')}</div><p>Keep another working passkey. A login-password reset cannot recover a vault after every authorized key is lost.</p></section>`;
+}
+
 function securitySettings() {
+  if(state.browserVault)return browserSecuritySettings();
   const protection = !state.unlocked ? 'Unlock to view protection' : state.mode === 'standard' ? 'Standard' : 'Hybrid · experimental';
   return `<section class="panel readable settings-security" aria-labelledby="security-settings-title">
     <div class="panel-header"><div><h2 id="security-settings-title">Security & recovery</h2><p>For ${esc(state.collection.name)}. Your account password and vault passphrase have different jobs.</p></div></div>
@@ -442,7 +597,8 @@ function renderItems() {
     renderRows()
   };
   renderRows();
-  renderDetail();
+  if(state.browserVault&&state.selected){$('.item-detail').innerHTML=`<div class="empty"><p>Verify your passkey to view the selected item.</p>${button('View selected item','browser-view','eye')}</div>`;}
+  else renderDetail();
   bind(main)
 }
 
@@ -461,7 +617,7 @@ async function renderDetail() {
     detail.innerHTML = '<div class="empty"><span class="emblem">' + icon('lock') + '</span><h2>A little space for everything important.</h2><p>Select an item to see its details. Passwords stay hidden until you choose to reveal them.</p></div>';
     return;
   }
-  const entry = await rpc('get', name);
+  const entry = await rpc(state.browserVault?'view':'get', name);
   if (state.selected !== name || !state.unlocked) return;
   const url = safeUrl(entry.url);
   detail.innerHTML = `<div class="detail-heading"><span class="item-letter">${esc(name.split('/').pop().trim()[0]?.toUpperCase() || '?' )}</span><div><h2>${esc(name.split('/').pop())}</h2><p class="small">${esc(state.collection.name)}${name.includes('/')?' / '+esc(name.slice(0,name.lastIndexOf('/'))):''}</p></div><div class="actions">${state.collection.edit?button('Edit','edit','edit','ghost'):''}</div></div><div class="detail-field"><span class="label">Username</span><div class="field-value"><span>${esc(entry.username||'Not set')}</span>${button('','copy-username','copy','icon-only')}</div></div><div class="detail-field"><span class="label">Password</span><div class="field-value"><span class="password-value mono" id="password-display">••••••••••••••••</span><div class="actions">${button('','reveal','eye','icon-only')}${button('','copy-password','copy','icon-only')}</div></div></div>${entry.url?`<div class="detail-field"><span class="label">Website</span><div class="field-value">${url?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(entry.url)} ${icon('arrow')}</a>`:`<span>${esc(entry.url)}</span>`}</div></div>`:''}${entry.otp?`<div class="detail-field"><span class="label">Verification code</span><div class="field-value"><span class="otp-code mono" id="otp-code">••• •••</span>${button('','copy-otp','copy','icon-only')}</div><span class="otp-timer" id="otp-time"></span></div>`:''}<div class="detail-field"><span class="label">Notes</span><p class="detail-notes">${esc(entry.notes||'No notes yet.')}</p></div><div class="detail-footer">${icon('shield')}Encrypted in ${esc(state.collection.name)}</div>${state.collection.edit?`<div class="detail-actions">${!entry.otp?button('Set up verification code','edit','clock','ghost'):'<span></span>'}${button('Delete item','delete','trash','ghost danger')}</div>`:''}`;
@@ -476,7 +632,13 @@ async function renderDetail() {
     $('#otp-time').textContent = 'Verification codes require HTTPS or localhost.';
     detail.querySelector('[data-action="copy-otp"]').disabled = true;
   }
-  if (entry.otp && isSecureContext) {
+  if (entry.otp && isSecureContext && state.browserVault) {
+    $('#otp-time').textContent='Verify your passkey to show a code.';
+    const show=document.createElement('button');show.type='button';show.className='btn ghost';show.textContent='Show verification code';
+    show.onclick=async()=>{try{const otp=await rpc('otp',name);if(state.selected===name){$('#otp-code').textContent=otp.code;$('#otp-time').textContent=`Valid for ${otp.remaining}s`;setTimeout(()=>{if(state.selected===name&&$('#otp-code'))$('#otp-code').textContent='••• •••';},Math.min(otp.remaining,30)*1000)}}catch(e){toast(errorText(e))}};
+    $('#otp-time').after(show);
+  }
+  if (entry.otp && isSecureContext && !state.browserVault) {
     const tick = async () => {
       try {
         const otp = await rpc('otp', name);
@@ -500,10 +662,12 @@ function safeUrl(value) {
   }
 }
 async function refreshRows() {
-  state.rows = await rpc('list');
+  state.rows = state.browserRows || await rpc('list');
+  state.browserRows=null;
   if (!state.rows.some(r => r.name === state.selected)) state.selected = null
 }
 async function persist() {
+  if(state.browserVault) return saveBrowserVault();
   state.snapshot = await rpc('seal');
   if (state.demo) return;
   state.dirty = true;
@@ -519,6 +683,7 @@ async function persist() {
   await sync()
 }
 async function sync() {
+  if(state.browserVault && state.dirty) return saveBrowserVault();
   if (state.demo || !state.dirty) return;
   if (state.conflict) throw new Error('Resolve the revision conflict in Sync & backup first.');
   if (JSON.parse(state.snapshot).version === 2) {
@@ -564,6 +729,8 @@ function lockMinutes() {
 }
 
 function lock() {
+  passkeyClient?.cancel();
+  state.browserRows=null;
   discardWorker();
   clearInterval(otpInterval);
   state.unlocked = false;
@@ -598,7 +765,6 @@ async function editItem(prefill = null) {
     otp: ''
   });
   dialog(original ? 'Edit item' : 'New item', `<form id="item-form">${field('Name','name','text',original||'','required maxlength="256" '+(original?'readonly':''))}${field('Username','username','text',entry.username,'autocomplete="off" maxlength="1024"')}<div class="field"><label for="f-password">Password</label><div class="input-action"><input id="f-password" name="password" type="password" autocomplete="new-password" value="${esc(entry.password)}" maxlength="4096">${button('Suggest password','generate-item','refresh')}</div><div id="password-suggestion" class="password-suggestion" hidden><label for="suggested-password">Suggested password</label><input id="suggested-password" class="mono" type="text" readonly spellcheck="false" autocomplete="off"><div class="actions">${button('Use suggested password','use-suggested','check')}${button('Generate another','generate-item','refresh','ghost')}</div><small>Generated on your device. Only saved when you save this item.</small></div></div>${field('Website','url','url',entry.url,'placeholder="https://example.com" maxlength="2048"')}<div class="field"><label for="f-otp">Verification-code setup key</label><input id="f-otp" name="otp" type="password" autocomplete="off" value="${esc(entry.otp||'')}" placeholder="Base32 secret or otpauth://totp/…" maxlength="4096"><small>On the website, enable two-factor authentication and choose an authenticator app. Paste its setup key or otpauth link here, then save this item. Enter Petika’s generated code on the website to finish enabling MFA. Saving here alone does not enable MFA. The key is encrypted with this item.</small></div><div class="field"><label for="f-notes">Notes</label><textarea id="f-notes" name="notes" maxlength="20000">${esc(entry.notes)}</textarea></div><div class="form-error" role="alert"></div><div class="dialog-footer">${button('Cancel','close')}<button class="btn primary" type="submit">Save item</button></div></form>`);
-  if (!original && !entry.password) await suggestItemPassword();
   form('#item-form', async data => {
     const name = data.get('name');
     await rpc('put', name, {
@@ -620,9 +786,11 @@ async function editItem(prefill = null) {
     state.view = 'items';
     shell();
     toast(message)
-  })
+  });
+  if (!original && !entry.password && !state.browserVault) await suggestItemPassword();
 }
 async function importDialog() {
+  if(state.browserVault||(!state.snapshot&&passkeySettings.fresh_policy!=='legacy'&&!state.demo))throw new Error('Passphrase import requires an explicit vault migration; it cannot replace this protection policy.');
   if (state.unlocked || state.snapshot || !state.collection.edit) throw new Error('Import is available only into an empty, locked collection. Use a new group to keep an existing collection intact.');
   dialog('Import encrypted collection', `<form id="import-form"><div class="field"><label for="import-file">Petika encrypted file</label><input id="import-file" name="file" type="file" accept=".petika,.json" required></div>${field('File unlock passphrase','passphrase','password','','required autocomplete="off"')}<p class="small muted">The file is decrypted on your device, then synced as ciphertext. GPG files must first be imported with the native CLI.</p><div class="form-error" role="alert"></div><div class="dialog-footer"><button class="btn primary" type="submit">Import collection</button></div></form>`);
   form('#import-form', async data => {
@@ -954,6 +1122,9 @@ async function action(name, el) {
       state.filter = el.dataset.filter;
       renderItems();
       break;
+    case 'browser-view': await renderDetail();break;
+    case 'browser-refresh': await preserveBrowserDraftAndRefresh();break;
+    case 'browser-add-key': await addBrowserKey();break;
     case 'select':
       state.selected = state.rows[Number(el.dataset.index)].name;
       renderRows();
@@ -1018,10 +1189,11 @@ async function action(name, el) {
     case 'websites':
       await websitesDialog();
       break;
-    case 'copy-generated':
-      await copyText($('#generated').value);
+    case 'copy-generated': {
+      const value=$('#generated').value;if(state.browserVault)await rpc('authorize-copy');
+      await copyText(value);
       toast('Password copied');
-      break;
+      break;}
     case 'save-generated':
       await editItem({
         username: '',
@@ -1034,14 +1206,15 @@ async function action(name, el) {
     case 'reveal': {
       const display = $('#password-display');
       const revealed = el.getAttribute('aria-label') === 'Hide password';
-      display.textContent = revealed ? '••••••••••••••••' : (await rpc('get', state.selected)).password;
+      display.textContent = revealed ? '••••••••••••••••' : (state.browserVault?await rpc('reveal-password',state.selected):(await rpc('get', state.selected)).password);
+      if(state.browserVault&&!revealed)setTimeout(()=>{if(display.isConnected){display.textContent='••••••••••••••••';el.setAttribute('aria-label','Reveal password')}},30000);
       el.setAttribute('aria-label', revealed ? 'Reveal password' : 'Hide password');
       break;
     }
     case 'copy-password':
     case 'copy-username': {
-      const entry = await rpc('get', state.selected);
-      await copyText(name === 'copy-password' ? entry.password : entry.username);
+      if(state.browserVault) await copyText(await rpc(name,state.selected));
+      else {const entry=await rpc('get',state.selected);await copyText(name==='copy-password'?entry.password:entry.username);}
       toast(name === 'copy-password' ? 'Password copied' : 'Username copied');
       break;
     }
@@ -1080,6 +1253,7 @@ async function action(name, el) {
       dialog('Load server version?', `<p>Download your encrypted backup first. Loading the server version replaces the pending copy on this device.</p><div class="dialog-footer">${button('Download my changes','export','download')}${button('Load server version','confirm-reload')}</div>`);
       break;
     case 'confirm-reload':
+      if(state.browserVault&&state.dirty){closeDialog();await preserveBrowserDraftAndRefresh();break;}
       localStorage.removeItem(draftKey());
       closeDialog();
       await loadCollection();
@@ -1190,6 +1364,8 @@ window.addEventListener('pageshow', event => {
     if (state.user) shell()
   }
 });
+window.addEventListener('pagehide',()=>passkeyClient?.cancel());
+document.addEventListener('visibilitychange',()=>{if(document.hidden)passkeyClient?.cancel();if(document.hidden && state.browserVault){discardWorker();state.unlocked=false;state.rows=[];state.selected=null;closeDialog();if(state.user)shell();}});
 window.addEventListener('beforeunload', event => {
   if (state.dirty) {
     event.preventDefault();
@@ -1204,6 +1380,9 @@ window.addEventListener('beforeunload', event => {
     const endpoint = new URL(config.endpoint || location.origin);
     if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.pathname !== '/' || endpoint.search || endpoint.hash) throw new Error('Invalid deployment endpoint.');
     apiEndpoint = endpoint.origin;
+    passkeySettings=config.passkeys||passkeySettings;
+    passkeyClient=new PasskeyClient(api);
+    browserSupport=await passkeyCapabilities();
     if (apiEndpoint !== location.origin) {
       location.replace(new URL(location.pathname + location.search + location.hash, apiEndpoint).href);
       return;

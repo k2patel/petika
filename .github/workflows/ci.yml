@@ -162,6 +162,8 @@ jobs:
         run: python3 scripts/test_cli_terminal.py
       - name: OTP reference vectors
         run: node scripts/test_otp.mjs
+      - name: Passkey encryption and per-action client checks
+        run: node --test scripts/test_passkeys.mjs
       - name: Extension origin policy
         run: node scripts/test_extension_policy.mjs
       - name: Synthetic PRF wrapper and fail-closed ceremony tests
@@ -211,6 +213,8 @@ jobs:
           /tmp/petika-browser-tests/bin/playwright install --with-deps chromium
       - name: Browser workflows and permissions
         run: /tmp/petika-browser-tests/bin/python scripts/test_web_ui.py
+      - name: Browser passkey vault and independent credentials
+        run: /tmp/petika-browser-tests/bin/python scripts/test_browser_passkeys.py
       - name: Synthetic browser PRF with virtual authenticator
         run: /tmp/petika-browser-tests/bin/python experiments/biometric-unlock/test_browser.py
       - name: Chromium extension approval and autofill

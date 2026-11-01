@@ -8,9 +8,11 @@
 - Chromium and Firefox extensions on Windows, macOS, and Linux; iOS and Android apps.
 - Password search, generation, save, edit, copy, and autofill.
 - One person's many devices, with selected passwords shareable with other users.
-- Biometrics enabled by default on supported devices, with an on/off setting.
-  Authenticate on unlock, not on every secret access. Provide deliberate passphrase
-  fallback when biometrics fail or are unavailable; never silently unlock.
+- Two explicit protection policies: browser passkeys (OS biometrics or PIN) and
+  strict biometric-only approval (no PIN/string fallback). Both require fresh approval
+  for each secret action, without a reusable key cache. Strict mode must fail closed
+  when no compatible provider exists. Existing passphrase vaults require explicit
+  migration; see [the browser implementation and limits](browser-passkeys.md).
 - Import existing GPG-encrypted password stores locally; legacy `pass` format and CLI
   compatibility are not required after import. Do not modify the source store.
 - Encrypted Git copies and recoverable backups must be addressed in the design.

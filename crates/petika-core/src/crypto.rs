@@ -240,6 +240,20 @@ pub fn envelope_metadata(bytes: &[u8]) -> Result<(EncryptionMode, Option<Collect
 
 /// Validate framing only. An untrusted server cannot authenticate client ciphertext.
 pub fn validate_envelope(bytes: &[u8]) -> Result<()> {
+    #[derive(Deserialize)]
+    struct Header {
+        version: u32,
+    }
+    if bytes.len() > MAX_FILE_BYTES {
+        return Err(Error::Format);
+    }
+    if serde_json::from_slice::<Header>(bytes)
+        .map_err(|_| Error::Format)?
+        .version
+        == 3
+    {
+        return crate::passkey_vault::BrowserVault::parse(bytes).map(|_| ());
+    }
     parse(bytes).map(|_| ())
 }
 

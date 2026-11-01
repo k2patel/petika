@@ -1,10 +1,10 @@
 # Petika · पेटिका — self-hosted password manager
 
-Target policy update (2026-10-31): every secret action requires fresh biometric-only
-approval on an authorized device; account passwords, secret strings/PINs, prior approvals
-and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
-broker and verified platform support. Existing runtime/probes do not implement this policy.
-See [the enforcement design](docs/decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+Protection policy update (2026-10-31): fresh personal vaults can use browser passkeys,
+with fresh verification for each secret action. Your OS may use biometrics or a PIN.
+A separate strict biometric-only choice never permits PIN fallback and remains blocked
+until a production protected-key provider is connected. Existing vaults keep their
+current protection. See [browser passkeys and policy boundaries](docs/browser-passkeys.md).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="assets/brand/petika-icon-dark.png">

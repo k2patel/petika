@@ -5,6 +5,17 @@ on 2026-10-31. This is the central checklist;
 feature guides describe current behavior. Checked items record implemented experimental capabilities or explicitly labeled
 completed decisions, not a production-readiness certification.
 
+## Browser and strict policies
+
+- [x] Explicit browser-passkey and strict-biometric setup choices; strict creation fails closed without a provider.
+- [x] Personal browser vaults: verified WebAuthn registration, PRF key wrappers, independent additional keys, fresh per-action workers and one-use CAS publication grants.
+- [ ] Hardware/browser-engine matrix, public-ledger restore drill and security review before broad release.
+- [ ] Legacy migration, cryptographic passkey removal/rotation, shared-vault browser support and QR enrollment.
+- [ ] Production strict biometric provider, native bridge and per-use hardware lifecycle coverage.
+
+See [implemented browser flow and limits](browser-passkeys.md). The strict sequence below
+continues independently; browser UV does not satisfy strict biometric evidence.
+
 ## Active implementation sequence
 
 The new Git/biometric target is tracked in the [ordered work plan](implementation-plan-git-biometric.md).

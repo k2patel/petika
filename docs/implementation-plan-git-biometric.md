@@ -1,10 +1,26 @@
 # Implementation plan: Git sync and mandatory per-action biometrics
 
+> **Policy update, 2026-10-31:** Both browser passkey verification (biometric or OS PIN)
+> and strict biometric-only protection are supported as explicit policy choices.
+> The browser personal-vault implementation is described in [browser passkeys](browser-passkeys.md).
+> Strict biometric-only creation remains blocked until a production provider exists.
+> Earlier mandatory-biometric statements below apply to the strict policy; they do
+> not describe the browser-passkey policy. Existing vaults are not auto-migrated.
+
 Date: 2026-10-31. Status: work identified; no milestone below is complete.
 Target: [ADR 0006](decisions/0006-git-authoritative-sync.md).
 Validation: [acceptance scenarios](testing/git-authoritative-sync.md).
 The current application continues to use API authority and outbound Git replication.
 Changes stay experimental until explicit migration and validation.
+
+## Browser-policy deliverable
+
+Implemented separately from B01–B03: WebAuthn registration and fresh action ceremonies,
+PRF-encrypted independent key wrappers, personal-vault framing and transient WASM
+workers, add-key enrollment, encrypted conflict drafts and one-use CAS write grants.
+The virtual-authenticator browser test covers two keys, UI controls and restart.
+Hardware/browser-engine verification, strict provider, QR pairing, group support,
+legacy migration and key-removal rotation remain open. See [details](browser-passkeys.md).
 
 ## Existing foundations to reuse
 

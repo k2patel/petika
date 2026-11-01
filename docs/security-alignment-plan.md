@@ -1,10 +1,9 @@
 # Security and compliance alignment plan
 
-Target policy update (2026-10-31): every secret action requires fresh biometric-only
-approval on an authorized device; account passwords, secret strings/PINs, prior approvals
-and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
-broker and verified platform support. Existing runtime/probes do not implement this policy.
-See [the enforcement design](decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+Protection policy update (2026-10-31): browser-passkey verification permits
+biometrics or OS PIN, with fresh approval per secret action. Strict biometric-only
+protection remains a separate, fail-closed policy requiring a production provider.
+Existing collections retain their protection. See [current implementation](browser-passkeys.md).
 
 Architecture update (2026-10-31): [ADR 0006](decisions/0006-git-authoritative-sync.md) selects Git-authoritative sync. Extend the validation gates to signed Git publication, atomic expected-head and authorization checks, ciphertext-only object storage, conflict draft retention, uncertain-push reconciliation, host credential capabilities, password-plus-any-authorized-key access and per-device encrypted vault-secret packages, repository isolation and explicit migration/recovery. Direction acceptance does not close existing security-review gates.
 

@@ -13,12 +13,17 @@ for package in sorted(metadata["packages"], key=lambda p: (p["name"], p["version
         continue
     print(f"\n{package['name']} {package['version']} — {package.get('license', 'UNKNOWN')}")
     print(package.get("repository") or "")
+    if package.get('license') == 'MPL-2.0':
+        print(f"Corresponding unmodified source: https://crates.io/api/v1/crates/{package['name']}/{package['version']}/download")
     root = Path(package["manifest_path"]).parent
     paths = set()
     for pattern in ("LICENSE*", "LICENCE*", "COPYING*", "NOTICE*", "license*", "licence*"):
         paths.update(p for p in root.glob(pattern) if p.is_file())
     if package.get("license_file"):
         paths.add(root / package["license_file"])
+    if package["name"] == "openssl-src":
+        paths.update(root.glob("openssl/LICENSE*"))
+        paths.update(root.glob("openssl/NOTICE*"))
     if package["name"] == "ring":
         paths.update(root.glob("src/polyfill/once_cell/LICENSE-*"))
         paths.update(root.glob("third_party/fiat/LICENSE"))

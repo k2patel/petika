@@ -1,10 +1,9 @@
 # Sync, backup, and recovery
 
-Target policy update (2026-10-31): every secret action requires fresh biometric-only
-approval on an authorized device; account passwords, secret strings/PINs, prior approvals
-and recovery tools cannot bypass it. Enforcement needs a trusted per-operation key/secret
-broker and verified platform support. Existing runtime/probes do not implement this policy.
-See [the enforcement design](decisions/0006-git-authoritative-sync.md#mandatory-biometric-approval-for-every-secret-action).
+Protection policy update (2026-10-31): browser passkeys permit biometric or OS PIN
+verification, with a fresh ceremony for each secret action. Strict biometric-only
+protection is a separate choice and stays blocked without a production provider.
+Existing vaults keep their protection. See [browser passkeys](browser-passkeys.md).
 
 For the current runtime, the API is authoritative and Git is a one-way ciphertext mirror.
 The accepted [Git-authoritative target](decisions/0006-git-authoritative-sync.md) has not
