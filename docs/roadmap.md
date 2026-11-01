@@ -17,6 +17,29 @@ completed decisions, not a production-readiness certification.
 See [implemented browser flow and limits](browser-passkeys.md). The strict sequence below
 continues independently; browser UV does not satisfy strict biometric evidence.
 
+## CLI distribution and Homebrew TODO
+
+Requested on 2026-10-31; paused for session wrap-up before implementation.
+No CLI release assets or Petika tap formula have been published yet.
+
+- [ ] Add a dedicated CLI release workflow, independent of the server/web image build.
+  Release packages must contain the executable, license notices and version/source
+  metadata; installation must not download the complete repository or require Rust.
+- [ ] Build and smoke-test separate macOS Apple Silicon/Intel and Linux x86-64/ARM64
+  archives. Verify minimum supported OS/runtime requirements for each target.
+- [ ] Build Windows separately with its own native runner, executable ZIP and checksums.
+  Cover x86-64 first and explicitly verify ARM64 support before publishing that target.
+- [ ] Publish immutable, versioned CLI-only assets and SHA-256 checksums from tagged or
+  manually requested releases. Avoid duplicating the full CI/server build on release tags.
+- [ ] Add `petika` to [k2patel/homebrew-tap](https://github.com/k2patel/homebrew-tap),
+  selecting the matching prebuilt CLI archive by OS/architecture with a verified checksum.
+  Validate formula style/audit, installation and a generated-data encryption round-trip.
+- [ ] Update both Petika's README and the tap README with working installation, upgrade
+  and verification commands once the formula and assets exist.
+- [ ] State the CLI compatibility boundary in release notes and formula caveats:
+  browser-approved account login works; new browser-passkey vault secret access still
+  needs a per-action browser/device approval integration. Packaging does not implement it.
+
 ## Active implementation sequence
 
 The new Git/biometric target is tracked in the [ordered work plan](implementation-plan-git-biometric.md).

@@ -68,6 +68,23 @@ deployed; see [architecture](docs/architecture.md) and [ADR 0006](docs/decisions
 - **Setup and upgrades:** browser wizard or environment provisioning, setup mode controls,
   versioned persistence, migration backups, and rejection of unsupported newer schemas.
 
+## CLI packages and Homebrew (planned)
+
+Standalone CLI downloads and a `petika` formula in
+[`k2patel/homebrew-tap`](https://github.com/k2patel/homebrew-tap) are on the
+[distribution TODO](docs/roadmap.md#cli-distribution-and-homebrew-todo).
+The dedicated release workflow will package macOS/Linux binaries and build Windows
+separately. Packages will contain the CLI and license notices, so installation will
+not require downloading this entire repository or building Rust.
+
+The formula and CLI release archives are **not published yet**. Installation commands
+will be added here and to the tap README after they are verified. For now, build the
+CLI from a checkout with `cargo install --path crates/petika-cli --locked`.
+
+The CLI supports browser-approved account login and older passphrase/recipient vaults.
+Opening the new browser-passkey vaults from the CLI still needs integration; see
+[CLI support](docs/cli-accounts.md) and [passkey boundaries](docs/browser-passkeys.md).
+
 ## Run from source
 
 Install [Rust through rustup](https://rustup.rs/), Python 3, and OpenSSL for the example
