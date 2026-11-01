@@ -15,6 +15,7 @@ use zeroize::{Zeroize, Zeroizing};
 #[cfg(unix)]
 mod agent;
 pub mod http;
+pub mod ssh;
 
 const LIMIT: usize = 16384;
 const PURPOSE: &[u8] = b"petika:native-git-lease-draft:experimental-v1";
@@ -66,6 +67,10 @@ pub struct Scope {
     pub repository: String,
     pub read_only: bool,
     pub ttl: u64,
+    /// Independently confirmed SSH endpoint/host key, retained before admission.
+    /// Older drafts can be reconciled/cleaned up but cannot fetch without it.
+    #[serde(default)]
+    pub ssh_remote: Option<ssh::PinnedRemote>,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -185,6 +190,12 @@ impl Intent {
         Ok(())
     }
     fn validate(&self) -> Result<()> {
+        // Management origins also become public server-side authorization
+        // metadata; never retain/send credentials embedded in their URL.
+        http::origin(&self.scope.management_origin)?;
+        if let Some(remote) = &self.scope.ssh_remote {
+            remote.validate(&self.scope.repository)?;
+        }
         if !id(&self.operation_id)
             || !(60..=3600).contains(&self.scope.ttl)
             || http::origin(&self.scope.server_origin)? != self.scope.server_origin
@@ -451,11 +462,7 @@ impl<C: DraftCustody> Operation<C> {
     }
     /// Record BEFORE starting an external transfer. A reopened TransferStarted
     /// operation is deliberately not reusable: reconcile Git and clean it up.
-    pub fn mark_transfer_started(
-        &mut self,
-        service: &mut impl LeaseService,
-        now: u64,
-    ) -> Result<()> {
+    fn mark_transfer_started(&mut self, service: &mut impl LeaseService, now: u64) -> Result<()> {
         let started = std::time::Instant::now();
         self.service(service)?;
         if self.phase() != Phase::Active {
@@ -503,7 +510,7 @@ impl<C: DraftCustody> Operation<C> {
     /// explicit SSH host-key pins and ciphertext-only Git protocol rules. This
     /// reference seam does not implement or validate Git-authoritative history.
     #[cfg(unix)]
-    pub fn transfer<T>(
+    pub(crate) fn transfer<T>(
         &mut self,
         service: &mut impl LeaseService,
         now: u64,

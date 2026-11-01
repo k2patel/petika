@@ -1887,6 +1887,7 @@ dependencies = [
  "chacha20poly1305",
  "ed25519-dalek",
  "getrandom 0.2.17",
+ "libc",
  "petika-core",
  "serde",
  "serde_json",

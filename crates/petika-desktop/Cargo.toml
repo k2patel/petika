@@ -10,7 +10,7 @@ publish = false
 
 [features]
 default = []
-experimental-git-client = ["petika-core/experimental-device-keys", "dep:serde", "dep:serde_json", "dep:zeroize", "dep:getrandom", "dep:base64", "dep:ed25519-dalek", "dep:thiserror", "dep:ureq", "dep:url", "dep:tempfile"]
+experimental-git-client = ["petika-core/experimental-device-keys", "dep:serde", "dep:serde_json", "dep:zeroize", "dep:getrandom", "dep:base64", "dep:ed25519-dalek", "dep:thiserror", "dep:ureq", "dep:url", "dep:tempfile", "dep:libc"]
 
 [dependencies]
 petika-core.workspace = true
@@ -24,6 +24,9 @@ thiserror = { workspace = true, optional = true }
 ureq = { version = "=3.4.2", default-features = false, features = ["rustls"], optional = true }
 url = { version = "2", optional = true }
 tempfile = { workspace = true, optional = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { version = "0.2", optional = true }
 
 [dev-dependencies]
 tempfile.workspace = true

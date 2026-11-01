@@ -141,3 +141,12 @@ lookup and records transfer attempts before use. A new isolated system SSH agent
 the temporary key through a socket and is killed after success/error; generated-data
 tests verify signatures, local expiry and cleanup. No production custodian or pinned-host
 Git runner is supplied. B02/B03, G01/G02 and T01 remain open.
+
+Pinned-host read update: public native `Operation::fetch` now requires a retained SSH
+endpoint/Ed25519 host pin, uses the isolated agent with no credential fallback and returns
+a temporary bare quarantine after structural fsck. Fifteen native tests pass, including
+a real local SSH ciphertext fetch, wrong-host/client-key denial, inherited-config
+isolation and bounded process cleanup. See [native contract](native-git-lease-client.md)
+and [evidence](testing/pinned-ssh-fetch-2026-10-31.json). Fetched data still requires
+independent signed-history/epoch/policy verification. Exact-parent conditional publication,
+conflict/re-edit/lost-reply reconciliation and production platform custody remain open.

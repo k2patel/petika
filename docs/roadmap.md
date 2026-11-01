@@ -20,8 +20,10 @@ GitHub/Gitea list/delete adapters, the worker and durable session/account hooks 
 wired and tested against local fake hosts. [Authorized registration](git-key-registration.md), own-session status and completion
 cleanup are now wired with device/SSH proof checks. A [native coordinator](native-git-lease-client.md)
 adds encrypted draft/recovery contracts, bounded HTTP and an isolated-agent seam, tested
-with generated data. Protected platform custody, pinned-host Git execution, cryptographic
-device removal, real-host validation and a status UI remain T01 work.
+with generated data. Typed pinned-host SSH fetch now passes a disposable local-sshd
+ciphertext transfer and denial tests. Protected platform custody, signed publication
+verification/conditional push, cryptographic device removal, real-host validation and
+a status UI remain open.
 
 ## Implemented
 

@@ -57,9 +57,10 @@ session cleanup events. The [registration API](git-key-registration.md) now veri
 and independent SSH-key proofs, persists intent before creation and supports completion
 cleanup. A gated [native coordinator](native-git-lease-client.md) now retains encrypted
 lease drafts through an injected custody boundary, reconciles own-session operation
-lookups and supplies one isolated short-lived SSH agent per transport job. Actual platform
-custody, pinned-host Git execution, cryptographic device-removal admission and actual-host
-validation remain pending; no deployment or live key mutation occurred in this milestone.
+lookups and supplies one isolated short-lived SSH agent per transport job. Its typed
+read-only fetch now enforces a retained Ed25519 SSH host pin and quarantines fetched Git
+objects for separate signed-history verification. Actual platform custody, conditional
+Git publication, cryptographic device-removal admission and actual-host validation remain pending; no deployment or live key mutation occurred in this milestone.
 
 Shared-vault ACLs, publication/revocation ordering, signed tree/ref and receipt formats,
 browser transport, durable device custody and complete recovery are release gates.

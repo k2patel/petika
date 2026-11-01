@@ -1,0 +1,41 @@
+{
+  "date": "2026-10-31",
+  "scope": "default-off native pinned-host read-only SSH Git fetch",
+  "production_enabled": false,
+  "live_git_provider_keys_modified": false,
+  "real_vault_decrypted": false,
+  "validation": {
+    "platform": "macOS arm64",
+    "rust": "1.90.0",
+    "git": "2.54.0 Apple Git-157",
+    "openssh": "10.3p1 LibreSSL 3.3.6",
+    "native_library_tests_including_explicit_local_sshd_test": 15,
+    "local_sshd_test": "passed with generated host/client keys and authenticated synthetic ciphertext",
+    "default_and_experimental_desktop_clippy": "passed with warnings denied",
+    "scope_of_regressions": "native coordinator/HTTP/agent suite included; server implementation unchanged"
+  },
+  "coverage": [
+    "SSH endpoint and canonical Ed25519 host pin retained in encrypted intent and validated on reopen",
+    "Missing pin, repository substitution, invalid branch and credentialed management URL denied before transfer",
+    "Actual Git-over-SSH fetch returns the exact generated ciphertext and expected commit in a temporary bare quarantine",
+    "Different valid host key rejected without TOFU or replacement; correct host with unauthorized client key rejected",
+    "Successful and failed SSH jobs queue cleanup, retain operation state and remove private agent invocation files",
+    "Dropping fetched data removes the temporary quarantine; no checkout or trusted vault pin is updated",
+    "Inherited poisoned global/system/environment Git configuration is excluded in a separate worker process",
+    "Shell quoting preserves metacharacters literally; Git command inputs and repository/ref shapes are validated",
+    "Actual subprocess deadline stops a sleeping Git alias through a dedicated process group",
+    "Quota checks reject symlinks/oversized files and tolerate benign atomic temporary-file renames",
+    "Existing lost-reply, encrypted resume, challenge binding, per-admission password callback, agent signature/expiry and cleanup tests pass"
+  ],
+  "limits": [
+    "SSH/Git structural checks do not verify signed vault publications, recipient policy, epochs or rollback pins",
+    "No conditional push, competing-client conflict/re-edit or lost-push-acknowledgement reconciliation implemented",
+    "No production device/draft custodian, native browser IPC or biometric-only vault operation integration",
+    "Native Unix fixed tool paths, Ed25519 host key, SHA-1 Git repository and standard owner/repo.git path only",
+    "Depth 128 and per-file/output/deadline constraints; aggregate disk/file-count budget is polled and may overshoot",
+    "No hard memory/CPU sandbox or hostile compressed-pack stress validation; patched system tools and further review required",
+    "Test sshd uses private generated config with StrictModes disabled for its temporary-directory ancestor; system SSH service unchanged",
+    "No actual hosted-provider grant/permission trial or remote deploy-key deletion performed by the SSH fixture",
+    "Remote ordinary deploy-key expiry remains dependent on the separate cleanup worker/provider"
+  ]
+}

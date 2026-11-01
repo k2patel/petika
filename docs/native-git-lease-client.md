@@ -1,7 +1,8 @@
 # Candidate native Git lease coordinator
 
 Date: 2026-10-31. `petika-desktop` feature `experimental-git-client`, off by default.
-This is a tested native library seam, not a product CLI, browser bridge, or vault unlock.
+This is a tested native library with pinned-host SSH fetch, not a product CLI, browser
+bridge, or vault unlock.
 It extends the [registration contract](git-key-registration.md) and
 [cleanup worker](git-key-lease-cleanup.md). No live host credentials or repositories
 were used, and no production feature was enabled.
@@ -82,16 +83,17 @@ For local development use the ignored `.secrets/git-leases/` directory and
 `<operation_id>.git-lease-draft` names; draft files and their lock suffix are also ignored
 repository-wide. Never put a real credential or encrypted private-key draft into Git.
 
-## Temporary SSH agent and transfer seam
+## Temporary SSH agent and pinned-host fetch
 
-On Unix, `Operation::transfer` records `transfer_started`, rechecks the owning session's
+On Unix, public `Operation::fetch` uses an internal transfer lifecycle that records `transfer_started`, rechecks the owning session's
 active status and expiry, then launches a new `/usr/bin/ssh-agent -D` with an empty
 environment and a private temporary socket directory. It sends one constrained Ed25519
 identity directly over the Unix socket using
 [RFC 9987 sections 5.2.3 and 5.2.7](https://www.rfc-editor.org/rfc/rfc9987.html#section-5.2.3).
 The packet contains the independent transport seed, never a device/authority signer.
 Private buffers are zeroized; no SSH private-key file is written. Only the socket path
-and standard public descriptor reach the trusted transport callback.
+and standard public descriptor reach the internal Git runner. The generic callback seam
+is now crate-private; callers use the typed fetch API.
 
 The agent lifetime is capped by the remaining lease time, conservatively reduced by
 monotonic elapsed time. Normal completion/error kills and waits for that agent before
@@ -102,11 +104,50 @@ Remote deletion still depends on the worker/provider; strict remote TTL requires
 certificate or lease-checking gateway. Caller-supplied `now` must come from the native
 controller's trusted UTC clock, never a browser request.
 
-The callback is a **trusted extension seam**. It must enforce independently verified SSH
-host-key pins, no forwarding or credential fallback, bounded subprocesses and ciphertext-only
-Git protocol rules. This milestone does not supply a production Git runner or host-key
-pin verifier. The agent test signs generated authentication data; it is not an actual
-SSH login, Git fetch/push, or hosted-permission test. No system agent is reused.
+`Scope.ssh_remote` retains the independently confirmed SSH hostname, port, username,
+exact lease repository and canonical Ed25519 host public key before admission. The SSH
+repository must match the lease's owner/repo. Older drafts without this optional field
+can still reconcile/clean up, but cannot fetch. The endpoint cannot be substituted by
+a server challenge. Management origins also reject embedded credentials, paths, query
+and fragment before retention or transmission.
+
+The runner uses a fresh known-hosts file containing only that host pin, strict checking,
+an explicit public identity and the isolated agent. It ignores user/system SSH config,
+disables password/PIN/keyboard-interactive/host-based/GSSAPI fallbacks and forwarding,
+and does not reuse a control socket or learn/replace a host key. A changed host key fails;
+there is no TOFU or `ssh-keyscan` trust ceremony. The controller must obtain the pin
+independently before creating this scope. See [OpenSSH configuration](https://man.openbsd.org/ssh_config).
+
+Git runs with an empty inherited environment, disabled global/system configuration,
+no credential helpers/hooks/fsmonitor, SSH as its only allowed protocol, no tags or
+submodule recursion, and an empty template. It fetches one validated branch into a new
+bare repository at `refs/petika/fetched`, with depth 128 and SHA-1 object format, then
+runs strict structural fsck and resolves a commit tip. It never checks out remote files,
+executes their filters, merges, rebases or publishes. The returned `FetchedGit` owns that
+temporary quarantine and removes it on drop; it does not update a shared cache or trusted
+vault pins. Single-branch fetch is not a repository read ACL. See [Git fetch](https://git-scm.com/docs/git-fetch)
+and [Git configuration](https://git-scm.com/docs/git-config).
+
+A correct SSH pin and structural Git checks **do not authenticate vault contents**.
+The application must independently verify the signed history, account/collection,
+recipient policy, epoch and retained rollback pins before using fetched data. This
+milestone adds no vault decryption or secret access and does not complete G01/G02.
+A remote may supply arbitrary unverified objects; no ciphertext schema is trusted here.
+
+Each job has a monotonic deadline capped at 30 seconds and the remaining lease time,
+bounded stdout/stderr capture (8 KiB each), and its own process group, killed/waited on
+completion or error. Children inherit a 16 MiB file-size resource limit. Polling checks
+reject symlinks, more than 4096 filesystem entries, or observed aggregate files over
+64 MiB. These checks tolerate Git's atomic lock/pack renames and run again at completion.
+The aggregate budget can overshoot between polls; this is not a hard memory/CPU/disk
+sandbox. Production process isolation and hostile-pack stress tests remain gates.
+Raw remote stderr is not forwarded to users.
+
+The candidate currently supports native Unix tools at `/usr/bin/git`, `/usr/bin/ssh`
+and `/usr/bin/ssh-agent`, one Ed25519 host pin, SHA-1 Git repositories and the standard
+`ssh://user@host:port/owner/repo.git` shape. HTTPS Git transport, host certificates,
+alternate repository-path mappings, SHA-256 repositories and other platform adapters
+remain work; unsupported cases must not silently fall back to unpinned transport.
 
 After either a successful or failed job, cleanup intent is durable before the server
 call. A failed cleanup acknowledgement retains the draft and forbids another transfer.
@@ -124,7 +165,7 @@ operation/key while the first is unresolved.
 
 ## Validation and next wiring
 
-Nine native tests cover encrypted reopen, all retained bindings, wrong device, expired
+The original nine native tests cover encrypted reopen, all retained bindings, wrong device, expired
 proof/lease, lost replies, unknown registration, no transfer replay, custody failure,
 tampered ciphertext, bounded HTTP/CSRF/public-only requests, repeated password callbacks,
 real system-agent Ed25519 signatures, local agent key expiry, cleanup after job failure
@@ -132,8 +173,20 @@ and scoped process/socket removal. Account tests additionally cover own-session 
 lookup, non-bearer context and cross-session denial. See
 [recorded evidence](testing/native-git-lease-client-2026-10-31.json).
 
-Next: protected platform custody for actual device identities and drafts; a pinned-host
-Git runner and two-client conditional-update/reconciliation tests; disposable hosted
+The expanded suite has 15 passing tests, including one explicitly run local-sshd test
+(normally ignored unless the required system tools/loopback permission are available).
+Actual Git-over-SSH transfers generated authenticated ciphertext to a disposable bare
+repository. Wrong host pin and wrong client key deny fetch and queue cleanup. Additional
+checks cover retained endpoint reopen, repository/branch injection, inherited poisoned
+Git configuration, shell quoting, real subprocess timeout, quotas and symlink denial.
+The local test server uses a private generated configuration with StrictModes disabled
+because its `/private/tmp` ancestor is writable; no system SSH service/configuration is
+changed. Host-provider key deletion still uses the separate fake-host tests, not a live
+provider. See [SSH fetch evidence](testing/pinned-ssh-fetch-2026-10-31.json).
+
+Next: protected platform custody for actual device identities and drafts; signed Git
+publication verification and exact-parent conditional push, including two-client
+conflicts, branch deletion/recreation and lost acknowledgements; disposable hosted
 permission trials; browser/QR/status UI. Production biometric enforcement, shared-vault
 authorization, cryptographic device removal/rotation and explicit Git-authority migration
 remain separate release gates.

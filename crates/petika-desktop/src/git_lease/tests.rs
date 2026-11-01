@@ -180,6 +180,7 @@ fn setup() -> (
         repository: "synthetic/vault".into(),
         read_only: true,
         ttl: 300,
+        ssh_remote: None,
     };
     let op = Operation::create(
         directory.path().join("draft"),
@@ -631,3 +632,6 @@ fn real_agent_key_expires_and_failed_job_still_queues_cleanup() {
     assert_eq!(op.phase(), Phase::CleanupPending);
     assert!(!socket.unwrap().exists());
 }
+
+#[cfg(unix)]
+mod ssh_fetch;
