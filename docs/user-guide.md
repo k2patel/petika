@@ -21,7 +21,9 @@ are no published mobile apps, browser-store extension, or public binary installe
 
 On a fresh Personal collection, select **Browser passkey**, confirm your account
 password, name the key and approve the browser's registration request. Then approve
-its vault-creation request. Your authenticator must support WebAuthn PRF; unavailable
+its vault-creation request by clicking **Verify passkey and create vault**. If setup
+fails after registration, reload and choose the existing passkey to retry verification;
+do not create the same key again. Your authenticator must support WebAuthn PRF; unavailable
 support produces an error rather than a passphrase fallback.
 
 To add another key, open **Settings → Security & recovery → Add an authorized passkey**.

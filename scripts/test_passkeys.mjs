@@ -71,3 +71,17 @@ test('cancellation generation remains monotonic when an in-flight operation fini
   assert.equal(f.client.generation,1);assert.equal(f.client.busy,false);
   f.client.cancel();assert.equal(f.client.generation,2);
 });
+test('registration requests a discoverable verified passkey and preserves duplicate exclusion',async()=>{
+  const id=encode(random(32));let finishes=0;
+  const client=new PasskeyClient(async path=>{
+    if(path.endsWith('/finish')){finishes++;return {};}
+    return {ceremony_id:'c'.repeat(64),options:{publicKey:{challenge:encode(random(32)),user:{id:encode(random(16)),name:'fixture',displayName:'Fixture'},authenticatorSelection:{residentKey:'discouraged'},excludeCredentials:[{type:'public-key',id}]}}};
+  },{async create({publicKey}){
+    assert.equal(publicKey.authenticatorSelection.residentKey,'required');
+    assert.equal(publicKey.authenticatorSelection.userVerification,'required');
+    assert.deepEqual(publicKey.excludeCredentials[0].id,decode(id));
+    throw new DOMException('The object is in an invalid state.','InvalidStateError');
+  }});
+  await assert.rejects(client.enroll('synthetic password','Fixture'),error=>error.code==='passkey-already-registered'&&error.cause.name==='InvalidStateError'&&error.message.includes('registered passkey'));
+  assert.equal(finishes,0);
+});

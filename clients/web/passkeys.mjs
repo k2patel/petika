@@ -11,7 +11,7 @@ export async function capabilities(env=globalThis) {
 }
 function options(source,registration) {
   const o=structuredClone(source.publicKey);o.challenge=decode(o.challenge);
-  if(registration) {o.user.id=decode(o.user.id);o.excludeCredentials=o.excludeCredentials?.map(c=>({...c,id:decode(c.id)}));o.extensions={...o.extensions,prf:{}};}
+  if(registration) {o.user.id=decode(o.user.id);o.excludeCredentials=o.excludeCredentials?.map(c=>({...c,id:decode(c.id)}));o.authenticatorSelection={...o.authenticatorSelection,residentKey:'required',requireResidentKey:true,userVerification:'required'};o.extensions={...o.extensions,prf:{}};}
   else {o.allowCredentials=o.allowCredentials?.map(c=>({...c,id:decode(c.id)}));}
   return o;
 }
@@ -30,7 +30,16 @@ export class PasskeyClient {
     const start=await this.api('/v1/passkeys/registration/start',{method:'POST',body:{current_password:password,label}});
     if(generation!==this.generation)throw new DOMException('Operation cancelled','AbortError');
     this.controller=new AbortController();const signal=this.controller.signal;
-    const c=await this.credentials.create({publicKey:options(start.options,true),signal});signal.throwIfAborted();
+    let c;
+    try {c=await this.credentials.create({publicKey:options(start.options,true),signal});}
+    catch(error) {
+      if(error.name==='InvalidStateError') {
+        const failure=new Error('This authenticator already has a Petika passkey. Select your registered passkey and verify it to finish setup.',{cause:error});
+        failure.code='passkey-already-registered';throw failure;
+      }
+      throw error;
+    }
+    signal.throwIfAborted();
     if(!c)throw new Error('Passkey setup was cancelled.');
     const result=await this.api('/v1/passkeys/registration/finish',{method:'POST',body:{ceremony_id:start.ceremony_id,credential:serialize(c,true)}});
     signal.throwIfAborted();if(generation!==this.generation)throw new DOMException('Operation cancelled','AbortError');return result;
@@ -44,7 +53,13 @@ export class PasskeyClient {
     this.controller=new AbortController();const signal=this.controller.signal;
     const publicKey=options(start.options,false);publicKey.userVerification='required';
     publicKey.extensions={...publicKey.extensions,prf:{eval:{first:decode(input,32)}}};
-    const c=await this.credentials.get({publicKey,signal});signal.throwIfAborted();
+    let c;
+    try {c=await this.credentials.get({publicKey,signal});}
+    catch(error) {
+      if(error.name==='InvalidStateError')throw new Error('The browser could not start passkey verification (InvalidStateError). Your registered passkey is saved; retry verification rather than creating it again.',{cause:error});
+      throw error;
+    }
+    signal.throwIfAborted();
     if(!c||encode(c.rawId)!==credentialId)throw new Error('Passkey mismatch');
     const bytes=new Uint8Array(c.response.authenticatorData);
     if(bytes.length<37||(bytes[32]&5)!==5)throw new Error('Passkey user verification is required.');

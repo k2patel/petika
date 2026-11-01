@@ -388,7 +388,7 @@ function browserUnlockView() {
   if(state.collection.group)return `${collectionTabs()}<div class="lock-panel"><h2>Protected shared collection</h2><p>Device-key enrollment for shared collections is not available yet. Ask the administrator to configure this collection.</p></div>`;
   return `${collectionTabs()}<div class="lock-panel"><div class="chest-tile">${mark()}</div><h2>${fresh?'Set up':'Unlock'} ${esc(state.collection.name)}</h2>
     <p>${fresh?'Choose the protection for this new vault.':'Verify an authorized passkey. Each secret action asks for fresh verification.'}</p>
-    ${fresh?`<form id="passkey-setup-form"><div class="choice-grid"><label class="choice"><input type="radio" name="policy" value="browser-passkey" ${strict?'disabled':'checked'}><span><strong>Browser passkey</strong><small>Touch ID, Face ID, security key, or device PIN</small></span></label><label class="choice"><input type="radio" name="policy" value="strict-biometric" ${strict?'checked':''}><span><strong>Biometric only</strong><small>No PIN or password fallback</small></span></label></div><p id="biometric-policy-status" class="notice" role="status"></p><div id="browser-passkey-fields"><div class="field"><label for="setup-credential">Passkey</label><select id="setup-credential" name="credential"><option value="new">Create a new passkey</option></select></div><div id="new-passkey-fields">${field('Confirm account password','account-password','password','','required autocomplete="current-password"')}${field('Passkey name','key-label','text','My passkey','required maxlength="80"')}</div></div><div class="form-error" role="alert"></div><button id="enable-passkey" type="submit" class="btn primary full">Set up passkey protection</button></form>`:
+    ${fresh?`<form id="passkey-setup-form"><div class="choice-grid"><label class="choice"><input type="radio" name="policy" value="browser-passkey" ${strict?'disabled':'checked'}><span><strong>Browser passkey</strong><small>Touch ID, Face ID, security key, or device PIN</small></span></label><label class="choice"><input type="radio" name="policy" value="strict-biometric" ${strict?'checked':''}><span><strong>Biometric only</strong><small>No PIN or password fallback</small></span></label></div><p id="biometric-policy-status" class="notice" role="status"></p><div id="browser-passkey-fields"><div class="field"><label for="setup-credential">Passkey</label><select id="setup-credential" name="credential"><option value="new">Create a new passkey</option></select></div><div id="new-passkey-fields">${field('Confirm account password','account-password','password','','required autocomplete="current-password"')}${field('Passkey name','key-label','text','My passkey','required maxlength="80"')}</div></div><p id="passkey-setup-progress" class="small" role="status"></p><div class="form-error" role="alert"></div><button id="enable-passkey" type="submit" class="btn primary full">Set up passkey protection</button></form>`:
     `<form id="passkey-open-form"><div class="field"><label for="open-credential">Authorized passkey</label><select id="open-credential" name="credential"></select></div><p class="small muted">This vault uses browser passkey verification. Your OS may offer biometrics or a device PIN.</p><div class="form-error" role="alert"></div><button type="submit" class="btn primary full">${state.dirty?'Verify and resume encrypted changes':'Verify passkey'}</button></form>`}
     ${state.dirty?`<div class="actions">${button('Download encrypted draft','export','download')}${button('Keep draft and refresh','browser-refresh','refresh')}</div>`:''}
     <p class="auth-footer">Your fingerprint stays with your device. Keep another authorized passkey and an encrypted backup.</p></div>`;
@@ -405,14 +405,37 @@ function bindBrowserUnlock() {
       const isNew=$('#setup-credential').value==='new';$('#new-passkey-fields').hidden=!isNew;
       setup.elements['account-password'].disabled=strict||!isNew;
       setup.elements['key-label'].disabled=strict||!isNew;
+      $('#enable-passkey').textContent=isNew?'Set up passkey protection':'Verify passkey and create vault';
+    };
+    const syncKeys=(info,selected=null)=>{
+      const select=setup.elements.credential;
+      const previous=selected||select.value;
+      while(select.options.length>1)select.remove(1);
+      for(const key of info.credentials){const option=document.createElement('option');option.value=key.id;option.textContent=key.label;select.append(option);}
+      if(info.credentials.some(key=>key.id===previous))select.value=previous;
+      else if(info.credentials.length===1)select.value=info.credentials[0].id;
+      update();
     };
     setup.addEventListener('change',update);update();
-    browserInfo().then(info=>{if(state.collection.id!==collection||!setup.isConnected)return;for(const key of info.credentials){const option=document.createElement('option');option.value=key.id;option.textContent=key.label;$('#setup-credential').append(option)}}).catch(e=>{if(setup.isConnected)setup.querySelector('.form-error').textContent=errorText(e)});
+    browserInfo().then(info=>{if(state.collection.id!==collection||!setup.isConnected)return;syncKeys(info);}).catch(e=>{if(setup.isConnected)setup.querySelector('.form-error').textContent=errorText(e)});
     form('#passkey-setup-form',async(data,el)=>{
       if(data.get('policy')!=='browser-passkey')throw new Error('Biometric-only protection is unavailable. Choose it only with a compatible provider.');
-      const generation=passkeyClient.generation;await browserInfo();assertBrowserContext(collection,generation);let id=data.get('credential');
-      if(id==='new')id=(await passkeyClient.enroll(data.get('account-password'),data.get('key-label'))).credential_id;
-      assertBrowserContext(collection,generation);el.elements['account-password'].value='';
+      const generation=passkeyClient.generation;const info=await browserInfo();assertBrowserContext(collection,generation);let id=data.get('credential');
+      if(id==='new') {
+        try {
+          const key=await passkeyClient.enroll(data.get('account-password'),data.get('key-label'));
+          assertBrowserContext(collection,generation);
+          syncKeys({credentials:[...info.credentials,{id:key.credential_id,label:data.get('key-label')}]},key.credential_id);
+          $('#passkey-setup-progress').textContent='Passkey registered. Click Verify passkey and create vault to finish with a fresh approval.';
+        } catch(error) {
+          // Registration can succeed even if its reply or the next step fails.
+          // Refresh public records so retry never blindly recreates the same key.
+          try {const refreshed=await browserInfo();assertBrowserContext(collection,generation);if(el.isConnected)syncKeys(refreshed);}catch{}
+          throw error;
+        } finally {el.elements['account-password'].value='';data.delete('account-password');}
+        return; // A second WebAuthn ceremony requires a new explicit user action.
+      }
+      syncKeys(info,id);
       const result=await passkeyClient.run(null,browserScope(),id,'create');
       assertBrowserContext(collection,generation);
       state.browserVault=result.vault;state.browserPending=result.pending;state.browserCredentialId=id;

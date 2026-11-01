@@ -24,6 +24,13 @@ Fresh personal vault setup offers both policies and defaults to browser passkeys
 when that endpoint is valid. `PETIKA_FRESH_VAULT_POLICY` accepts `legacy`,
 `browser-passkey`, or `strict-biometric`. Strict mode blocks creation until a
 compatible provider is available. Builds without the feature retain legacy setup.
+Setup registers a passkey first, then waits for a separate **Verify passkey and
+create vault** click. It never chains registration and verification behind one click.
+If registration was saved but its reply or later verification failed, reload/setup
+selects the existing public credential so retry does not recreate an excluded key.
+New registration requests a discoverable, user-verified credential; duplicate-key
+exclusion remains enforced. Existing credentials are never deleted during retry.
+
 Existing collections retain their original protection and are never silently
 converted. Legacy personal version-1 vaults can [explicitly migrate](passkey-migration.md)
 with their current passphrase and a fresh passkey ceremony. Groups and QR enrollment

@@ -36,6 +36,19 @@ with tempfile.TemporaryDirectory(prefix='petika-passkeys-') as temporary:
         with sync_playwright() as p:
             browser = p.chromium.launch()
             context = browser.new_context(viewport={'width':1440,'height':1000})
+            context.add_init_script("""
+              window.__requireFreshGesture=true;window.__passkeyCalls={create:0,get:0};
+              let budget=0;document.addEventListener('click',()=>budget=1,true);
+              for(const method of ['create','get']) {
+                const native=navigator.credentials[method].bind(navigator.credentials);
+                navigator.credentials[method]=async options=>{
+                  if(window.__requireFreshGesture&&budget--<1)throw new DOMException('A fresh click is required','NotAllowedError');
+                  window.__passkeyCalls[method]++;
+                  if(method==='get'&&window.__failNextPasskeyGet){window.__failNextPasskeyGet=false;throw new DOMException('Synthetic first verification cancellation','NotAllowedError');}
+                  return native(options);
+                };
+              }
+            """)
             page = context.new_page(); errors = []; requests = []
             page.on('pageerror', lambda e: errors.append(str(e)))
             page.on('request', lambda r: requests.append((r.url, r.post_data)) if '/v1/passkey' in r.url else None)
@@ -57,7 +70,25 @@ with tempfile.TemporaryDirectory(prefix='petika-passkeys-') as temporary:
             output = root/'output/passkeys'; output.mkdir(parents=True, exist_ok=True)
             page.screenshot(path=str(output/'setup-both-policies.png'))
             page.get_by_label('Confirm account password', exact=True).fill(password)
+            # Persist registration but lose its reply; setup must recover the
+            # registered key instead of starting another excluded registration.
+            def lose_registration_reply(route):
+                accepted=route.fetch();assert accepted.status==200
+                route.abort();page.unroute('**/v1/passkeys/registration/finish',lose_registration_reply)
+            page.route('**/v1/passkeys/registration/finish',lose_registration_reply)
             page.get_by_role('button', name='Set up passkey protection').click()
+            expect(page.get_by_role('button',name='Verify passkey and create vault')).to_be_visible()
+            expect(page.get_by_role('alert')).to_contain_text('fetch',ignore_case=True)
+            assert page.evaluate('window.__passkeyCalls')=={'create':1,'get':0}
+            assert not list((work/'data/collections').glob('*/snapshot.json'))
+            page.reload()
+            expect(page.get_by_role('button',name='Verify passkey and create vault')).to_be_visible()
+            expect(page.get_by_label('Confirm account password',exact=True)).to_be_hidden()
+            page.evaluate('window.__failNextPasskeyGet=true')
+            page.get_by_role('button',name='Verify passkey and create vault').click()
+            expect(page.get_by_role('alert')).to_contain_text('Synthetic first verification cancellation')
+            expect(page.get_by_role('button',name='Verify passkey and create vault')).to_be_visible()
+            page.get_by_role('button',name='Verify passkey and create vault').click()
             try:
                 expect(page.get_by_role('heading', name='Your secrets, in good company.')).to_be_visible(timeout=15000)
             except Exception:
@@ -65,6 +96,9 @@ with tempfile.TemporaryDirectory(prefix='petika-passkeys-') as temporary:
                 raise
             assert not errors, errors
             print('PASS: fresh setup with real WebAuthn verifier and PRF-encrypted bound vault')
+            assert page.evaluate('window.__passkeyCalls')=={'create':0,'get':2}
+            page.evaluate('window.__requireFreshGesture=false')
+            print('PASS: lost registration reply/reload and failed verification resume the same key; each ceremony needs a separate click')
             page.get_by_role('button',name='New item',exact=True).click()
             page.get_by_label('Name',exact=True).fill('UI example')
             page.get_by_label('Username',exact=True).fill('ui@example.test')
