@@ -201,6 +201,12 @@ parallel. Feature backlog items remain open but do not replace these security ga
   QR capture, and enforced exact-origin website permissions (see [UX requirements](settings-experience.md#password-and-totp-browser-experience)).
 - [x] In-vault password suggestions, account-scoped active-client listing/revocation,
   and website-permission management, enforced by the Chromium preview before filling.
+- [x] Register mobile store identities under sponsorship by Aum Maa Shree LLC:
+  Google Play **Petika** and iOS **Petika Password Manager**, both using
+  `com.aummaashree.petika` ([registration details](branding.md#sponsorship-and-android-app-identity)).
+- [ ] Build iOS/Android development and test versions in a later phase: native
+  projects, signing, development/test identifiers as needed, Google Play internal
+  testing and Apple TestFlight distribution.
 - [ ] iOS/Android apps, desktop native messaging, and configurable biometric unlock.
 - [ ] Full GPG key creation/export/expiry/revocation UI.
 - [ ] OTP QR scanning.

@@ -30,6 +30,7 @@ and limitations.
 - [Container and source deployment](deployment.md)
 - [Reverse proxy and optional HTTPS](reverse-proxy.md)
 - [Brand identity](branding.md)
+- [Mobile store registrations and planned development/test builds](branding.md#mobile-development-and-test-builds)
 - [Self-hosting](self-hosting.md)
 - [GPG store import](import.md)
 - [Authentication and sharing](authentication.md)

@@ -11,6 +11,15 @@ login and TOTP filling with local WASM decryption. Firefox and iOS/Android clien
 are not implemented. The desktop
 integration crate is a placeholder for native messaging and OS authentication.
 
+The Google Play Console entry uses **Petika** with Android package name
+`com.aummaashree.petika`, sponsored by **Aum Maa Shree LLC**. Use this package
+name as the future Android app's `applicationId`. See the
+[documented app identity](../docs/branding.md#sponsorship-and-android-app-identity).
+
+The registered iOS App Store name is **Petika Password Manager**, with bundle
+ID `com.aummaashree.petika`. See the
+[iOS app identity](../docs/branding.md#ios-app-identity) for registration status.
+
 Planned clients should reuse the Rust core and native platform bindings for autofill
 and biometrics. Browser-specific glue must work without npm. Native UI stacks and
 packaging remain open decisions. See the [roadmap](../docs/roadmap.md).

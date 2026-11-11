@@ -9,6 +9,46 @@ ascending binary digits use Devanagari **०** (zero) and **१** (one), connect
 Indian-inspired box with digital contents becoming available when unlocked.
 Use this as a brand metaphor, not an illustration of how encryption works.
 
+## Sponsorship and Android app identity
+
+Petika is sponsored by **Aum Maa Shree LLC**. The Google Play Console app
+identity confirmed by the project owner is:
+
+| Field | Value |
+| --- | --- |
+| App name | Petika |
+| Android package name | `com.aummaashree.petika` |
+| Console last updated | November 3, 2026 |
+
+Use `com.aummaashree.petika` as the Android `applicationId` when implementing
+the native app. The Google Play Console entry is configured; the Android client
+and its build configuration are not yet implemented.
+
+## iOS app identity
+
+The project owner chose **Petika Password Manager** as the iOS App Store name
+after App Store Connect reported that **Petika** was already in use.
+
+| Field | Value |
+| --- | --- |
+| App Store name | Petika Password Manager |
+| iOS bundle ID | `com.aummaashree.petika` |
+| App Store Connect SKU | `petika-ios` |
+
+The project owner confirmed that Apple identifier registration and App Store
+Connect app creation are complete. Use this bundle ID when implementing the iOS
+app. The iOS client and its build configuration are not yet implemented.
+
+## Mobile development and test builds
+
+Both store registrations are complete, as confirmed by the project owner.
+Development and test versions are planned for a later phase. That phase will
+configure native projects, signing, development/test identifiers as needed, and
+Google Play internal testing and Apple TestFlight distribution. Development/test
+identifiers have not yet been chosen; the registered identifiers above are the
+production app identities. Store registration does not indicate an uploaded build
+or a published app.
+
 ## Assets
 
 - [Primary wordmark](../assets/brand/petika-logo.png): transparent horizontal PNG
