@@ -2,6 +2,43 @@ use petika_core::{Entry, Error, StoreFile, UnlockedStore, generate_password};
 use serde_json::Value;
 
 const PASS: &str = "correct test horse battery staple";
+
+#[test]
+fn device_unlock_keys_authenticate_vaults_and_expire_after_rewrap() {
+    use petika_core::{CollectionContext, EncryptionMode};
+    for mode in [EncryptionMode::Standard, EncryptionMode::HybridPostQuantum] {
+        let mut store = UnlockedStore::create_with_mode(PASS, mode).unwrap();
+        store.put("example".into(), entry(), false).unwrap();
+        let original = store.seal().unwrap();
+        assert!(UnlockedStore::local_unlock_key(&original, "incorrect").is_err());
+        let key = UnlockedStore::local_unlock_key(&original, PASS).unwrap();
+        let mut opened = UnlockedStore::open_with_local_unlock_key(&original, &key).unwrap();
+        assert_eq!(opened.get("example").unwrap().password, entry().password);
+        opened.put("second".into(), entry(), false).unwrap();
+        let saved = opened.seal().unwrap();
+        assert!(UnlockedStore::open_with_local_unlock_key(&saved, &key).is_ok());
+        let other = UnlockedStore::create(PASS).unwrap().seal().unwrap();
+        assert!(UnlockedStore::open_with_local_unlock_key(&other, &key).is_err());
+        opened
+            .change_passphrase("a different strong passphrase")
+            .unwrap();
+        let rewrapped = opened.seal().unwrap();
+        assert!(UnlockedStore::open_with_local_unlock_key(&rewrapped, &key).is_err());
+        opened
+            .bind_collection(
+                CollectionContext {
+                    deployment_id: "a".repeat(64),
+                    collection_id: "b".repeat(64),
+                    key_epoch: 1,
+                },
+                PASS,
+            )
+            .unwrap();
+        let bound = opened.seal().unwrap();
+        assert!(UnlockedStore::local_unlock_key(&bound, PASS).is_err());
+        assert!(UnlockedStore::open_with_local_unlock_key(&bound, &key).is_err());
+    }
+}
 fn entry() -> Entry {
     Entry {
         otp: None,

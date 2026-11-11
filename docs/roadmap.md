@@ -42,6 +42,10 @@ versions and the macOS deployment targets before documenting support floors.
 - [x] Document installation, upgrades, verification, and browser-passkey vault
   compatibility in the READMEs, release notes, and formula caveats.
 - [ ] Build and verify Windows ARM64 support before publishing that target.
+- [x] Add opt-in local-vault CLI device unlock with a Secure Enclave Touch ID
+  companion and a Windows Hello PRF provider. Generated-data Touch ID enrollment,
+  fresh-process reopening, and removal passed on macOS. Interactive Windows Hello
+  verification remains pending. See [device unlock](cli-accounts.md#local-device-unlock).
 
 ## Active implementation sequence
 

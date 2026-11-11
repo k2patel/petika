@@ -66,6 +66,58 @@ format; these command aliases do not imply GPG-file compatibility. Existing GPG
 password stores can be [imported locally](import.md). The workflow is inspired by
 [password-store](https://www.passwordstore.org/), not copied shell code.
 
+## Local device unlock
+
+Source builds support opt-in device unlock for local passphrase vaults. The
+published CLI 0.1.0 predates this feature. Build the CLI from the current source.
+On macOS, also compile its companion executable beside `petika`:
+
+```sh
+cargo build --release --locked -p petika
+# macOS only, using the Xcode command-line tools:
+swiftc -O crates/petika-cli/macos-unlock.swift -o target/release/petika-macos-unlock
+```
+
+After placing the built executable(s) together in your chosen bin directory:
+
+```sh
+petika --store ./vault.petika biometric enable
+petika --store ./vault.petika --biometric get Email/example --reveal
+petika --store ./vault.petika biometric disable
+```
+
+Enrollment verifies the existing vault passphrase and device approval before
+writing `vault.petika.biometric`. That private sidecar holds a device-protected
+passphrase-derived key. The passphrase itself is discarded after derivation.
+On Windows, keep the vault and sidecar in a private user-profile directory with
+restricted inherited ACLs, as with other [local CLI state](#session-storage-and-revocation).
+Each `--biometric` command requests platform approval and drops its unlocked
+state on exit. Cancellation or unavailable hardware returns an error. Running
+the command again without `--biometric` uses the existing passphrase flow.
+
+On macOS, Touch ID protects an enclave P-256 key under
+`biometryCurrentSet`, with a fresh authentication context and zero reuse
+duration. Changing the enrolled biometric set invalidates that key. The release
+workflow builds the companion for macOS 12 and later.
+[Apple access-control flags](https://developer.apple.com/documentation/security/secaccesscontrolcreateflags)
+
+On Windows, the native WebAuthn API requests a platform authenticator with
+required user verification and PRF support. Windows Hello may approve with a
+fingerprint, face recognition, or device PIN. Enrollment fails when the OS or
+authenticator cannot supply PRF output. Credentials marked backup-eligible or
+backed-up are rejected. API buffers and decrypted key material
+are released after each operation. Hardware prompting, cancellation, lockout,
+and enrollment-change behavior require interactive checks on the target device.
+[Microsoft native WebAuthn API](https://learn.microsoft.com/en-us/windows/win32/api/webauthn/)
+
+The explicit flag supports local read/write operations. Managed API collections,
+recipient identities, browser-passkey vaults, and passphrase changes use their
+existing unlock flows. To renew enrollment after changing the vault passphrase,
+run `biometric disable`, then `biometric enable`. Disabling removes this local
+enrollment file. Copies of old enrollment files remain paired with their old
+vault copies, and Windows may retain the underlying OS credential. Retain your
+vault passphrase for recovery on another device.
+
 ## Live API operations
 
 Use `--collection personal` or a collection ID on `list`/`ls`, `get`, `show`,

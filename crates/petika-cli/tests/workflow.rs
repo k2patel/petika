@@ -192,6 +192,77 @@ fn cli_create_put_reveal_generate_remove_and_wrong_password() {
 }
 
 #[test]
+fn biometric_flags_reject_stdin_and_managed_commands_without_network_access() {
+    for arguments in [
+        vec!["--biometric", "--passphrase-stdin", "list"],
+        vec![
+            "--biometric",
+            "login",
+            "--server",
+            "https://example.invalid",
+        ],
+        vec!["--biometric", "get", "example", "--collection", "personal"],
+        vec!["--biometric", "init"],
+        vec!["--biometric", "passphrase"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_petika"))
+            .arg("--no-config")
+            .args(arguments)
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(output.stdout.is_empty());
+    }
+}
+
+#[test]
+fn removing_biometric_enrollment_preserves_the_vault() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("store.petika");
+    assert!(
+        run(&path, &["init"], &"synthetic test passphrase\n".repeat(2))
+            .status
+            .success()
+    );
+    let original = std::fs::read(&path).unwrap();
+    let credential = dir.path().join("store.petika.biometric");
+    petika_core::StoreFile::lock(&credential)
+        .unwrap()
+        .write(b"synthetic enrollment", true)
+        .unwrap();
+    assert!(run(&path, &["biometric", "disable"], "").status.success());
+    assert!(!credential.exists());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+}
+
+#[test]
+fn invalid_biometric_enrollment_cannot_unlock_or_modify_a_vault() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("store.petika");
+    assert!(
+        run(&path, &["init"], &"synthetic test passphrase\n".repeat(2))
+            .status
+            .success()
+    );
+    let original = std::fs::read(&path).unwrap();
+    let credential = dir.path().join("store.petika.biometric");
+    petika_core::StoreFile::lock(&credential)
+        .unwrap()
+        .write(b"invalid", true)
+        .unwrap();
+    let output = Command::new(env!("CARGO_BIN_EXE_petika"))
+        .args(["--no-config", "--biometric", "--store"])
+        .arg(&path)
+        .arg("list")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    assert_eq!(std::fs::read(path).unwrap(), original);
+}
+
+#[test]
 fn mismatched_or_short_passphrases_leave_no_store() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("store.petika");

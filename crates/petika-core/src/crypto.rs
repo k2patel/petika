@@ -310,8 +310,33 @@ impl UnlockedStore {
     pub fn open(bytes: &[u8], passphrase: &str) -> Result<Self> {
         let envelope = parse(bytes)?;
         let wrapping_key = derive(passphrase, &envelope.salt)?;
+        Self::open_wrapped(envelope, &wrapping_key)
+    }
+
+    /// Derive a local vault's unlock key after authenticating its contents.
+    /// The caller must protect this key with device-bound access control.
+    pub fn local_unlock_key(bytes: &[u8], passphrase: &str) -> Result<Zeroizing<[u8; 32]>> {
+        let envelope = parse(bytes)?;
+        if envelope.context.is_some() {
+            return Err(Error::Authentication);
+        }
+        let wrapping_key = derive(passphrase, &envelope.salt)?;
+        Self::open_wrapped(envelope, &wrapping_key)?;
+        Ok(wrapping_key)
+    }
+
+    /// Open a local vault using a device-protected passphrase-derived key.
+    pub fn open_with_local_unlock_key(bytes: &[u8], wrapping_key: &[u8; 32]) -> Result<Self> {
+        let envelope = parse(bytes)?;
+        if envelope.context.is_some() {
+            return Err(Error::Authentication);
+        }
+        Self::open_wrapped(envelope, wrapping_key)
+    }
+
+    fn open_wrapped(envelope: Envelope, wrapping_key: &[u8; 32]) -> Result<Self> {
         let unwrapped = decrypt(
-            &wrapping_key,
+            wrapping_key,
             &envelope.key_nonce,
             &envelope.wrapped_key,
             &envelope.aad(true),

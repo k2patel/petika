@@ -98,6 +98,7 @@ Windows Server 2022.
 The CLI supports browser-approved account login and older passphrase/recipient vaults.
 Opening the new browser-passkey vaults from the CLI still needs integration; see
 [CLI support](docs/cli-accounts.md) and [passkey boundaries](docs/browser-passkeys.md).
+Current source builds also provide opt-in [local Touch ID and Windows Hello unlock](docs/cli-accounts.md#local-device-unlock).
 
 ## Run from source
 

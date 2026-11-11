@@ -16,6 +16,8 @@ __pycache__/
 /petika-data/
 /petika-mirror/
 *.petika
+*.petika.biometric
+*.petika.biometric.lock
 # Managed-account bearer credentials when explicitly stored in the checkout.
 session.json
 session.json.lock

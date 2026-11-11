@@ -69,6 +69,8 @@ def main():
         stage = Path(temp) / "stage"
         stage.mkdir()
         shutil.copy2(args.binary, stage / executable)
+        if system == "Darwin":
+            shutil.copy2(args.binary.with_name("petika-macos-unlock"), stage / "petika-macos-unlock")
         shutil.copyfile(ROOT / "LICENSE", stage / "LICENSE")
         shutil.copyfile(args.notices, stage / "THIRD_PARTY_NOTICES.txt")
         metadata = {
@@ -82,6 +84,13 @@ def main():
         extracted = Path(temp) / "extracted"
         shutil.unpack_archive(archive, extracted)
         smoke_test(extracted / executable, version)
+        if system == "Darwin":
+            result = subprocess.run(
+                [extracted / "petika-macos-unlock", "unlock"],
+                input=b"{}", capture_output=True, timeout=10,
+            )
+            if result.returncode == 0 or result.stdout:
+                raise SystemExit("The macOS helper accepted an invalid credential")
         digest = hashlib.sha256(archive.read_bytes()).hexdigest()
         shutil.copyfile(archive, args.output / archive.name)
         (args.output / f"{archive.name}.sha256").write_bytes(f"{digest}  {archive.name}\n".encode("ascii"))

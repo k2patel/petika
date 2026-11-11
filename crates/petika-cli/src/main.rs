@@ -1,4 +1,5 @@
 mod account;
+mod biometric;
 mod config;
 #[cfg(feature = "experimental-entry-format")]
 mod entry_edit;
@@ -31,7 +32,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
     name = "petika",
     version,
     about = "Petika — experimental encrypted password storage",
-    after_help = "Every storage command unlocks locally with a passphrase and locks on exit. Use login for managed API access; collection passphrases never leave this device. Biometrics are not implemented."
+    after_help = "Vaults unlock locally for each command. Enroll a local vault for Touch ID on a supported Mac or Windows Hello with PRF support. Windows Hello can approve with biometrics or a device PIN. Use login for managed API access. Collection passphrases stay on this device."
 )]
 struct Cli {
     /// Configuration file (defaults to ~/.petikarc). Command-line options take precedence.
@@ -52,6 +53,9 @@ struct Cli {
     /// Read passphrases from stdin instead of the terminal. Never pass them as arguments.
     #[arg(long, global = true)]
     passphrase_stdin: bool,
+    /// Unlock an enrolled local vault with Touch ID or Windows Hello.
+    #[arg(long, global = true, conflicts_with_all = ["passphrase_stdin", "identity_file"])]
+    biometric: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -126,6 +130,11 @@ enum Command {
         /// GnuPG home to use for import; otherwise use the user's existing GnuPG home.
         #[arg(long, requires = "import_gpg")]
         gpg_home: Option<PathBuf>,
+    },
+    /// Manage Touch ID or Windows Hello unlock for a local vault.
+    Biometric {
+        #[command(subcommand)]
+        command: biometric::Command,
     },
     /// Import GPG entries locally into an existing Petika store, saving only if all succeed.
     ImportGpg {
@@ -343,6 +352,26 @@ fn run(mut cli: Cli) -> Result<()> {
     cli.store = cli.store.or(defaults.store);
     cli.session_file = cli.session_file.or(defaults.session_file);
     cli.identity_file = cli.identity_file.or(defaults.identity_file);
+    if (cli.biometric || matches!(cli.command, Command::Biometric { .. }))
+        && cli.identity_file.is_some()
+    {
+        return Err("biometric unlock is available only for local passphrase vaults".into());
+    }
+    if cli.biometric
+        && (!matches!(
+            cli.command,
+            Command::ImportGpg { .. }
+                | Command::List { .. }
+                | Command::Get { .. }
+                | Command::Show { .. }
+                | Command::Otp { .. }
+                | Command::Put { .. }
+                | Command::Generate { .. }
+                | Command::Remove { .. }
+        ) || managed::selection(&cli.command).is_some())
+    {
+        return Err("--biometric applies only to local vault operations".into());
+    }
     let session = || -> Result<PathBuf> {
         match &cli.session_file {
             Some(path) => Ok(path.clone()),
@@ -445,7 +474,12 @@ fn run(mut cli: Cli) -> Result<()> {
     if !file.exists() {
         return Err("store does not exist; run petika init first".into());
     }
-    let mut store = if let Some(identity) = &cli.identity_file {
+    if let Command::Biometric { command } = &cli.command {
+        return biometric::configure(command, &path, &file, cli.passphrase_stdin);
+    }
+    let mut store = if cli.biometric {
+        biometric::open(&path, &file)?
+    } else if let Some(identity) = &cli.identity_file {
         keys::open_local(identity, &file.read()?, &path, cli.passphrase_stdin)?
     } else {
         let passphrase = secret("Passphrase: ", cli.passphrase_stdin)?;
@@ -468,6 +502,7 @@ fn operate(
         Command::Entries { .. } => unreachable!(),
         Command::Keys { .. }
         | Command::Init { .. }
+        | Command::Biometric { .. }
         | Command::Login { .. }
         | Command::Logout { .. }
         | Command::Whoami
