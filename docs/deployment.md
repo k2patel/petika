@@ -7,8 +7,9 @@ not enable key issuance or migrate vaults. See [cleanup operations](git-key-leas
 Current deployment instructions enable the existing API and outbound Git mirror. [ADR 0006](decisions/0006-git-authoritative-sync.md) defines the next Git-authoritative target; no environment setting here enables it. Host-neutral SSH/HTTPS, optional API/gateway credentials and browser compatibility require implementation and capability testing.
 
 Experimental web UI and local managed accounts, with personal/group encrypted collections.
-Verified group-key delivery and explicit rotation are implemented; native biometrics and
-mobile clients remain planned. An experimental Chromium toolbar extension
+Verified group-key delivery and explicit rotation are implemented.
+[Local CLI device unlock](cli-accounts.md#local-device-unlock) is available in source
+builds. Mobile clients remain planned. An experimental Chromium toolbar extension
 is available for local QA; see the [user guide](user-guide.md). The bearer token authorizes ciphertext
 access; it cannot decrypt the store. Use synthetic data until the security design and
 implementation have been independently reviewed.
