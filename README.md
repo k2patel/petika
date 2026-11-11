@@ -73,9 +73,9 @@ deployed; see [architecture](docs/architecture.md) and [ADR 0006](docs/decisions
 Standalone CLI downloads and a `petika` formula in
 [`k2patel/homebrew-tap`](https://github.com/k2patel/homebrew-tap) are on the
 [distribution TODO](docs/roadmap.md#cli-distribution-and-homebrew-todo).
-The dedicated release workflow will package macOS/Linux binaries and build Windows
-separately. Packages will contain the CLI and license notices, so installation will
-not require downloading this entire repository or building Rust.
+The [CLI release workflow](.github/workflows/cli-release.yml) builds macOS (Apple
+Silicon and Intel), Linux (x86-64 and ARM64), and Windows (x86-64) archives with
+the executable, license notices, build metadata, and SHA-256 checksums.
 
 The formula and CLI release archives are **not published yet**. Installation commands
 will be added here and to the tap README after they are verified. For now, build the

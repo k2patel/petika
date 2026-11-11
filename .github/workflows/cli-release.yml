@@ -1,0 +1,133 @@
+name: CLI release
+
+on:
+  push:
+    tags: ['cli-v*']
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a GitHub release (run on an existing cli-v tag)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    name: Package ${{ matrix.target }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - runner: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - runner: windows-2022
+            target: x86_64-pc-windows-msvc
+    env:
+      CLI_TARGET: ${{ matrix.target }}
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check release ref against the CLI version
+        env:
+          PUBLISH: ${{ inputs.publish }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF_TYPE" == tag || "$PUBLISH" == true ]]; then
+            version="$(python -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')"
+            if [[ "$GITHUB_REF" != "refs/tags/cli-v$version" ]]; then
+              echo "Select the existing cli-v$version tag."
+              exit 1
+            fi
+          fi
+      - name: Build locked CLI and generate dependency notices
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: '-C target-feature=+crt-static'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo build --release --locked --package petika --target "$CLI_TARGET"
+          python scripts/check_licenses.py
+          python scripts/third_party_notices.py > third-party-notices.txt
+      - name: Package and exercise the archived executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary="target/$CLI_TARGET/release/petika"
+          if [[ "$RUNNER_OS" == Windows ]]; then
+            binary="$binary.exe"
+          elif [[ "$RUNNER_OS" == macOS ]]; then
+            otool -l "$binary" | sed -n '/LC_BUILD_VERSION/,+5p'
+          else
+            ldd "$binary"
+            readelf --version-info "$binary" | sed -n 's/.*Name: \(GLIBC_[^ ]*\).*/\1/p' | sort -Vu
+          fi
+          python scripts/package_cli.py --binary "$binary" --target "$CLI_TARGET" \
+            --notices third-party-notices.txt --output dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    if: github.ref_type == 'tag' && (github.event_name == 'push' || inputs.publish)
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: cli-release-${{ github.ref_name }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cli-*
+          merge-multiple: true
+          path: dist
+      - name: Verify all five archives and publish
+        working-directory: dist
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#cli-v}"
+          archives=(
+            "petika-$version-aarch64-apple-darwin.tar.gz"
+            "petika-$version-x86_64-apple-darwin.tar.gz"
+            "petika-$version-x86_64-unknown-linux-gnu.tar.gz"
+            "petika-$version-aarch64-unknown-linux-gnu.tar.gz"
+            "petika-$version-x86_64-pc-windows-msvc.zip"
+          )
+          checksums=()
+          for archive in "${archives[@]}"; do
+            sha256sum "$archive" | cmp - "$archive.sha256"
+            checksums+=("$archive.sha256")
+          done
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false \
+            --title "Petika CLI $version" --notes-file - \
+            "${archives[@]}" "${checksums[@]}" <<'NOTES'
+          Standalone Petika CLI for macOS (Apple Silicon and Intel), Linux
+          (x86-64 and ARM64), and Windows (x86-64). Verify each download
+          against its accompanying SHA-256 file.
+
+          The CLI supports browser-approved account login and legacy passphrase
+          or recipient vaults. CLI access to secrets in browser-passkey vaults
+          requires per-action device approval integration and is pending.
+          NOTES

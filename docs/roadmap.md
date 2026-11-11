@@ -19,10 +19,15 @@ continues independently; browser UV does not satisfy strict biometric evidence.
 
 ## CLI distribution and Homebrew TODO
 
-Requested on 2026-10-31; paused for session wrap-up before implementation.
-No CLI release assets or Petika tap formula have been published yet.
+The [CLI release workflow](../.github/workflows/cli-release.yml) can be run
+manually on a branch to produce test artifacts. Enable release immutability in
+the GitHub repository's General settings before pushing a tag such as
+`cli-v0.1.0`. A matching tag also supports manual publishing through the
+workflow's `publish` input. If an interrupted upload leaves a draft, remove
+that draft before retrying. Review the runner logs for the Linux glibc symbol
+versions and the macOS deployment targets before documenting support floors.
 
-- [ ] Add a dedicated CLI release workflow, independent of the server/web image build.
+- [x] Add a dedicated CLI release workflow, independent of the server/web image build.
   Release packages must contain the executable, license notices and version/source
   metadata; installation must not download the complete repository or require Rust.
 - [ ] Build and smoke-test separate macOS Apple Silicon/Intel and Linux x86-64/ARM64
