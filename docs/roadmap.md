@@ -30,20 +30,18 @@ versions and the macOS deployment targets before documenting support floors.
 - [x] Add a dedicated CLI release workflow, independent of the server/web image build.
   Release packages must contain the executable, license notices and version/source
   metadata; installation must not download the complete repository or require Rust.
-- [ ] Build and smoke-test separate macOS Apple Silicon/Intel and Linux x86-64/ARM64
-  archives. Verify minimum supported OS/runtime requirements for each target.
-- [ ] Build Windows separately with its own native runner, executable ZIP and checksums.
-  Cover x86-64 first and explicitly verify ARM64 support before publishing that target.
-- [ ] Publish immutable, versioned CLI-only assets and SHA-256 checksums from tagged or
-  manually requested releases. Avoid duplicating the full CI/server build on release tags.
-- [ ] Add `petika` to [k2patel/homebrew-tap](https://github.com/k2patel/homebrew-tap),
-  selecting the matching prebuilt CLI archive by OS/architecture with a verified checksum.
-  Validate formula style/audit, installation and a generated-data encryption round-trip.
-- [ ] Update both Petika's README and the tap README with working installation, upgrade
-  and verification commands once the formula and assets exist.
-- [ ] State the CLI compatibility boundary in release notes and formula caveats:
-  browser-approved account login works; new browser-passkey vault secret access still
-  needs a per-action browser/device approval integration. Packaging does not implement it.
+- [x] Build and smoke-test native macOS Apple Silicon/Intel and Linux x86-64/ARM64
+  archives. Record the tested OS versions, macOS deployment targets, and Linux glibc
+  requirements in the [CLI installation guide](../README.md#cli-packages-and-homebrew).
+- [x] Build and smoke-test a Windows x86-64 executable ZIP on a native runner.
+- [x] Publish immutable [CLI 0.1.0 assets](https://github.com/k2patel/petika/releases/tag/cli-v0.1.0)
+  with SHA-256 checksums, independent of the full CI/server build.
+- [x] Publish the [Homebrew formula](https://github.com/k2patel/homebrew-tap/blob/main/Formula/petika.rb)
+  with pinned checksums for macOS and Linux. Verify Homebrew style, online audit,
+  Apple Silicon installation, and a synthetic encrypted vault round-trip.
+- [x] Document installation, upgrades, verification, and browser-passkey vault
+  compatibility in the READMEs, release notes, and formula caveats.
+- [ ] Build and verify Windows ARM64 support before publishing that target.
 
 ## Active implementation sequence
 

@@ -71,7 +71,7 @@ jobs:
           if [[ "$RUNNER_OS" == Windows ]]; then
             binary="$binary.exe"
           elif [[ "$RUNNER_OS" == macOS ]]; then
-            otool -l "$binary" | sed -n '/LC_BUILD_VERSION/,+5p'
+            otool -l "$binary" | sed -n -e '/LC_BUILD_VERSION/,+5p' -e '/LC_VERSION_MIN_MACOSX/,+4p'
           else
             ldd "$binary"
             readelf --version-info "$binary" | sed -n 's/.*Name: \(GLIBC_[^ ]*\).*/\1/p' | sort -Vu

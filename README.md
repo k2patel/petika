@@ -68,18 +68,32 @@ deployed; see [architecture](docs/architecture.md) and [ADR 0006](docs/decisions
 - **Setup and upgrades:** browser wizard or environment provisioning, setup mode controls,
   versioned persistence, migration backups, and rejection of unsupported newer schemas.
 
-## CLI packages and Homebrew (planned)
+## CLI packages and Homebrew
 
-Standalone CLI downloads and a `petika` formula in
-[`k2patel/homebrew-tap`](https://github.com/k2patel/homebrew-tap) are on the
-[distribution TODO](docs/roadmap.md#cli-distribution-and-homebrew-todo).
-The [CLI release workflow](.github/workflows/cli-release.yml) builds macOS (Apple
-Silicon and Intel), Linux (x86-64 and ARM64), and Windows (x86-64) archives with
-the executable, license notices, build metadata, and SHA-256 checksums.
+Install the CLI with Homebrew on macOS (Apple Silicon or Intel) or Linux
+(ARM64 or x86-64):
 
-The formula and CLI release archives are **not published yet**. Installation commands
-will be added here and to the tap README after they are verified. For now, build the
-CLI from a checkout with `cargo install --path crates/petika-cli --locked`.
+```sh
+brew install k2patel/tap/petika
+petika --version
+brew test k2patel/tap/petika
+```
+
+To upgrade, run `brew update` and `brew upgrade k2patel/tap/petika`.
+
+[Petika CLI 0.1.0](https://github.com/k2patel/petika/releases/tag/cli-v0.1.0)
+provides direct downloads for the same platforms and Windows x86-64. Each
+archive contains the executable, license notices, and build metadata. Download
+the matching `.sha256` file into the same directory before extracting. Run
+`shasum -a 256 -c <archive>.sha256` on macOS or
+`sha256sum -c <archive>.sha256` on Linux, substituting the actual filename.
+On Windows, use `Get-FileHash -Algorithm SHA256 <archive>` in PowerShell and
+compare the result with the checksum file.
+
+Both Linux builds require glibc 2.34 or newer and were tested on Ubuntu 22.04.
+The macOS binaries declare deployment targets of 11.0 on Apple Silicon and
+10.12 on Intel. Both were tested on macOS 15. Windows x86-64 was tested on
+Windows Server 2022.
 
 The CLI supports browser-approved account login and older passphrase/recipient vaults.
 Opening the new browser-passkey vaults from the CLI still needs integration; see
