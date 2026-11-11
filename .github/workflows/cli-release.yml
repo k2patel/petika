@@ -125,12 +125,20 @@ jobs:
             sha256sum "$archive" | cmp - "$archive.sha256"
             checksums+=("$archive.sha256")
           done
-          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=false \
+          gh release create "$GITHUB_REF_NAME" --verify-tag --latest=true \
             --title "Petika CLI $version" --notes-file - \
             "${archives[@]}" "${checksums[@]}" <<'NOTES'
           Standalone Petika CLI for macOS (Apple Silicon and Intel), Linux
           (x86-64 and ARM64), and Windows (x86-64). Verify each download
           against its accompanying SHA-256 file.
+
+          Local passphrase vaults support opt-in Touch ID on supported Macs
+          and Windows Hello where device-bound PRF credentials are available.
+          Enroll with `petika biometric enable`, then request device approval
+          with `petika --biometric get NAME --reveal`. Enrollment verifies the
+          existing vault passphrase. The macOS companion requires macOS 12 or
+          later. Windows Hello can approve with biometrics or a device PIN.
+          Windows Hello hardware verification remains pending.
 
           The CLI supports browser-approved account login and legacy passphrase
           or recipient vaults. CLI access to secrets in browser-passkey vaults

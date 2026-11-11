@@ -8,8 +8,8 @@ Current deployment instructions enable the existing API and outbound Git mirror.
 
 Experimental web UI and local managed accounts, with personal/group encrypted collections.
 Verified group-key delivery and explicit rotation are implemented.
-[Local CLI device unlock](cli-accounts.md#local-device-unlock) is available in source
-builds. Mobile clients remain planned. An experimental Chromium toolbar extension
+[Local CLI device unlock](cli-accounts.md#local-device-unlock) is available in CLI
+0.1.1. Mobile clients remain planned. An experimental Chromium toolbar extension
 is available for local QA; see the [user guide](user-guide.md). The bearer token authorizes ciphertext
 access; it cannot decrypt the store. Use synthetic data until the security design and
 implementation have been independently reviewed.

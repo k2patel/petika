@@ -68,9 +68,9 @@ password stores can be [imported locally](import.md). The workflow is inspired b
 
 ## Local device unlock
 
-Source builds support opt-in device unlock for local passphrase vaults. The
-published CLI 0.1.0 predates this feature. Build the CLI from the current source.
-On macOS, also compile its companion executable beside `petika`:
+CLI 0.1.1 supports opt-in device unlock for local passphrase vaults. Homebrew
+installs the macOS companion alongside the CLI. To build from source, compile
+the CLI and, on macOS, its companion:
 
 ```sh
 cargo build --release --locked -p petika
@@ -78,7 +78,7 @@ cargo build --release --locked -p petika
 swiftc -O crates/petika-cli/macos-unlock.swift -o target/release/petika-macos-unlock
 ```
 
-After placing the built executable(s) together in your chosen bin directory:
+After installing through Homebrew or placing the built executables in your bin directory:
 
 ```sh
 petika --store ./vault.petika biometric enable
